@@ -53,6 +53,8 @@ export function FreeTextCard({
     onUpdate(note.id, { fontSize: keys[nextIdx] });
   };
 
+  const isNearTop = isCanvasView && note.posY < 45;
+
   return (
     <motion.div
       layout={!isCanvasView}
@@ -75,32 +77,44 @@ export function FreeTextCard({
         y: isCanvasView ? note.posY : 0,
       }}
       style={isCanvasView ? { position: "absolute", left: 0, top: 0 } : undefined}
-      className={`group relative min-w-[220px] max-w-xl p-3 rounded-2xl transition-all select-none cursor-default ${
-        isFocused ? "bg-surface/60 backdrop-blur-xs ring-2 ring-primary/40 z-30" : "hover:bg-surface/30 z-10"
+      className={`group relative transition-all select-none cursor-default ${
+        isCanvasView
+          ? `w-fit max-w-2xl rounded-xl p-1 ${
+              isFocused
+                ? "bg-surface/50 backdrop-blur-xs ring-1.5 ring-primary/50 shadow-sm z-30"
+                : "hover:bg-surface/20 hover:ring-1 hover:ring-border/60 z-10"
+            }`
+          : "w-full p-4 rounded-2xl bg-surface border border-border shadow-card flex flex-col justify-between"
       }`}
     >
-      {/* Barra de controle rápida visível no hover */}
-      <div className="flex items-center justify-between gap-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <div className="flex items-center gap-1">
-          {isCanvasView && (
-            <span
-              className="cursor-grab active:cursor-grabbing p-1 text-text-muted hover:text-text-title rounded-md"
-              title="Arrastar Texto"
-            >
-              <GripVertical size={14} />
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={cycleFontSize}
-            className="px-2 py-0.5 rounded-md bg-surface border border-border text-[11px] font-bold text-text-title hover:border-primary transition-colors cursor-pointer flex items-center gap-1"
-            title="Alterar Tamanho da Fonte"
+      {/* Barra de controle rápida flutuante (estilo Miro/Figma, acima do texto) */}
+      <div
+        className={`absolute flex items-center gap-1 bg-surface/95 backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl border border-border transition-all z-40 w-max pointer-events-auto ${
+          isNearTop ? "top-full mt-2 left-0" : "-top-10 left-0"
+        } ${
+          isFocused
+            ? "opacity-100 scale-100"
+            : "opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100"
+        }`}
+      >
+        {isCanvasView && (
+          <span
+            className="cursor-grab active:cursor-grabbing p-1 text-text-muted hover:text-text-title rounded-lg transition-colors"
+            title="Arrastar Texto"
           >
-            <Type size={12} />
-            <span>{sizeConfig.label}</span>
-          </button>
-        </div>
-
+            <GripVertical size={13} />
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={cycleFontSize}
+          className="px-2 py-0.5 rounded-lg bg-surface-muted hover:bg-primary/10 hover:text-primary text-[11px] font-bold text-text-title transition-colors cursor-pointer flex items-center gap-1"
+          title="Alterar Tamanho da Fonte (P, M, G, GG)"
+        >
+          <Type size={12} />
+          <span>{sizeConfig.label}</span>
+        </button>
+        <div className="w-[1px] h-3 bg-border mx-0.5" />
         <button
           type="button"
           onClick={() => {
@@ -108,23 +122,37 @@ export function FreeTextCard({
               onDelete(note.id);
             }
           }}
-          className="p-1 rounded-md text-text-muted hover:text-status-danger hover:bg-status-danger-bg transition-colors cursor-pointer"
+          className="p-1 rounded-lg text-text-muted hover:text-status-danger hover:bg-status-danger-bg transition-colors cursor-pointer"
           title="Excluir Texto"
         >
-          <Trash2 size={13} />
+          <Trash2 size={12} />
         </button>
       </div>
 
-      {/* Textarea do Texto Livre */}
-      <textarea
-        value={content}
-        onChange={handleContentChange}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
-        rows={Math.max(2, Math.min(6, content.split("\n").length))}
-        placeholder="Digite um título ou texto livre..."
-        className={`w-full bg-transparent border-none outline-none resize-none focus:ring-0 leading-tight text-text-title placeholder:text-text-muted/50 ${sizeConfig.cls}`}
-      />
+      {/* Container Auto-fit: o mirror span ajusta a largura e altura milimetricamente ao texto */}
+      <div
+        className="inline-grid items-center relative"
+        style={{ minWidth: "60px" }}
+      >
+        {/* Span invisível que define a dimensão exata com base no texto */}
+        <span
+          className={`invisible whitespace-pre-wrap break-words col-start-1 row-start-1 select-none pointer-events-none p-1.5 leading-tight ${sizeConfig.cls}`}
+          aria-hidden="true"
+        >
+          {(content || "Texto...") + "\u200B"}
+        </span>
+
+        {/* Textarea que preenche exatamente as dimensões do span */}
+        <textarea
+          value={content}
+          onChange={handleContentChange}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          rows={1}
+          placeholder="Texto..."
+          className={`col-start-1 row-start-1 w-full h-full bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 leading-tight text-text-title placeholder:text-text-muted/40 p-1.5 m-0 ${sizeConfig.cls}`}
+        />
+      </div>
     </motion.div>
   );
 }
