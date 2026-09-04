@@ -19,6 +19,8 @@ interface StickyNoteCardProps {
   onUpdate: (id: string, patch: Partial<NoteItem>) => void;
   onDelete: (id: string) => void;
   onDragEnd?: (id: string, newX: number, newY: number) => void;
+  isHighlighted?: boolean;
+  isDimmed?: boolean;
 }
 
 export const COLOR_CONFIG: Record<
@@ -110,6 +112,8 @@ export function StickyNoteCard({
   onUpdate,
   onDelete,
   onDragEnd,
+  isHighlighted = false,
+  isDimmed = false,
 }: StickyNoteCardProps) {
   const [title, setTitle] = useState(note.title || "");
   const [content, setContent] = useState(note.content || "");
@@ -172,7 +176,15 @@ export function StickyNoteCard({
       whileTap={{ scale: 0.98 }}
       className={`group relative w-64 min-h-[220px] rounded-2xl p-4 shadow-[0_12px_28px_-6px_rgba(0,0,0,0.18),0_6px_10px_-4px_rgba(0,0,0,0.12)] border transition-all flex flex-col justify-between select-none cursor-default ${
         currentTheme.bg
-      } ${currentTheme.border} ${isFocused ? "ring-2 ring-primary/40 z-30" : "z-10"}`}
+      } ${currentTheme.border} ${
+        isHighlighted
+          ? "ring-4 ring-primary ring-offset-4 ring-offset-background z-40 scale-105 shadow-2xl"
+          : isDimmed
+          ? "opacity-25 blur-[0.4px] pointer-events-none"
+          : isFocused
+          ? "ring-2 ring-primary/40 z-30"
+          : "z-10"
+      }`}
     >
       {/* Topo do Post-it */}
       <div>

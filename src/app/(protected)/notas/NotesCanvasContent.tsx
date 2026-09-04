@@ -15,6 +15,9 @@ import {
   Type,
   Sparkles,
   Focus,
+  X,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import type { NoteItem, NoteColor, NoteType, DrawingItem } from "@/lib/actions/notes";
 import {
@@ -197,6 +200,35 @@ export function NotesCanvasContent({
       });
     },
     [notes, drawings, zoomLevel, getNotesCenter]
+  );
+
+  // Centraliza a visão do canvas em uma nota específica (usado na busca e navegação)
+  const centerOnSingleNote = useCallback(
+    (note: NoteItem, smooth = true) => {
+      if (!canvasScrollRef.current) return;
+
+      const w = note.type === "sticky" ? 256 : 160;
+      const h = note.type === "sticky" ? 220 : 60;
+
+      const noteCenterX = note.posX + w / 2;
+      const noteCenterY = note.posY + h / 2;
+
+      const viewportWidth = canvasScrollRef.current.clientWidth;
+      const viewportHeight = canvasScrollRef.current.clientHeight;
+
+      const targetX = noteCenterX * zoomLevel - viewportWidth / 2;
+      const targetY = noteCenterY * zoomLevel - viewportHeight / 2;
+
+      const scrollLeft = Math.max(0, targetX);
+      const scrollTop = Math.max(0, targetY);
+
+      canvasScrollRef.current.scrollTo({
+        left: scrollLeft,
+        top: scrollTop,
+        behavior: smooth ? "smooth" : "auto",
+      });
+    },
+    [zoomLevel]
   );
 
   // Ao carregar a página pela primeira vez, centraliza automaticamente nas notas já colocadas
@@ -394,7 +426,88 @@ export function NotesCanvasContent({
     });
   };
 
-  // Filtros aplicados
+  const [currentMatchIdx, setCurrentMatchIdx] = useState(0);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Lista de notas que atendem a busca atual
+  const matchedNotes = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return [];
+    return notes.filter((n) => {
+      const matchesSearch =
+        (n.title && n.title.toLowerCase().includes(term)) ||
+        (n.content && n.content.toLowerCase().includes(term));
+      const matchesColor =
+        selectedColorFilter === "ALL" || n.color === selectedColorFilter;
+      return matchesSearch && matchesColor;
+    });
+  }, [notes, searchTerm, selectedColorFilter]);
+
+  // Ao digitar no campo de busca, centraliza automaticamente na nota encontrada
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchTerm(val);
+    setCurrentMatchIdx(0);
+
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (val.trim()) {
+      searchTimerRef.current = setTimeout(() => {
+        const term = val.trim().toLowerCase();
+        const firstMatch = notes.find((n) => {
+          const matches =
+            (n.title && n.title.toLowerCase().includes(term)) ||
+            (n.content && n.content.toLowerCase().includes(term));
+          const matchesColor =
+            selectedColorFilter === "ALL" || n.color === selectedColorFilter;
+          return matches && matchesColor;
+        });
+
+        if (firstMatch && viewMode === "canvas") {
+          centerOnSingleNote(firstMatch, true);
+        }
+      }, 120);
+    }
+  };
+
+  const handleNextMatch = () => {
+    if (matchedNotes.length === 0) return;
+    const nextIdx = (currentMatchIdx + 1) % matchedNotes.length;
+    setCurrentMatchIdx(nextIdx);
+    if (viewMode === "canvas") {
+      centerOnSingleNote(matchedNotes[nextIdx], true);
+    }
+  };
+
+  const handlePrevMatch = () => {
+    if (matchedNotes.length === 0) return;
+    const prevIdx =
+      (currentMatchIdx - 1 + matchedNotes.length) % matchedNotes.length;
+    setCurrentMatchIdx(prevIdx);
+    if (viewMode === "canvas") {
+      centerOnSingleNote(matchedNotes[prevIdx], true);
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (e.shiftKey) {
+        handlePrevMatch();
+      } else {
+        handleNextMatch();
+      }
+    } else if (e.key === "Escape") {
+      setSearchTerm("");
+      setCurrentMatchIdx(0);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setCurrentMatchIdx(0);
+  };
+
+  // Filtros aplicados para a exibição em Grade (Grid)
   const filteredNotes = useMemo(() => {
     return notes.filter((n) => {
       const matchesSearch =
@@ -442,19 +555,65 @@ export function NotesCanvasContent({
         </div>
 
         {/* Lado Central: Pesquisa e Filtros */}
-        <div className="flex items-center gap-2 flex-1 max-w-sm justify-center">
-          <div className="relative w-full">
+        <div className="flex items-center gap-2 flex-1 max-w-md justify-center">
+          <div className="relative w-full flex items-center">
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar nas notas..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-border bg-surface-subtle text-xs text-text-body placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:bg-surface transition-all"
+              onChange={handleSearchChange}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Buscar nas notas... (Enter para navegar)"
+              className="w-full pl-8 pr-24 py-1.5 rounded-xl border border-border bg-surface-subtle text-xs text-text-body placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:bg-surface transition-all"
             />
             <Search
               size={14}
-              className="absolute left-2.5 top-2 text-text-muted pointer-events-none"
+              className="absolute left-2.5 text-text-muted pointer-events-none"
             />
+
+            {/* Controles da busca: Contador + Setas + Limpar */}
+            {searchTerm && (
+              <div className="absolute right-1.5 flex items-center gap-0.5 bg-surface rounded-lg px-1.5 py-0.5 border border-border shadow-xs">
+                {matchedNotes.length > 0 ? (
+                  <>
+                    <span className="text-[10px] font-bold text-text-muted tabular-nums pr-1">
+                      {currentMatchIdx + 1}/{matchedNotes.length}
+                    </span>
+                    {matchedNotes.length > 1 && (
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          onClick={handlePrevMatch}
+                          className="p-0.5 hover:bg-surface-muted rounded text-text-muted hover:text-text-title cursor-pointer"
+                          title="Anterior (Shift + Enter)"
+                        >
+                          <ChevronUp size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleNextMatch}
+                          className="p-0.5 hover:bg-surface-muted rounded text-text-muted hover:text-text-title cursor-pointer"
+                          title="Próxima (Enter)"
+                        >
+                          <ChevronDown size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-[10px] text-text-muted px-1 font-medium">
+                    0 notas
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="p-0.5 hover:bg-surface-muted rounded text-text-muted hover:text-red-500 cursor-pointer ml-0.5"
+                  title="Limpar busca (Esc)"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Filtro por Cor */}
@@ -578,16 +737,14 @@ export function NotesCanvasContent({
             : undefined
         }
       >
-        {filteredNotes.length === 0 && drawings.length === 0 ? (
+        {!searchTerm && selectedColorFilter === "ALL" && notes.length === 0 && drawings.length === 0 ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 space-y-4">
             <div className="w-16 h-16 rounded-3xl bg-amber-500/10 text-amber-600 flex items-center justify-center shadow-inner">
               <StickyNote size={32} />
             </div>
             <div className="max-w-sm space-y-1">
               <h3 className="text-base font-bold text-text-title">
-                {searchTerm || selectedColorFilter !== "ALL"
-                  ? "Nenhuma nota encontrada com esse filtro"
-                  : "Seu mural está pronto"}
+                Seu mural está pronto
               </h3>
               <p className="text-xs text-text-muted leading-relaxed">
                 Use a barra de ferramentas à esquerda para adicionar post-its, escrever títulos ou desenhar com a caneta.
@@ -638,27 +795,43 @@ export function NotesCanvasContent({
             />
 
             {/* Renderização dos Elementos (Post-its e Textos Livres) */}
-            {filteredNotes.map((note) =>
-              note.type === "text" ? (
-                <FreeTextCard
-                  key={note.id}
-                  note={note}
-                  isCanvasView={true}
-                  onUpdate={handleUpdateNote}
-                  onDelete={handleDeleteNote}
-                  onDragEnd={handleDragEnd}
-                />
-              ) : (
-                <StickyNoteCard
-                  key={note.id}
-                  note={note}
-                  isCanvasView={true}
-                  onUpdate={handleUpdateNote}
-                  onDelete={handleDeleteNote}
-                  onDragEnd={handleDragEnd}
-                />
+            {notes
+              .filter(
+                (n) =>
+                  selectedColorFilter === "ALL" || n.color === selectedColorFilter
               )
-            )}
+              .map((note) => {
+                const isSearchActive = searchTerm.trim().length > 0;
+                const isMatch =
+                  isSearchActive && matchedNotes.some((m) => m.id === note.id);
+                const isCurrentMatch =
+                  isSearchActive && matchedNotes[currentMatchIdx]?.id === note.id;
+                const isDimmed = isSearchActive && !isMatch;
+
+                return note.type === "text" ? (
+                  <FreeTextCard
+                    key={note.id}
+                    note={note}
+                    isCanvasView={true}
+                    onUpdate={handleUpdateNote}
+                    onDelete={handleDeleteNote}
+                    onDragEnd={handleDragEnd}
+                    isHighlighted={isCurrentMatch}
+                    isDimmed={isDimmed}
+                  />
+                ) : (
+                  <StickyNoteCard
+                    key={note.id}
+                    note={note}
+                    isCanvasView={true}
+                    onUpdate={handleUpdateNote}
+                    onDelete={handleDeleteNote}
+                    onDragEnd={handleDragEnd}
+                    isHighlighted={isCurrentMatch}
+                    isDimmed={isDimmed}
+                  />
+                );
+              })}
           </div>
         ) : (
           /* Visualização Organizada em Grade */

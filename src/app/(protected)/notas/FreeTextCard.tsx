@@ -11,6 +11,8 @@ interface FreeTextCardProps {
   onUpdate: (id: string, patch: Partial<NoteItem>) => void;
   onDelete: (id: string) => void;
   onDragEnd?: (id: string, newX: number, newY: number) => void;
+  isHighlighted?: boolean;
+  isDimmed?: boolean;
 }
 
 const FONT_SIZES: Record<string, { cls: string; label: string }> = {
@@ -26,6 +28,8 @@ export function FreeTextCard({
   onUpdate,
   onDelete,
   onDragEnd,
+  isHighlighted = false,
+  isDimmed = false,
 }: FreeTextCardProps) {
   const [content, setContent] = useState(note.content || note.title || "");
   const [isFocused, setIsFocused] = useState(false);
@@ -80,7 +84,11 @@ export function FreeTextCard({
       className={`group relative transition-all select-none cursor-default ${
         isCanvasView
           ? `w-fit max-w-2xl rounded-xl p-1 ${
-              isFocused
+              isHighlighted
+                ? "bg-surface/90 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-2xl z-40 scale-105"
+                : isDimmed
+                ? "opacity-25 blur-[0.4px] pointer-events-none"
+                : isFocused
                 ? "bg-surface/50 backdrop-blur-xs ring-1.5 ring-primary/50 shadow-sm z-30"
                 : "hover:bg-surface/20 hover:ring-1 hover:ring-border/60 z-10"
             }`
