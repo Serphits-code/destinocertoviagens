@@ -525,9 +525,31 @@ export function NotesCanvasContent({
   const handleZoom = (delta: number) => {
     setZoomLevel((prev) => {
       const next = Number((prev + delta).toFixed(2));
-      return Math.min(Math.max(next, 0.6), 1.5);
+      return Math.min(Math.max(next, 0.2), 2.0);
     });
   };
+
+  // Zoom suave com a roda do mouse segurando Ctrl ou gesto de pinça no trackpad
+  useEffect(() => {
+    const el = canvasScrollRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.05 : -0.05;
+        setZoomLevel((prev) => {
+          const next = Number((prev + delta).toFixed(2));
+          return Math.min(Math.max(next, 0.2), 2.0);
+        });
+      }
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
 
   return (
     <div className="flex flex-col h-[calc(100vh-4.5rem)] -m-6 w-[calc(100%+3rem)] max-w-[calc(100vw-260px)] overflow-hidden bg-background relative select-none">
@@ -901,7 +923,8 @@ export function NotesCanvasContent({
             <button
               type="button"
               onClick={() => handleZoom(-0.1)}
-              className="p-1.5 rounded-lg text-text-muted hover:text-text-title hover:bg-surface-muted transition-colors cursor-pointer"
+              disabled={zoomLevel <= 0.2}
+              className="p-1.5 rounded-lg text-text-muted hover:text-text-title hover:bg-surface-muted transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               title="Diminuir Zoom"
             >
               <ZoomOut size={14} />
@@ -914,7 +937,8 @@ export function NotesCanvasContent({
             <button
               type="button"
               onClick={() => handleZoom(0.1)}
-              className="p-1.5 rounded-lg text-text-muted hover:text-text-title hover:bg-surface-muted transition-colors cursor-pointer"
+              disabled={zoomLevel >= 2.0}
+              className="p-1.5 rounded-lg text-text-muted hover:text-text-title hover:bg-surface-muted transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               title="Aumentar Zoom"
             >
               <ZoomIn size={14} />
