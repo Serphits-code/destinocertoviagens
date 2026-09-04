@@ -89,7 +89,7 @@ export function SummaryWidget({
       <div className="bg-white/10 rounded-xl p-3">
         <div className="flex items-center justify-between">
           <p className="text-xs text-white/50 uppercase tracking-wide">
-            Lucro estimado (100% ocupação)
+            Lucro estimado líquido
           </p>
           {marginNum > 0 && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-green-500/20 text-green-300">
@@ -98,8 +98,13 @@ export function SummaryWidget({
           )}
         </div>
         <p className="text-lg font-bold text-green-300">
-          {fmt(agencyProfitPerPerson * slots)}
+          {fmt(agencyProfitPerPerson)}
         </p>
+        {slots > 1 && (
+          <p className="text-[11px] text-white/60 mt-1">
+            Total agência ({slots} vagas): {fmt(agencyProfitPerPerson * slots)}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
