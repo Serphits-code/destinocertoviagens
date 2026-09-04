@@ -1,0 +1,229 @@
+// Destino Certo — Schema do banco de dados
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  ATENDENTE
+  VISUALIZADOR
+}
+
+enum ExcursionStatus {
+  RASCUNHO
+  ATIVA
+  ENCERRADA
+}
+
+enum PresetType {
+  PACOTE
+  BLOCO
+}
+
+enum TransactionKind {
+  RECEBIMENTO
+  PAGAMENTO
+}
+
+model User {
+  id           String      @id @default(cuid())
+  name         String
+  email        String      @unique
+  passwordHash String
+  role         Role        @default(ADMIN)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  excursions   Excursion[]
+  presets      Preset[]
+}
+
+model Excursion {
+  id               String          @id @default(cuid())
+  name             String
+  destination      String?
+  destinationsJson Json?
+  latitude         Float?
+  longitude        Float?
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  slots              Int             @default(0)
+  status             ExcursionStatus @default(RASCUNHO)
+  itineraryJson Json?
+  createdById   String?
+  createdBy     User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  blocks        Block[]
+  transactions  Transaction[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([periodStart, periodEnd])
+  @@index([createdById])
+}
+
+model Block {
+  id          String    @id @default(cuid())
+  excursionId String
+  excursion   Excursion @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  order       Int
+  configJson  Json      // colunas/linhas das tabelas dinâmicas
+  collapsed   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([excursionId, order])
+}
+
+model Preset {
+  id          String     @id @default(cuid())
+  name        String
+  type        PresetType
+  payloadJson Json
+  createdById String?
+  createdBy   User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+}
+
+model Transaction {
+  id            String          @id @default(cuid())
+  excursionId   String?
+  excursion     Excursion?      @relation(fields: [excursionId], references: [id], onDelete: SetNull)
+  kind          TransactionKind
+  amount        Decimal         @db.Decimal(12, 2)
+  dueDate       DateTime
+  paidAt        DateTime?
+  passengerName String?
+  createdAt     DateTime        @default(now())
+
+  @@index([kind, dueDate])
+}
+
+model Customer {
+  id            String    @id @default(cuid())
+  name          String
+  cpf           String?
+  rg            String?
+  passport      String?
+  birthDate     DateTime?
+  gender        String?
+  phone         String?
+  mobile        String?
+  email         String?
+  address       String?
+  number        String?
+  complement    String?
+  neighborhood  String?
+  city          String?
+  state         String?
+  zipCode       String?
+  notes         String?
+  mondeId       String?   @unique
+  firstSaleDate DateTime?
+  lastSaleDate  DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  financialEntries FinancialEntry[]
+  trips            CustomerTrip[]
+
+  @@index([name])
+  @@index([cpf])
+  @@index([mobile])
+  @@index([birthDate])
+  @@index([city, state])
+}
+
+model CustomerTrip {
+  id             String    @id @default(cuid())
+  customerId     String
+  customer       Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  groupName      String    // Ex: "PACOTE JATIÚCA OUTUBRO 2025" ou "Viagem Fernando de Noronha"
+  destination    String?   // Ex: "Maceió - AL" ou "Nacional"
+  departureDate  DateTime?
+  returnDate     DateTime?
+  saleNumber     String?
+  role           String    @default("PASSAGEIRO") // "PASSAGEIRO" | "PAGANTE" | "PAGANTE_E_PASSAGEIRO"
+  isGroupTrip    Boolean   @default(false)        // true se for Operação Própria (Grupo/Excursão)
+  
+  companionsJson Json?     // Array de { customerId, name } que viajaram juntos nesta mesma reserva
+  
+  createdAt      DateTime  @default(now())
+
+  @@index([customerId])
+  @@index([groupName])
+  @@index([departureDate])
+  @@index([saleNumber])
+  @@index([isGroupTrip])
+}
+
+model Supplier {
+  id           String           @id @default(cuid())
+  name         String
+  tradeName    String?
+  cnpj         String?
+  ie           String?
+  category     String?
+  phone        String?
+  mobile       String?
+  email        String?
+  website      String?
+  address      String?
+  number       String?
+  complement   String?
+  neighborhood String?
+  city         String?
+  state        String?
+  zipCode      String?
+  notes        String?
+  mondeId      String?          @unique
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  financialEntries FinancialEntry[]
+
+  @@index([name])
+  @@index([tradeName])
+  @@index([cnpj])
+  @@index([category])
+  @@index([city, state])
+}
+
+model FinancialEntry {
+  id          String    @id @default(cuid())
+  mondeId     String?   @unique
+  kind        String    // "RECEBIMENTO" | "PAGAMENTO"
+  description String
+  document    String?
+  amount      Decimal   @db.Decimal(12, 2)
+  dueDate     DateTime
+  paidAt      DateTime?
+  status      String    @default("PENDENTE") // "PAGO" | "PENDENTE"
+
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime  @default(now())
+
+  @@index([customerId])
+  @@index([supplierId])
+  @@index([kind, dueDate])
+  @@index([status])
+  @@index([kind, status, dueDate])
+}
+
+

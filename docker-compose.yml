@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: destinocerto-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: destinocerto
+      POSTGRES_PASSWORD: destinocerto_dev
+      POSTGRES_DB: destinocerto
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U destinocerto -d destinocerto"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

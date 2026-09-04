@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Destino Certo — Gestor de Pacotes de Viagem</title>
+  <meta name="description" content="Design system moderno para montagem de pacotes de viagem da Agência Destino Certo.">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Top App Navigation Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <img src="assets/logo.jpg" alt="Logo Destino Certo" class="brand-logo" onerror="this.style.display='none'">
+      <div>
+        <h1 class="brand-title">DESTINO CERTO</h1>
+        <div class="brand-subtitle">Agência de Viagens • Gestor de Pacotes</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <span id="save-indicator" class="save-indicator"><span>✓</span> Salvo</span>
+      
+      <button class="btn btn-secondary no-print" onclick="PresetManager.openPresetsModal()" title="Gerenciar pacotes salvos">
+        <span>📂</span> Pacotes
+      </button>
+
+      <button class="btn btn-secondary no-print" onclick="PresetManager.openSavePresetModal()" title="Salvar todo o pacote atual">
+        <span>💾</span> Salvar Pacote
+      </button>
+
+      <button class="btn btn-primary no-print" onclick="App.openAddBlockModal('templates')" title="Adicionar novo card ou modelo">
+        <span>➕</span> Adicionar Card (+)
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="main-wrapper">
+    
+    <!-- Editor Workspace (Cards Column) -->
+    <main class="editor-workspace">
+      
+      <!-- Top Package Banner -->
+      <div class="package-top-banner">
+        <div>
+          <h2 id="pkg-name" class="pkg-title-input" contenteditable="true" spellcheck="false" title="Clique para editar o nome do pacote">
+            PACOTE FOZ DO IGUAÇU
+          </h2>
+        </div>
+        <div class="pkg-meta-group">
+          <div>
+            Período: <span id="pkg-dates" class="pkg-editable-val" contenteditable="true" spellcheck="false">09/05 – 13/05/2026</span>
+          </div>
+          <div>
+            Vagas: <span id="pkg-slots" class="pkg-editable-val" contenteditable="true" spellcheck="false">20</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Container onde os cards do Design System são renderizados -->
+      <div id="blocks-container" class="blocks-container">
+        <!-- Injetado via BlockManager -->
+      </div>
+
+    </main>
+
+    <!-- Sidebar com Dark Summary Card e Ações -->
+    <aside class="sidebar-panel no-print">
+      
+      <!-- Dark Slate Summary Widget (Idêntico ao Design System) -->
+      <div class="dark-summary-card">
+        <div class="summary-card-header">
+          <span class="summary-card-icon">🧮</span>
+          <span class="summary-card-title">Resumo Financeiro</span>
+        </div>
+
+        <div class="summary-stat-block">
+          <span class="summary-stat-label">VALOR TOTAL DOS CUSTOS ESTIMADOS</span>
+          <span class="summary-stat-value" id="widget-total-cost">R$ 0,00</span>
+        </div>
+
+        <div class="summary-inner-box">
+          <span class="summary-stat-label" style="color: #CBD5E1;">LUCRO ESTIMADO (100% OCUPAÇÃO)</span>
+          <span class="summary-stat-value" id="widget-total-profit">R$ 0,00</span>
+        </div>
+
+        <div class="summary-grid-2cols">
+          <div class="summary-mini-stat">
+            <span class="summary-stat-label">POR PASSAGEIRO</span>
+            <span class="summary-stat-value" id="widget-package-price">R$ 0,00</span>
+          </div>
+          <div class="summary-mini-stat">
+            <span class="summary-stat-label">FATURAMENTO TOTAL</span>
+            <span class="summary-stat-value" id="widget-grand-total">R$ 0,00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="sidebar-card">
+        <h4>⚡ Ações Rápidas</h4>
+        <div class="sidebar-menu">
+          <button class="btn btn-primary sidebar-btn" onclick="App.openAddBlockModal('templates')">
+            <span>➕</span> Adicionar Card (+)
+          </button>
+          <button class="btn btn-secondary sidebar-btn" onclick="BlockManager.expandAllCards()">
+            <span>➕</span> Expandir Todos
+          </button>
+          <button class="btn btn-secondary sidebar-btn" onclick="BlockManager.collapseAllCards()">
+            <span>➖</span> Minimizar Todos
+          </button>
+          <button class="btn btn-secondary sidebar-btn" onclick="App.printPackage()">
+            <span>🖨️</span> Imprimir / PDF
+          </button>
+        </div>
+      </div>
+
+      <!-- Backup & Modelos -->
+      <div class="sidebar-card">
+        <h4>💾 Arquivos & Backup</h4>
+        <div class="sidebar-menu">
+          <button class="btn btn-secondary sidebar-btn" onclick="PresetManager.exportPackage()">
+            <span>📤</span> Baixar Pacote (JSON)
+          </button>
+          <div class="file-input-wrapper">
+            <button class="btn btn-secondary sidebar-btn" style="width: 100%;">
+              <span>📥</span> Abrir Arquivo (JSON)
+            </button>
+            <input type="file" id="json-file-input" accept=".json" onchange="PresetManager.importPackageFile(this)">
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 1: SELETOR DE PREDEFINIÇÕES DE CARDS & CATEGORIAS (COM ABAS)
+       ========================================================================== -->
+  <div class="modal-backdrop" id="add-block-modal">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3><span>➕</span> Adicionar Card ao Pacote</h3>
+        <button class="btn-close-modal" onclick="App.closeAddBlockModal()">✕</button>
+      </div>
+
+      <!-- Abas de Navegação -->
+      <div class="tab-nav-wrapper">
+        <button class="tab-btn active" data-tab="templates" onclick="App.setPickerTab('templates')">
+          <span>⭐</span> Modelos Salvos de Cards
+        </button>
+        <button class="tab-btn" data-tab="categories" onclick="App.setPickerTab('categories')">
+          <span>🏷️</span> Categorias Base
+        </button>
+      </div>
+
+      <div class="modal-body" id="category-picker-content">
+        <!-- Injetado via App.renderCategoryPicker() -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="App.closeAddBlockModal()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 2: SALVAR CARD ESPECÍFICO COMO MODELO
+       ========================================================================== -->
+  <div class="modal-backdrop" id="save-card-template-modal">
+    <div class="modal-window" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3><span>💾</span> Salvar Card como Modelo</h3>
+        <button class="btn-close-modal" onclick="PresetManager.closeSaveCardTemplateModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="card-template-name">Nome do Modelo deste Card</label>
+          <input type="text" id="card-template-name" class="form-control" placeholder="Ex: Itens Inclusos Padrão, Aéreo Azul, Tarobá Duplo...">
+          <div class="form-hint">Este card ficará disponível na lista de predefinições do botão (+) para você reutilizar a qualquer momento.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="PresetManager.closeSaveCardTemplateModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="PresetManager.confirmSaveCardTemplate()">Salvar Modelo de Card</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 3: CRIADOR DE TABELA CUSTOMIZADA
+       ========================================================================== -->
+  <div class="modal-backdrop" id="custom-block-modal">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3><span>✨</span> Criar Card Customizado</h3>
+        <button class="btn-close-modal" onclick="App.closeCustomBlockModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="custom-block-title">Título do Card</label>
+          <input type="text" id="custom-block-title" class="form-control" value="INGRESSOS E PASSEIOS">
+        </div>
+        <div class="form-group">
+          <label for="custom-block-cols">Colunas (separadas por vírgula)</label>
+          <input type="text" id="custom-block-cols" class="form-control" value="ITEM, FORNECEDOR, VALOR (R$), STATUS">
+        </div>
+        <div class="form-group">
+          <label for="custom-block-rows">Quantidade de Linhas Iniciais</label>
+          <input type="number" id="custom-block-rows" class="form-control" value="3" min="1" max="20">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="App.closeCustomBlockModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="App.confirmCreateCustomBlock()">Criar Card</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 4: PACOTES COMPLETOS SALVOS
+       ========================================================================== -->
+  <div class="modal-backdrop" id="presets-modal">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3><span>📂</span> Pacotes Completos Salvos</h3>
+        <button class="btn-close-modal" onclick="PresetManager.closePresetsModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="presets-list-container" class="presets-list-container">
+          <!-- Injetado via PresetManager.renderPresetsList() -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="PresetManager.closePresetsModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL 5: SALVAR PACOTE COMPLETO
+       ========================================================================== -->
+  <div class="modal-backdrop" id="save-preset-modal">
+    <div class="modal-window" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3><span>💾</span> Salvar Pacote Completo</h3>
+        <button class="btn-close-modal" onclick="PresetManager.closeSavePresetModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="new-preset-name">Nome do Pacote</label>
+          <input type="text" id="new-preset-name" class="form-control" placeholder="Ex: Pacote Foz do Iguaçu Completo">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="PresetManager.closeSavePresetModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="PresetManager.confirmSavePreset()">Salvar Pacote</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/categories.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/blocks.js"></script>
+  <script src="js/presets.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
