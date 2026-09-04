@@ -6,6 +6,7 @@ import type { EditorBlock } from "@/lib/editor-types";
 interface SummaryWidgetProps {
   blocks: EditorBlock[];
   slots: number;
+  profitMargin?: number;
 }
 
 function parseNum(v: unknown): number {
@@ -14,7 +15,11 @@ function parseNum(v: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
-export function SummaryWidget({ blocks, slots }: SummaryWidgetProps) {
+export function SummaryWidget({
+  blocks,
+  slots,
+  profitMargin = 0,
+}: SummaryWidgetProps) {
   const { totalCost, totalProfit } = useMemo(() => {
     let cost = 0;
     let profit = 0;
@@ -61,7 +66,10 @@ export function SummaryWidget({ blocks, slots }: SummaryWidgetProps) {
       minimumFractionDigits: 2,
     });
 
-  const pricePerPerson = totalCost + totalProfit;
+  const marginNum = Number(profitMargin) || 0;
+  const agencyProfitPerPerson =
+    marginNum > 0 ? totalCost * (marginNum / 100) : totalProfit;
+  const pricePerPerson = totalCost + agencyProfitPerPerson;
   const grandTotal = pricePerPerson * slots;
 
   return (
@@ -79,10 +87,19 @@ export function SummaryWidget({ blocks, slots }: SummaryWidgetProps) {
       </div>
 
       <div className="bg-white/10 rounded-xl p-3">
-        <p className="text-xs text-white/50 uppercase tracking-wide">
-          Lucro estimado (100% ocupação)
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-white/50 uppercase tracking-wide">
+            Lucro estimado (100% ocupação)
+          </p>
+          {marginNum > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-green-500/20 text-green-300">
+              {marginNum}%
+            </span>
+          )}
+        </div>
+        <p className="text-lg font-bold text-green-300">
+          {fmt(agencyProfitPerPerson * slots)}
         </p>
-        <p className="text-lg font-bold text-green-300">{fmt(totalProfit * slots)}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

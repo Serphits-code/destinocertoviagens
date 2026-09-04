@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   startTransition,
+  useMemo,
 } from "react";
 import {
   DndContext,
@@ -23,9 +24,24 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Check, BedDouble, Package, Compass, Pencil, GripVertical } from "lucide-react";
+import {
+  Plus,
+  Check,
+  BedDouble,
+  Package,
+  Compass,
+  Pencil,
+  GripVertical,
+  Sparkles,
+  Receipt,
+} from "lucide-react";
 import type { EditorBlock, BlockCategoryId, BlockData } from "@/lib/editor-types";
 import type { ItineraryItem } from "@/lib/actions/itinerary";
+import type { ExcursionAddon } from "@/lib/actions/addons";
+import {
+  updateExcursionAddons,
+  updateExcursionProfitMargin,
+} from "@/lib/actions/addons";
 import {
   updateExcursionHeader,
   addBlock,
@@ -40,8 +56,10 @@ import { CATEGORY_DEFINITIONS } from "@/lib/categories";
 import { BlockCard } from "./BlockCard";
 import { AddBlockModal } from "./AddBlockModal";
 import { SummaryWidget } from "./SummaryWidget";
-import { RoomListView } from "./RoomListView";
+import { RoomListView, type RoomGuest, type RoomEntry } from "./RoomListView";
 import { ItineraryView, DEFAULT_SAO_PAULO_ITINERARY } from "./ItineraryView";
+import { AdicionaisView } from "./AdicionaisView";
+import { CheckoutView } from "./CheckoutView";
 import { updateExcursionItinerary } from "@/lib/actions/itinerary";
 import { WeatherClimateBadge } from "@/components/WeatherClimateBadge";
 
@@ -57,6 +75,8 @@ interface PackageEditorProps {
   initialSlots: number;
   initialBlocks: EditorBlock[];
   initialItinerary?: ItineraryItem[];
+  initialAddons?: ExcursionAddon[];
+  initialProfitMargin?: number;
 }
 
 function generateTempId() {
@@ -75,6 +95,8 @@ export function PackageEditor({
   initialSlots,
   initialBlocks,
   initialItinerary,
+  initialAddons = [],
+  initialProfitMargin = 0,
 }: PackageEditorProps) {
   const [blocks, setBlocks] = useState<EditorBlock[]>(initialBlocks);
   const [name, setName] = useState(initialName);
@@ -87,7 +109,9 @@ export function PackageEditor({
   const [insertIndex, setInsertIndex] = useState<number | undefined>(undefined);
   const [mounted, setMounted] = useState(false);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
-  const [view, setView] = useState<"pacote" | "roomlist" | "roteiro">("pacote");
+  const [view, setView] = useState<"pacote" | "roomlist" | "roteiro" | "adicionais" | "checkout">("pacote");
+  const [addons, setAddons] = useState<ExcursionAddon[]>(initialAddons || []);
+  const [profitMargin, setProfitMargin] = useState<number>(initialProfitMargin || 0);
 
   // ---- Roteiro ----
   const [itinerary, setItinerary] = useState<ItineraryItem[]>(
@@ -212,6 +236,85 @@ export function PackageEditor({
     },
     [excursionId, flashSaved]
   );
+
+  // ---- Adicionais & Lucro da Agência ----
+  const addonsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistAddons = useCallback(
+    (newAddons: ExcursionAddon[]) => {
+      if (addonsTimer.current) clearTimeout(addonsTimer.current);
+      addonsTimer.current = setTimeout(async () => {
+        await updateExcursionAddons(excursionId, newAddons);
+        flashSaved();
+      }, 500);
+    },
+    [excursionId, flashSaved]
+  );
+
+  const handleUpdateAddons = useCallback(
+    (newAddons: ExcursionAddon[]) => {
+      setAddons(newAddons);
+      persistAddons(newAddons);
+    },
+    [persistAddons]
+  );
+
+  const marginTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleUpdateProfitMargin = useCallback(
+    (newMargin: number) => {
+      setProfitMargin(newMargin);
+      if (marginTimer.current) clearTimeout(marginTimer.current);
+      marginTimer.current = setTimeout(async () => {
+        await updateExcursionProfitMargin(excursionId, newMargin);
+        flashSaved();
+      }, 400);
+    },
+    [excursionId, flashSaved]
+  );
+
+  // Extrai quartos e passageiros da hospedagem para vincular em Adicionais e Checkout
+  const hospedagemBlock = blocks.find((b) => b.categoryId === "hospedagem");
+  const rooms: RoomEntry[] = useMemo(() => {
+    return Array.isArray(hospedagemBlock?.data?.roomList)
+      ? (hospedagemBlock?.data?.roomList as RoomEntry[])
+      : [];
+  }, [hospedagemBlock?.data?.roomList]);
+
+  const guests: RoomGuest[] = useMemo(() => {
+    return rooms.flatMap((r) => r.hospedes || []);
+  }, [rooms]);
+
+  // Custo base por pessoa estimado a partir dos cards do pacote
+  const totalBaseCostPerPerson = useMemo(() => {
+    let cost = 0;
+    for (const block of blocks) {
+      const d = block.data;
+      if (block.categoryId === "itens_inclusos" && Array.isArray(d.rows)) {
+        for (const r of d.rows) cost += parseFloat(String(r.custo || 0).replace(",", ".")) || 0;
+      }
+      if (block.categoryId === "personalizados" && Array.isArray(d.rows)) {
+        for (const r of d.rows) cost += parseFloat(String(r.custo || 0).replace(",", ".")) || 0;
+      }
+      if (block.categoryId === "aereo") {
+        cost += parseFloat(String(d.custoUnitario || 0).replace(",", ".")) || 0;
+      }
+      if (block.categoryId === "hospedagem" && Array.isArray(d.rooms)) {
+        for (const r of d.rooms) {
+          const p = parseFloat(String(r.porPessoa || 0).replace(",", ".")) || 0;
+          if (p > 0) cost += p;
+        }
+      }
+      if (block.categoryId === "rodoviario") {
+        cost += parseFloat(String(d.rateioPorPessoa || 0).replace(",", ".")) || 0;
+      }
+      if (block.categoryId === "guias") {
+        cost += parseFloat(String(d.rateioPorPessoa || 0).replace(",", ".")) || 0;
+      }
+      if (block.categoryId === "personalizada" && Array.isArray(d.rows)) {
+        for (const r of d.rows) cost += parseFloat(String(r.valor ?? r.custo ?? 0).replace(",", ".")) || 0;
+      }
+    }
+    return cost;
+  }, [blocks]);
 
   // ---- Blocos ----
 
@@ -410,8 +513,8 @@ export function PackageEditor({
             )}
           </AnimatePresence>
 
-          {/* Switch Pacote / Room List / Roteiro */}
-          <div className="flex items-center bg-surface-muted rounded-lg p-1 border border-border">
+          {/* Switch Pacote / Room List / Roteiro / Adicionais / Checkout */}
+          <div className="flex items-center bg-surface-muted rounded-lg p-1 border border-border flex-wrap gap-1">
             <button
               onClick={() => setView("pacote")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -443,6 +546,31 @@ export function PackageEditor({
               }`}
             >
               <Compass size={15} /> Roteiro
+            </button>
+            <button
+              onClick={() => setView("adicionais")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                view === "adicionais"
+                  ? "bg-surface text-text-title shadow-shadow-card"
+                  : "text-text-muted hover:text-text-body"
+              }`}
+            >
+              <Sparkles size={15} className="text-primary" /> Adicionais
+              {addons.length > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-primary/15 text-primary">
+                  {addons.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setView("checkout")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                view === "checkout"
+                  ? "bg-surface text-text-title shadow-shadow-card"
+                  : "text-text-muted hover:text-text-body"
+              }`}
+            >
+              <Receipt size={15} className="text-status-success" /> Checkout
             </button>
           </div>
         </div>
@@ -577,6 +705,22 @@ export function PackageEditor({
               onDeleteItem={handleDeleteItineraryItem}
               onMoveItem={handleMoveItineraryItem}
               saved={itinerarySaved}
+            />
+          ) : view === "adicionais" ? (
+            <AdicionaisView
+              addons={addons}
+              onUpdateAddons={handleUpdateAddons}
+              guests={guests}
+            />
+          ) : view === "checkout" ? (
+            <CheckoutView
+              guests={guests}
+              rooms={rooms}
+              addons={addons}
+              totalBaseCostPerPerson={totalBaseCostPerPerson}
+              profitMargin={profitMargin}
+              onUpdateProfitMargin={handleUpdateProfitMargin}
+              slots={slots}
             />
           ) : blocks.length === 0 ? (
             <div className="bg-surface rounded-2xl border border-border p-12 text-center">
@@ -724,7 +868,7 @@ export function PackageEditor({
             </button>
           )}
 
-          <SummaryWidget blocks={blocks} slots={slots} />
+          <SummaryWidget blocks={blocks} slots={slots} profitMargin={profitMargin} />
           <div className="bg-surface rounded-2xl border border-border shadow-shadow-card p-4 space-y-2">
             <h4 className="text-sm font-semibold text-text-title">⚡ Ações Rápidas</h4>
             <button

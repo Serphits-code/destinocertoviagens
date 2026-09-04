@@ -43,6 +43,8 @@ export default async function ExcursionEditorPage({
       initialSlots={excursion.slots}
       initialBlocks={blocks}
       initialItinerary={(excursion.itineraryJson as any) ?? []}
+      initialAddons={(excursion.addonsJson as any) ?? []}
+      initialProfitMargin={excursion.profitMargin ?? 0}
     />
   );
 }
