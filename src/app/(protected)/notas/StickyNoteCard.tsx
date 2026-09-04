@@ -98,7 +98,11 @@ export const COLOR_CONFIG: Record<
   },
 };
 
-const STICKERS = ["💯", "❤️", "✅", "💡", "🔥", "⭐", "📌", "👏", "🎯", "☕"];
+const STICKERS = [
+  "💯", "❤️", "✅", "💡", "🔥",
+  "⭐", "📌", "🎉", "🎯", "☕",
+  "🚀", "👍", "👏", "⚠️", "💎",
+];
 
 export function StickyNoteCard({
   note,
@@ -194,13 +198,14 @@ export function StickyNoteCard({
 
             {/* Sticker / Emoji Atual */}
             {note.sticker && (
-              <span
-                className="text-lg leading-none cursor-pointer hover:scale-125 transition-transform"
+              <button
+                type="button"
                 onClick={() => onUpdate(note.id, { sticker: null })}
-                title="Clique para remover sticker"
+                className="text-xl leading-none cursor-pointer hover:scale-125 transition-transform drop-shadow-sm flex items-center justify-center p-0.5 rounded-md hover:bg-black/5"
+                title="Sticker ativo (clique para remover)"
               >
                 {note.sticker}
-              </span>
+              </button>
             )}
           </div>
 
@@ -230,7 +235,8 @@ export function StickyNoteCard({
                       initial={{ opacity: 0, scale: 0.85, y: -4 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.85, y: -4 }}
-                      className="absolute right-0 top-full mt-1.5 p-2 bg-surface rounded-xl shadow-xl border border-border flex items-center gap-1.5 z-50"
+                      style={{ width: "max-content", minWidth: "max-content" }}
+                      className="absolute right-0 top-full mt-2 p-2.5 bg-surface/95 backdrop-blur-md rounded-2xl shadow-2xl border border-border flex items-center gap-2 z-50"
                     >
                       {(Object.keys(COLOR_CONFIG) as NoteColor[]).map((c) => (
                         <button
@@ -240,9 +246,9 @@ export function StickyNoteCard({
                             onUpdate(note.id, { color: c });
                             setShowColorPicker(false);
                           }}
-                          className={`w-5 h-5 rounded-full border shadow-2xs transition-transform hover:scale-125 cursor-pointer ${
+                          className={`w-6 h-6 shrink-0 rounded-full border-2 shadow-sm transition-transform hover:scale-125 cursor-pointer ${
                             COLOR_CONFIG[c].dot
-                          } ${note.color === c ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                          } ${note.color === c ? "ring-2 ring-primary ring-offset-2" : ""}`}
                           title={COLOR_CONFIG[c].label}
                         />
                       ))}
@@ -260,7 +266,11 @@ export function StickyNoteCard({
                   setShowStickerPicker(!showStickerPicker);
                   setShowColorPicker(false);
                 }}
-                className="p-1 text-black/40 hover:text-black/80 hover:bg-black/5 rounded-lg transition-colors cursor-pointer"
+                className={`p-1 rounded-lg transition-colors cursor-pointer ${
+                  showStickerPicker || note.sticker
+                    ? "text-primary bg-primary/10"
+                    : "text-black/40 hover:text-black/80 hover:bg-black/5"
+                }`}
                 title="Adicionar Sticker / Reação"
               >
                 <Smile size={13} />
@@ -274,24 +284,63 @@ export function StickyNoteCard({
                       onClick={() => setShowStickerPicker(false)}
                     />
                     <motion.div
-                      initial={{ opacity: 0, scale: 0.85, y: -4 }}
+                      initial={{ opacity: 0, scale: 0.9, y: -4 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.85, y: -4 }}
-                      className="absolute right-0 top-full mt-1.5 p-2 bg-surface rounded-xl shadow-xl border border-border grid grid-cols-5 gap-1.5 z-50 text-base"
+                      exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                      style={{ width: "224px", minWidth: "224px" }}
+                      className="absolute right-0 top-full mt-2 p-2.5 bg-surface/95 backdrop-blur-md rounded-2xl shadow-2xl border border-border z-50 flex flex-col gap-2"
                     >
-                      {STICKERS.map((stk) => (
-                        <button
-                          key={stk}
-                          type="button"
-                          onClick={() => {
-                            onUpdate(note.id, { sticker: stk });
-                            setShowStickerPicker(false);
-                          }}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-muted hover:scale-125 transition-transform cursor-pointer"
-                        >
-                          {stk}
-                        </button>
-                      ))}
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[11px] font-bold tracking-wider uppercase text-text-muted">
+                          Stickers
+                        </span>
+                        {note.sticker && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onUpdate(note.id, { sticker: null });
+                              setShowStickerPicker(false);
+                            }}
+                            className="text-[10px] font-semibold text-status-danger hover:underline cursor-pointer"
+                          >
+                            Remover
+                          </button>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(5, 36px)",
+                          gap: "4px",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {STICKERS.map((stk) => {
+                          const isSelected = note.sticker === stk;
+                          return (
+                            <button
+                              key={stk}
+                              type="button"
+                              onClick={() => {
+                                onUpdate(note.id, {
+                                  sticker: isSelected ? null : stk,
+                                });
+                                setShowStickerPicker(false);
+                              }}
+                              style={{ width: "36px", height: "36px" }}
+                              className={`flex items-center justify-center rounded-xl text-xl hover:scale-125 transition-all cursor-pointer select-none shrink-0 ${
+                                isSelected
+                                  ? "bg-primary/20 ring-1 ring-primary"
+                                  : "hover:bg-surface-muted"
+                              }`}
+                              title={stk}
+                            >
+                              {stk}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </motion.div>
                   </>
                 )}

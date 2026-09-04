@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getUserNotes } from "@/lib/actions/notes";
+import { getUserNotes, getUserDrawings } from "@/lib/actions/notes";
 import { NotesCanvasContent } from "./NotesCanvasContent";
 
 export const metadata = {
@@ -14,11 +14,15 @@ export default async function NotesPage() {
     redirect("/login");
   }
 
-  const notes = await getUserNotes();
+  const [notes, drawings] = await Promise.all([
+    getUserNotes(),
+    getUserDrawings(),
+  ]);
 
   return (
     <NotesCanvasContent
       initialNotes={notes}
+      initialDrawings={drawings}
       userName={session.user.name}
     />
   );

@@ -43,6 +43,7 @@ model User {
   excursions   Excursion[]
   presets      Preset[]
   notes        Note[]
+  drawings     CanvasDrawing[]
 }
 
 model Excursion {
@@ -233,6 +234,8 @@ model Note {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @default("sticky") // "sticky" | "text"
+  fontSize  String?  @default("base")   // "base" | "lg" | "xl" | "2xl"
   title     String?
   content   String   @default("")
   color     String   @default("yellow") // "yellow" | "blue" | "green" | "pink" | "purple" | "orange" | "white"
@@ -247,6 +250,19 @@ model Note {
   @@index([userId])
   @@index([userId, createdAt])
 }
+
+model CanvasDrawing {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pathData    String
+  color       String   @default("#F59E0B")
+  strokeWidth Float    @default(3)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
 
 
 
