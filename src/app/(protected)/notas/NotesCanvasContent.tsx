@@ -14,6 +14,7 @@ import {
   StickyNote,
   Type,
   Sparkles,
+  Focus,
 } from "lucide-react";
 import type { NoteItem, NoteColor, NoteType, DrawingItem } from "@/lib/actions/notes";
 import {
@@ -124,6 +125,94 @@ export function NotesCanvasContent({
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerUp);
   };
+
+  // Cálculo do ponto central de todas as notas e desenhos existentes
+  const getNotesCenter = useCallback(
+    (notesList: NoteItem[], drawingsList: DrawingItem[] = []) => {
+      if (notesList.length === 0 && drawingsList.length === 0) return null;
+
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+
+      for (const n of notesList) {
+        const w = n.type === "sticky" ? 256 : 180;
+        const h = n.type === "sticky" ? 220 : 80;
+
+        minX = Math.min(minX, n.posX);
+        maxX = Math.max(maxX, n.posX + w);
+        minY = Math.min(minY, n.posY);
+        maxY = Math.max(maxY, n.posY + h);
+      }
+
+      // Se não houver notas, utiliza as coordenadas dos desenhos
+      if (notesList.length === 0) {
+        for (const d of drawingsList) {
+          const nums = d.pathData.match(/\d+/g)?.map(Number) || [];
+          for (let i = 0; i < nums.length; i += 2) {
+            if (nums[i] !== undefined) {
+              minX = Math.min(minX, nums[i]);
+              maxX = Math.max(maxX, nums[i]);
+            }
+            if (nums[i + 1] !== undefined) {
+              minY = Math.min(minY, nums[i + 1]);
+              maxY = Math.max(maxY, nums[i + 1]);
+            }
+          }
+        }
+      }
+
+      if (minX === Infinity) return null;
+
+      return {
+        centerX: (minX + maxX) / 2,
+        centerY: (minY + maxY) / 2,
+      };
+    },
+    []
+  );
+
+  // Centraliza a visão do canvas exatamente sobre as notas
+  const centerOnNotes = useCallback(
+    (smooth = true, targetNotes = notes, targetDrawings = drawings) => {
+      if (!canvasScrollRef.current) return;
+
+      const center = getNotesCenter(targetNotes, targetDrawings);
+      if (!center) return;
+
+      const viewportWidth = canvasScrollRef.current.clientWidth;
+      const viewportHeight = canvasScrollRef.current.clientHeight;
+
+      const targetX = center.centerX * zoomLevel - viewportWidth / 2;
+      const targetY = center.centerY * zoomLevel - viewportHeight / 2;
+
+      const scrollLeft = Math.max(0, targetX);
+      const scrollTop = Math.max(0, targetY);
+
+      canvasScrollRef.current.scrollTo({
+        left: scrollLeft,
+        top: scrollTop,
+        behavior: smooth ? "smooth" : "auto",
+      });
+    },
+    [notes, drawings, zoomLevel, getNotesCenter]
+  );
+
+  // Ao carregar a página pela primeira vez, centraliza automaticamente nas notas já colocadas
+  const hasInitialCenteredRef = useRef(false);
+  useEffect(() => {
+    if (
+      !hasInitialCenteredRef.current &&
+      (initialNotes.length > 0 || initialDrawings.length > 0)
+    ) {
+      const t = setTimeout(() => {
+        centerOnNotes(false, initialNotes, initialDrawings);
+        hasInitialCenteredRef.current = true;
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [initialNotes, initialDrawings, centerOnNotes]);
 
   const flashSaved = useCallback(() => {
     setJustSaved(true);
@@ -665,6 +754,15 @@ export function NotesCanvasContent({
               title="Resetar Zoom (100%)"
             >
               <RotateCcw size={13} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => centerOnNotes(true)}
+              className="p-1.5 rounded-lg text-text-muted hover:text-text-title hover:bg-surface-muted transition-colors cursor-pointer"
+              title="Centralizar nas Notas"
+            >
+              <Focus size={14} />
             </button>
           </div>
         )}
