@@ -57,6 +57,7 @@ export function FreeTextCard({
     <motion.div
       layout={!isCanvasView}
       drag={isCanvasView}
+      data-note-card="true"
       dragMomentum={false}
       dragElastic={0.05}
       onDragEnd={(_e, info) => {
@@ -74,7 +75,7 @@ export function FreeTextCard({
         y: isCanvasView ? note.posY : 0,
       }}
       style={isCanvasView ? { position: "absolute", left: 0, top: 0 } : undefined}
-      className={`group relative min-w-[220px] max-w-xl p-3 rounded-2xl transition-all select-none ${
+      className={`group relative min-w-[220px] max-w-xl p-3 rounded-2xl transition-all select-none cursor-default ${
         isFocused ? "bg-surface/60 backdrop-blur-xs ring-2 ring-primary/40 z-30" : "hover:bg-surface/30 z-10"
       }`}
     >

@@ -149,6 +149,7 @@ export function StickyNoteCard({
     <motion.div
       layout={!isCanvasView}
       drag={isCanvasView}
+      data-note-card="true"
       dragMomentum={false}
       dragElastic={0.05}
       onDragEnd={(_e, info) => {
@@ -169,7 +170,7 @@ export function StickyNoteCard({
       style={isCanvasView ? { position: "absolute", left: 0, top: 0 } : undefined}
       whileHover={{ scale: 1.02, zIndex: 30 }}
       whileTap={{ scale: 0.98 }}
-      className={`group relative w-64 min-h-[220px] rounded-2xl p-4 shadow-[0_12px_28px_-6px_rgba(0,0,0,0.18),0_6px_10px_-4px_rgba(0,0,0,0.12)] border transition-all flex flex-col justify-between select-none ${
+      className={`group relative w-64 min-h-[220px] rounded-2xl p-4 shadow-[0_12px_28px_-6px_rgba(0,0,0,0.18),0_6px_10px_-4px_rgba(0,0,0,0.12)] border transition-all flex flex-col justify-between select-none cursor-default ${
         currentTheme.bg
       } ${currentTheme.border} ${isFocused ? "ring-2 ring-primary/40 z-30" : "z-10"}`}
     >

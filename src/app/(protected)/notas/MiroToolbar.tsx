@@ -67,7 +67,7 @@ export function MiroToolbar({
             ? "bg-primary text-white shadow-xs"
             : "text-text-muted hover:text-text-title hover:bg-surface-muted"
         }`}
-        title="Mover e Selecionar (V)"
+        title="Navegar e Selecionar (V) • Arraste o fundo da tela para mover"
       >
         <MousePointer size={18} />
       </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo, useRef, useCallback } from "react";
+import { useState, useTransition, useMemo, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -55,6 +55,74 @@ export function NotesCanvasContent({
 
   const [isPending, startTransition] = useTransition();
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Pan / Arrastar tela do mural (estilo Miro/Figma)
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
+
+  const handleCanvasPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (viewMode !== "canvas" || activeTool === "pen") return;
+    // Aceita clique com botão esquerdo (0) ou botão de rolagem/meio (1)
+    if (e.button !== 0 && e.button !== 1) return;
+
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+
+    // Se o clique ocorreu em um post-it, card de texto, botão, input, textarea ou toolbar, NÃO arrasta o canvas
+    if (
+      target.closest("[data-note-card]") ||
+      target.closest("button") ||
+      target.closest("input") ||
+      target.closest("textarea") ||
+      target.closest("aside") ||
+      target.closest("header") ||
+      target.closest("footer")
+    ) {
+      return;
+    }
+
+    if (!canvasScrollRef.current) return;
+
+    setIsPanning(true);
+    panStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      scrollLeft: canvasScrollRef.current.scrollLeft,
+      scrollTop: canvasScrollRef.current.scrollTop,
+    };
+
+    const prevCursor = document.body.style.cursor;
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      if (!panStartRef.current || !canvasScrollRef.current) return;
+      const dx = moveEvent.clientX - panStartRef.current.startX;
+      const dy = moveEvent.clientY - panStartRef.current.startY;
+      canvasScrollRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
+      canvasScrollRef.current.scrollTop = panStartRef.current.scrollTop - dy;
+    };
+
+    const onPointerUp = () => {
+      setIsPanning(false);
+      panStartRef.current = null;
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSelect;
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+  };
 
   const flashSaved = useCallback(() => {
     setJustSaved(true);
@@ -388,9 +456,14 @@ export function NotesCanvasContent({
       {/* Área Principal de Trabalho (Canvas ou Grid) */}
       <main
         ref={canvasScrollRef}
+        onPointerDown={handleCanvasPointerDown}
         className={`flex-1 relative overflow-auto w-full select-none ${
           viewMode === "canvas"
-            ? "cursor-default"
+            ? activeTool === "pen"
+              ? "cursor-crosshair"
+              : isPanning
+              ? "cursor-grabbing"
+              : "cursor-grab"
             : "p-8 max-w-7xl mx-auto w-full"
         }`}
         style={
@@ -440,7 +513,13 @@ export function NotesCanvasContent({
         ) : viewMode === "canvas" ? (
           /* Canvas Livre Estilo Miro */
           <div
-            className="relative min-w-[2400px] min-h-[1600px] transition-transform origin-top-left"
+            className={`relative min-w-[2400px] min-h-[1600px] transition-transform origin-top-left ${
+              activeTool === "pen"
+                ? "cursor-crosshair"
+                : isPanning
+                ? "cursor-grabbing"
+                : "cursor-grab"
+            }`}
             style={{ transform: `scale(${zoomLevel})` }}
           >
             {/* Camada de Desenho SVG (Caneta/Rabisco) */}
@@ -516,6 +595,13 @@ export function NotesCanvasContent({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {viewMode === "canvas" && (
+          <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-surface/90 border border-border shadow-lg backdrop-blur-md text-[11px] font-medium text-text-muted select-none">
+            <span className="text-sm leading-none">✋</span>
+            <span>Arraste o fundo para navegar</span>
+          </div>
+        )}
 
         {viewMode === "canvas" && (
           <div className="flex items-center gap-1 bg-surface/90 border border-border shadow-lg px-2 py-1 rounded-2xl backdrop-blur-md text-xs font-bold text-text-title">
