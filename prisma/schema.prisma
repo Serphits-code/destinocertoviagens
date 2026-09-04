@@ -42,6 +42,7 @@ model User {
 
   excursions   Excursion[]
   presets      Preset[]
+  notes        Note[]
 }
 
 model Excursion {
@@ -227,5 +228,25 @@ model FinancialEntry {
   @@index([status])
   @@index([kind, status, dueDate])
 }
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String?
+  content   String   @default("")
+  color     String   @default("yellow") // "yellow" | "blue" | "green" | "pink" | "purple" | "orange" | "white"
+  posX      Float    @default(100)
+  posY      Float    @default(100)
+  rotation  Float    @default(0)
+  sticker   String?
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
 
 

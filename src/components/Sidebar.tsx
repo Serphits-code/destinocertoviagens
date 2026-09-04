@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Share2,
+  StickyNote,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -22,6 +23,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Cockpit", href: "/cockpit" },
   { icon: Map, label: "Excursões", href: "/excursoes" },
   { icon: Users, label: "Clientes & Passageiros", href: "/clientes" },
+  { icon: StickyNote, label: "Quadro de Notas", href: "/notas" },
   { icon: Share2, label: "Rede Social", href: "/rede-social" },
   { icon: Building2, label: "Fornecedores & Parceiros", href: "/fornecedores" },
   { icon: Settings, label: "Configurações", href: "/configuracoes" },
