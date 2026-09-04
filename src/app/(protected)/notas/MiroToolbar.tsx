@@ -7,6 +7,7 @@ import {
   Type,
   StickyNote,
   PenTool,
+  Eraser,
   Undo2,
   Trash2,
   Palette,
@@ -15,7 +16,7 @@ import {
 import type { NoteColor } from "@/lib/actions/notes";
 import { COLOR_CONFIG } from "./StickyNoteCard";
 
-export type ActiveTool = "select" | "text" | "sticky" | "pen";
+export type ActiveTool = "select" | "text" | "sticky" | "pen" | "eraser";
 
 export const PEN_COLORS = [
   { label: "Amarelo", value: "#F59E0B" },
@@ -214,6 +215,24 @@ export function MiroToolbar({
           )}
         </AnimatePresence>
       </div>
+
+      {/* 5. Borracha (Eraser) */}
+      <button
+        type="button"
+        onClick={() => {
+          onSelectTool("eraser");
+          setShowPenColors(false);
+          setShowStickyColors(false);
+        }}
+        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+          activeTool === "eraser"
+            ? "bg-primary text-white shadow-xs"
+            : "text-text-muted hover:text-text-title hover:bg-surface-muted"
+        }`}
+        title="Borracha (E) • Clique ou arraste sobre os rabiscos para apagá-los"
+      >
+        <Eraser size={18} />
+      </button>
 
       <div className="w-6 h-px bg-border my-1" />
 

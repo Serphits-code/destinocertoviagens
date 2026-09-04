@@ -22,6 +22,7 @@ import {
   updateNotePosition,
   deleteNote,
   saveDrawing,
+  deleteDrawing,
   undoLastDrawing,
   clearUserDrawings,
 } from "@/lib/actions/notes";
@@ -66,7 +67,7 @@ export function NotesCanvasContent({
   } | null>(null);
 
   const handleCanvasPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (viewMode !== "canvas" || activeTool === "pen") return;
+    if (viewMode !== "canvas" || activeTool === "pen" || activeTool === "eraser") return;
     // Aceita clique com botão esquerdo (0) ou botão de rolagem/meio (1)
     if (e.button !== 0 && e.button !== 1) return;
 
@@ -294,6 +295,16 @@ export function NotesCanvasContent({
     });
   };
 
+  // Apagar traço individual (Borracha)
+  const handleDeleteDrawing = (id: string) => {
+    setDrawings((prev) => prev.filter((d) => d.id !== id));
+
+    startTransition(async () => {
+      await deleteDrawing(id);
+      flashSaved();
+    });
+  };
+
   // Filtros aplicados
   const filteredNotes = useMemo(() => {
     return notes.filter((n) => {
@@ -461,6 +472,8 @@ export function NotesCanvasContent({
           viewMode === "canvas"
             ? activeTool === "pen"
               ? "cursor-crosshair"
+              : activeTool === "eraser"
+              ? "cursor-pointer"
               : isPanning
               ? "cursor-grabbing"
               : "cursor-grab"
@@ -516,18 +529,22 @@ export function NotesCanvasContent({
             className={`relative min-w-[2400px] min-h-[1600px] transition-transform origin-top-left ${
               activeTool === "pen"
                 ? "cursor-crosshair"
+                : activeTool === "eraser"
+                ? "cursor-pointer"
                 : isPanning
                 ? "cursor-grabbing"
                 : "cursor-grab"
             }`}
             style={{ transform: `scale(${zoomLevel})` }}
           >
-            {/* Camada de Desenho SVG (Caneta/Rabisco) */}
+            {/* Camada de Desenho SVG (Caneta/Rabisco e Borracha) */}
             <DrawingLayer
               isDrawingMode={activeTool === "pen"}
+              isEraserMode={activeTool === "eraser"}
               penColor={penColor}
               drawings={drawings}
               onSaveDrawing={handleSaveDrawing}
+              onDeleteDrawing={handleDeleteDrawing}
               zoomLevel={zoomLevel}
             />
 
@@ -598,8 +615,22 @@ export function NotesCanvasContent({
 
         {viewMode === "canvas" && (
           <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-surface/90 border border-border shadow-lg backdrop-blur-md text-[11px] font-medium text-text-muted select-none">
-            <span className="text-sm leading-none">✋</span>
-            <span>Arraste o fundo para navegar</span>
+            {activeTool === "eraser" ? (
+              <>
+                <span className="text-sm leading-none">🧹</span>
+                <span className="text-primary font-semibold">Borracha: Clique ou passe sobre os rabiscos para apagá-los</span>
+              </>
+            ) : activeTool === "pen" ? (
+              <>
+                <span className="text-sm leading-none">✏️</span>
+                <span>Modo Caneta: Desenhe livremente no mural</span>
+              </>
+            ) : (
+              <>
+                <span className="text-sm leading-none">✋</span>
+                <span>Arraste o fundo para navegar</span>
+              </>
+            )}
           </div>
         )}
 

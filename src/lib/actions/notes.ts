@@ -191,6 +191,19 @@ export async function undoLastDrawing(): Promise<{ success: boolean }> {
   return { success: true };
 }
 
+export async function deleteDrawing(id: string): Promise<{ success: boolean }> {
+  const user = await requireAuth();
+
+  await db.canvasDrawing.deleteMany({
+    where: {
+      id,
+      userId: user.id,
+    },
+  });
+
+  return { success: true };
+}
+
 export async function clearUserDrawings(): Promise<{ success: boolean }> {
   const user = await requireAuth();
 
