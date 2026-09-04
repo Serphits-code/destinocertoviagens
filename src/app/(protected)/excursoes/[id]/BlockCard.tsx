@@ -69,10 +69,16 @@ export function BlockCard({
       style={style}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface rounded-2xl border border-border shadow-shadow-card hover:shadow-shadow-hover transition-shadow overflow-hidden"
+      className={`bg-surface rounded-2xl border border-border shadow-shadow-card hover:shadow-shadow-hover transition-shadow ${
+        menuOpen ? "z-30 relative" : "relative"
+      }`}
     >
       {/* Header do card */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-surface-subtle">
+      <div
+        className={`flex items-center gap-2 px-4 py-3 bg-surface-subtle transition-all ${
+          block.collapsed ? "rounded-2xl" : "rounded-t-2xl border-b border-border"
+        }`}
+      >
         <button
           type="button"
           {...attributes}
@@ -99,7 +105,7 @@ export function BlockCard({
         <div className="flex items-center gap-1">
           <button
             onClick={() => onToggleCollapse(block.id)}
-            className="p-1.5 rounded-lg text-text-muted hover:bg-surface-muted transition-colors"
+            className="p-1.5 rounded-lg text-text-muted hover:bg-surface-muted transition-colors cursor-pointer"
             title={block.collapsed ? "Expandir" : "Minimizar"}
           >
             {block.collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
@@ -108,7 +114,7 @@ export function BlockCard({
           <div className="relative">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="p-1.5 rounded-lg text-text-muted hover:bg-surface-muted transition-colors"
+              className="p-1.5 rounded-lg text-text-muted hover:bg-surface-muted transition-colors cursor-pointer"
               title="Mais opções"
             >
               <MoreVertical size={16} />
@@ -116,38 +122,48 @@ export function BlockCard({
 
             <AnimatePresence>
               {menuOpen && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                  className="absolute right-0 mt-1 w-52 bg-surface rounded-xl shadow-shadow-hover border border-border overflow-hidden z-30"
-                >
-                  <button
-                    onClick={() => {
-                      onDuplicate(block.id);
+                <>
+                  {/* Backdrop para fechar ao clicar fora */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setMenuOpen(false);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-body hover:bg-surface-muted transition-colors"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                    className="absolute right-0 top-full mt-1.5 w-52 bg-surface rounded-xl shadow-2xl border border-border overflow-hidden z-50"
                   >
-                    <Copy size={14} /> Duplicar Card
-                  </button>
-                  <button
-                    onClick={handleSavePreset}
-                    disabled={savingPreset || block.id.startsWith("temp_")}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-body hover:bg-surface-muted transition-colors disabled:opacity-50"
-                  >
-                    <Save size={14} /> Salvar como Modelo
-                  </button>
-                  <button
-                    onClick={() => {
-                      onDelete(block.id);
-                      setMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-status-danger hover:bg-status-danger-bg transition-colors"
-                  >
-                    <Trash2 size={14} /> Excluir Card
-                  </button>
-                </motion.div>
+                    <button
+                      onClick={() => {
+                        onDuplicate(block.id);
+                        setMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-text-body hover:bg-surface-muted transition-colors cursor-pointer"
+                    >
+                      <Copy size={14} /> Duplicar Card
+                    </button>
+                    <button
+                      onClick={handleSavePreset}
+                      disabled={savingPreset || block.id.startsWith("temp_")}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-text-body hover:bg-surface-muted transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      <Save size={14} /> Salvar como Modelo
+                    </button>
+                    <button
+                      onClick={() => {
+                        onDelete(block.id);
+                        setMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-status-danger hover:bg-status-danger-bg transition-colors cursor-pointer"
+                    >
+                      <Trash2 size={14} /> Excluir Card
+                    </button>
+                  </motion.div>
+                </>
               )}
             </AnimatePresence>
           </div>
