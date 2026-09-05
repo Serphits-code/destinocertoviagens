@@ -67,7 +67,7 @@ export function Sidebar() {
   return (
     <motion.aside
       initial={false}
-      animate={{ width: collapsed ? 76 : 260 }}
+      animate={{ width: collapsed ? 76 : 268 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className="fixed left-0 top-0 h-screen bg-secondary text-white flex flex-col z-40 shadow-2xl border-r border-white/5 select-none"
     >
@@ -127,7 +127,7 @@ export function Sidebar() {
       </div>
 
       {/* Navegação Principal do Menu */}
-      <nav className="flex-1 py-4 px-3 space-y-1.5 overflow-y-auto">
+      <nav className="flex-1 py-4 px-2.5 space-y-1.5 overflow-y-auto">
         {menuItems.map((item) => {
           const hasSubItems = Boolean(item.subItems && item.subItems.length > 0);
           const isSubActive = hasSubItems && item.subItems?.some((sub) => pathname === sub.href);
@@ -139,27 +139,69 @@ export function Sidebar() {
 
           return (
             <div key={item.href} className="space-y-1">
-              <Link href={item.href} className="block group">
+              <Link href={item.href} className="block group relative">
                 <motion.div
-                  whileHover={{ x: collapsed ? 0 : 3 }}
+                  whileHover={{ x: collapsed ? 0 : 2 }}
+                  whileTap={{ scale: 0.985 }}
                   transition={{ duration: 0.15 }}
-                  className={`relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                  className={`relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors duration-200 cursor-pointer overflow-hidden ${
                     isParentActive
-                      ? "bg-gradient-to-r from-primary to-[#ff7a22] text-white font-bold shadow-lg shadow-primary/25 border border-primary-strong/40"
+                      ? "text-white font-bold"
                       : isSubActive
                       ? "text-white bg-white/[0.08] border border-white/10 font-semibold"
-                      : "text-slate-300/75 hover:text-white bg-transparent hover:bg-white/[0.06] border border-transparent hover:border-white/10"
+                      : "text-slate-300/75 hover:text-white"
                   }`}
                 >
-                  {/* Indicador Branco na borda esquerda apenas quando ativo */}
+                  {/* Transição Suave de Fundo Ativo (Shared Layout Animation entre botões) */}
                   {isParentActive && (
-                    <div className="w-1.5 h-4 rounded-full bg-white shrink-0 -ml-0.5 shadow-xs" />
+                    <motion.div
+                      layoutId="active-sidebar-pill"
+                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary via-[#ff7a22] to-orange-500 shadow-lg shadow-primary/25 border border-primary-strong/40 z-0 overflow-hidden"
+                      transition={{
+                        type: "spring",
+                        stiffness: 380,
+                        damping: 32,
+                        mass: 0.8,
+                      }}
+                    >
+                      {/* Fill progressivo / varredura luminosa da esquerda para a direita */}
+                      <motion.div
+                        initial={{ x: "-100%" }}
+                        animate={{ x: "100%" }}
+                        transition={{ duration: 0.65, ease: "easeOut" }}
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12 pointer-events-none"
+                      />
+                    </motion.div>
+                  )}
+
+                  {/* Fill progressivo da esquerda para a direita no Hover (Inativo) */}
+                  {!isParentActive && !isSubActive && (
+                    <motion.div
+                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-white/[0.09] via-white/[0.05] to-transparent border border-white/10 pointer-events-none z-0"
+                      initial={{ scaleX: 0, opacity: 0 }}
+                      whileHover={{ scaleX: 1, opacity: 1 }}
+                      transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                      style={{ originX: 0 }}
+                    />
+                  )}
+
+                  {/* Cápsula Indicadora Branca na borda esquerda com transição suave */}
+                  {isParentActive && (
+                    <motion.div
+                      layoutId="active-sidebar-capsule"
+                      className="w-1.5 h-4 rounded-full bg-white shrink-0 -ml-0.5 shadow-sm z-10"
+                      transition={{
+                        type: "spring",
+                        stiffness: 400,
+                        damping: 30,
+                      }}
+                    />
                   )}
 
                   {/* Ícone com destaque */}
                   <Icon
                     size={19}
-                    className={`shrink-0 transition-colors ${
+                    className={`shrink-0 transition-colors z-10 ${
                       isParentActive || isSubActive
                         ? "text-white drop-shadow-xs"
                         : "text-slate-400 group-hover:text-primary"
@@ -172,11 +214,15 @@ export function Sidebar() {
                         initial={{ opacity: 0, width: 0 }}
                         animate={{ opacity: 1, width: "auto" }}
                         exit={{ opacity: 0, width: 0 }}
-                        className="flex-1 flex items-center justify-between min-w-0 overflow-hidden"
+                        className="flex-1 flex items-center justify-between min-w-0 z-10"
                       >
                         <span
-                          className={`whitespace-nowrap truncate text-sm ${
-                            isParentActive ? "font-bold text-white" : isSubActive ? "font-semibold text-white" : "font-medium"
+                          className={`truncate text-[13px] tracking-tight ${
+                            isParentActive
+                              ? "font-bold text-white"
+                              : isSubActive
+                              ? "font-semibold text-white"
+                              : "font-medium"
                           }`}
                         >
                           {item.label}
@@ -184,8 +230,9 @@ export function Sidebar() {
 
                         {hasSubItems && (
                           <button
+                            type="button"
                             onClick={(e) => toggleSubmenu(item.href, e)}
-                            className="p-1 rounded-md hover:bg-white/15 text-slate-400 hover:text-white transition-colors cursor-pointer ml-1.5"
+                            className="p-1 rounded-md hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer ml-1 shrink-0"
                             title={isSubmenuOpen ? "Recolher subitens" : "Expandir subitens"}
                           >
                             <ChevronDown
@@ -210,36 +257,74 @@ export function Sidebar() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="ml-5 pl-3 border-l-2 border-white/10 mt-1 space-y-1 overflow-hidden"
+                      transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                      className="ml-4 pl-3 border-l-2 border-white/10 mt-1 space-y-1 overflow-hidden"
                     >
                       {item.subItems?.map((sub) => {
                         const isThisSubActive = pathname === sub.href;
                         const SubIcon = sub.icon;
 
                         return (
-                          <Link key={sub.href} href={sub.href} className="block group/sub">
+                          <Link key={sub.href} href={sub.href} className="block group/sub relative">
                             <motion.div
                               whileHover={{ x: 2 }}
+                              whileTap={{ scale: 0.985 }}
                               transition={{ duration: 0.15 }}
-                              className={`relative flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs transition-all duration-200 cursor-pointer ${
+                              className={`relative flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs transition-colors duration-200 cursor-pointer overflow-hidden ${
                                 isThisSubActive
-                                  ? "bg-gradient-to-r from-primary to-[#ff7a22] text-white font-bold shadow-md shadow-primary/20 border border-primary-strong/40"
-                                  : "text-slate-300/75 hover:text-white bg-transparent hover:bg-white/[0.06] border border-transparent hover:border-white/10 font-medium"
+                                  ? "text-white font-bold"
+                                  : "text-slate-300/75 hover:text-white"
                               }`}
                             >
+                              {/* Transição suave de Fundo Ativo no Subitem */}
                               {isThisSubActive && (
-                                <div className="w-1.5 h-3.5 rounded-full bg-white shrink-0 -ml-1 shadow-xs" />
+                                <motion.div
+                                  layoutId="active-sub-sidebar-pill"
+                                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary via-[#ff7a22] to-orange-500 shadow-md shadow-primary/20 border border-primary-strong/40 z-0 overflow-hidden"
+                                  transition={{
+                                    type: "spring",
+                                    stiffness: 400,
+                                    damping: 32,
+                                    mass: 0.8,
+                                  }}
+                                >
+                                  <motion.div
+                                    initial={{ x: "-100%" }}
+                                    animate={{ x: "100%" }}
+                                    transition={{ duration: 0.55, ease: "easeOut" }}
+                                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent skew-x-12 pointer-events-none"
+                                  />
+                                </motion.div>
                               )}
+
+                              {/* Fill progressivo da esquerda para a direita no Hover do Subitem */}
+                              {!isThisSubActive && (
+                                <motion.div
+                                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-white/[0.08] to-transparent border border-white/10 pointer-events-none z-0"
+                                  initial={{ scaleX: 0, opacity: 0 }}
+                                  whileHover={{ scaleX: 1, opacity: 1 }}
+                                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                                  style={{ originX: 0 }}
+                                />
+                              )}
+
+                              {isThisSubActive && (
+                                <motion.div
+                                  layoutId="active-sub-capsule"
+                                  className="w-1.5 h-3.5 rounded-full bg-white shrink-0 -ml-1 shadow-xs z-10"
+                                  transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                                />
+                              )}
+
                               <SubIcon
                                 size={15}
-                                className={`shrink-0 transition-colors ${
+                                className={`shrink-0 transition-colors z-10 ${
                                   isThisSubActive
                                     ? "text-white"
                                     : "text-slate-400 group-hover/sub:text-primary"
                                 }`}
                               />
-                              <span className="whitespace-nowrap truncate">{sub.label}</span>
+                              <span className="truncate z-10">{sub.label}</span>
                             </motion.div>
                           </Link>
                         );
@@ -259,17 +344,23 @@ export function Sidebar() {
                       <Link
                         key={sub.href}
                         href={sub.href}
-                        className="block"
+                        className="block relative"
                         title={sub.label}
                       >
                         <div
-                          className={`w-9 h-9 mx-auto rounded-xl flex items-center justify-center transition-all ${
+                          className={`w-9 h-9 mx-auto rounded-xl flex items-center justify-center transition-all relative overflow-hidden ${
                             isThisSubActive
                               ? "bg-primary text-white shadow-sm"
                               : "text-slate-400 hover:text-white hover:bg-white/10"
                           }`}
                         >
-                          <SubIcon size={15} />
+                          {isThisSubActive && (
+                            <motion.div
+                              layoutId="active-collapsed-sub-pill"
+                              className="absolute inset-0 bg-primary"
+                            />
+                          )}
+                          <SubIcon size={15} className="z-10" />
                         </div>
                       </Link>
                     );

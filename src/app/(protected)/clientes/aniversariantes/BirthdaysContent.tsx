@@ -296,7 +296,7 @@ export function BirthdaysContent({
           </div>
         </div>
 
-        {/* Abas dos 12 Meses com Contadores */}
+        {/* Abas dos 12 Meses com Contadores e Transição Suave */}
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-1.5 pt-2 border-t border-(--border)">
           {MONTH_SHORT.map((shortName, idx) => {
             const m = idx + 1;
@@ -309,23 +309,71 @@ export function BirthdaysContent({
                 key={m}
                 onClick={() => handleMonthChange(m)}
                 disabled={isPending}
-                className={`relative flex flex-col items-center justify-center py-2 px-1 rounded-xl text-center transition-all cursor-pointer ${
-                  isSelected
-                    ? "bg-gradient-to-b from-primary to-[#ff7a22] text-white font-bold shadow-md shadow-primary/20 scale-[1.02]"
-                    : isToday
-                    ? "bg-primary/10 text-primary border border-primary/30 font-semibold hover:bg-primary/20"
-                    : "bg-(--surface-subtle) hover:bg-(--surface) text-(--text-muted) hover:text-(--text-title) border border-transparent hover:border-(--border)"
-                }`}
+                className="relative flex flex-col items-center justify-center py-2 px-1 rounded-xl text-center transition-colors cursor-pointer group overflow-hidden select-none"
               >
-                {isToday && !isSelected && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />
+                {/* Transição suave do fundo ativo entre os meses com Spring Physics */}
+                {isSelected && (
+                  <motion.div
+                    layoutId="active-month-tab-pill"
+                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary via-[#ff7a22] to-orange-500 shadow-md shadow-primary/25 border border-primary-strong/40 z-0 overflow-hidden"
+                    transition={{
+                      type: "spring",
+                      stiffness: 420,
+                      damping: 32,
+                      mass: 0.8,
+                    }}
+                  >
+                    {/* Fill progressivo luminoso da esquerda para a direita */}
+                    <motion.div
+                      initial={{ x: "-100%" }}
+                      animate={{ x: "100%" }}
+                      transition={{ duration: 0.55, ease: "easeOut" }}
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent skew-x-12 pointer-events-none"
+                    />
+                  </motion.div>
                 )}
-                <span className="text-xs">{shortName}</span>
+
+                {/* Fill progressivo da esquerda para a direita no Hover (Inativo) */}
+                {!isSelected && (
+                  <motion.div
+                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/15 via-primary/5 to-transparent border border-primary/20 pointer-events-none z-0"
+                    initial={{ scaleX: 0, opacity: 0 }}
+                    whileHover={{ scaleX: 1, opacity: 1 }}
+                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                    style={{ originX: 0 }}
+                  />
+                )}
+
+                {/* Fundo sutil para itens inativos */}
+                {!isSelected && !isToday && (
+                  <div className="absolute inset-0 rounded-xl bg-(--surface-subtle) -z-10" />
+                )}
+
+                {isToday && !isSelected && (
+                  <div className="absolute inset-0 rounded-xl bg-primary/10 border border-primary/30 -z-10" />
+                )}
+
+                {isToday && !isSelected && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary z-20" />
+                )}
+
                 <span
-                  className={`text-[10px] mt-0.5 px-1.5 py-0.2 rounded-full font-mono ${
+                  className={`relative z-10 text-xs transition-colors ${
                     isSelected
-                      ? "bg-white/20 text-white"
-                      : "bg-(--surface) text-(--text-muted)"
+                      ? "text-white font-extrabold"
+                      : isToday
+                      ? "text-primary font-bold"
+                      : "text-(--text-muted) group-hover:text-(--text-title) font-medium"
+                  }`}
+                >
+                  {shortName}
+                </span>
+
+                <span
+                  className={`relative z-10 text-[10px] mt-0.5 px-1.5 py-0.2 rounded-full font-mono transition-colors ${
+                    isSelected
+                      ? "bg-white/20 text-white font-bold"
+                      : "bg-(--surface) text-(--text-muted) group-hover:text-(--text-title)"
                   }`}
                 >
                   {count}
@@ -461,87 +509,150 @@ export function BirthdaysContent({
           )}
         </div>
 
-        {/* Filtros de Status (Quando no Mês Atual) */}
+        {/* Filtros de Status (Quando no Mês Atual) com Transição Fluida */}
         {isCurrentMonthActive && (
           <div className="flex items-center gap-1 p-1 rounded-xl bg-(--surface-subtle) border border-(--border) text-xs">
             <button
               onClick={() => setStatusFilter("ALL")}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+              className={`relative px-3 py-1.5 rounded-lg transition-colors cursor-pointer overflow-hidden ${
                 statusFilter === "ALL"
-                  ? "bg-primary text-white shadow-xs"
-                  : "text-(--text-muted) hover:text-(--text-title)"
+                  ? "text-white font-bold"
+                  : "text-(--text-muted) hover:text-(--text-title) font-medium"
               }`}
             >
-              Todos ({monthStats.total})
+              {statusFilter === "ALL" && (
+                <motion.div
+                  layoutId="active-status-filter-pill"
+                  className="absolute inset-0 rounded-lg bg-primary shadow-xs z-0"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <span className="relative z-10">Todos ({monthStats.total})</span>
             </button>
+
             <button
               onClick={() => setStatusFilter("TODAY")}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${
+              className={`relative px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer overflow-hidden ${
                 statusFilter === "TODAY"
-                  ? "bg-amber-500 text-white shadow-xs font-bold"
-                  : "text-(--text-muted) hover:text-amber-500"
+                  ? "text-white font-bold"
+                  : "text-(--text-muted) hover:text-amber-500 font-medium"
               }`}
             >
-              <PartyPopper size={13} />
-              <span>Hoje ({monthStats.todayCount})</span>
+              {statusFilter === "TODAY" && (
+                <motion.div
+                  layoutId="active-status-filter-pill"
+                  className="absolute inset-0 rounded-lg bg-amber-500 shadow-xs z-0"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <PartyPopper size={13} className="relative z-10" />
+              <span className="relative z-10">Hoje ({monthStats.todayCount})</span>
             </button>
+
             <button
               onClick={() => setStatusFilter("UPCOMING")}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+              className={`relative px-3 py-1.5 rounded-lg transition-colors cursor-pointer overflow-hidden ${
                 statusFilter === "UPCOMING"
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-(--text-muted) hover:text-(--text-title)"
+                  ? "text-white font-bold"
+                  : "text-(--text-muted) hover:text-(--text-title) font-medium"
               }`}
             >
-              Próximos
+              {statusFilter === "UPCOMING" && (
+                <motion.div
+                  layoutId="active-status-filter-pill"
+                  className="absolute inset-0 rounded-lg bg-indigo-600 shadow-xs z-0"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <span className="relative z-10">Próximos</span>
             </button>
+
             <button
               onClick={() => setStatusFilter("PAST")}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+              className={`relative px-3 py-1.5 rounded-lg transition-colors cursor-pointer overflow-hidden ${
                 statusFilter === "PAST"
-                  ? "bg-(--surface) text-(--text-title) shadow-xs font-semibold"
-                  : "text-(--text-muted) hover:text-(--text-title)"
+                  ? "text-(--text-title) font-bold"
+                  : "text-(--text-muted) hover:text-(--text-title) font-medium"
               }`}
             >
-              Passados
+              {statusFilter === "PAST" && (
+                <motion.div
+                  layoutId="active-status-filter-pill"
+                  className="absolute inset-0 rounded-lg bg-(--surface) shadow-xs border border-(--border) z-0"
+                  transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                />
+              )}
+              <span className="relative z-10">Passados</span>
             </button>
           </div>
         )}
 
-        {/* Alternador de Modo de Visualização */}
+        {/* Alternador de Modo de Visualização com Fundo Deslizante */}
         <div className="flex items-center gap-1 p-1 rounded-xl bg-(--surface-subtle) border border-(--border)">
           <button
             onClick={() => setViewMode("cards")}
-            className={`p-2 rounded-lg transition-colors cursor-pointer ${
-              viewMode === "cards"
-                ? "bg-(--surface) text-primary shadow-xs font-semibold"
-                : "text-(--text-muted) hover:text-(--text-title)"
-            }`}
+            className="relative p-2 rounded-lg transition-colors cursor-pointer overflow-hidden"
             title="Visualização em Cards"
           >
-            <LayoutGrid size={16} />
+            {viewMode === "cards" && (
+              <motion.div
+                layoutId="active-view-mode-pill"
+                className="absolute inset-0 rounded-lg bg-(--surface) shadow-xs border border-(--border) z-0"
+                transition={{ type: "spring", stiffness: 450, damping: 32 }}
+              />
+            )}
+            <LayoutGrid
+              size={16}
+              className={`relative z-10 transition-colors ${
+                viewMode === "cards"
+                  ? "text-primary"
+                  : "text-(--text-muted) hover:text-(--text-title)"
+              }`}
+            />
           </button>
+
           <button
             onClick={() => setViewMode("timeline")}
-            className={`p-2 rounded-lg transition-colors cursor-pointer ${
-              viewMode === "timeline"
-                ? "bg-(--surface) text-primary shadow-xs font-semibold"
-                : "text-(--text-muted) hover:text-(--text-title)"
-            }`}
+            className="relative p-2 rounded-lg transition-colors cursor-pointer overflow-hidden"
             title="Visualização por Dias (Linha do Tempo)"
           >
-            <CalendarDays size={16} />
+            {viewMode === "timeline" && (
+              <motion.div
+                layoutId="active-view-mode-pill"
+                className="absolute inset-0 rounded-lg bg-(--surface) shadow-xs border border-(--border) z-0"
+                transition={{ type: "spring", stiffness: 450, damping: 32 }}
+              />
+            )}
+            <CalendarDays
+              size={16}
+              className={`relative z-10 transition-colors ${
+                viewMode === "timeline"
+                  ? "text-primary"
+                  : "text-(--text-muted) hover:text-(--text-title)"
+              }`}
+            />
           </button>
+
           <button
             onClick={() => setViewMode("table")}
-            className={`p-2 rounded-lg transition-colors cursor-pointer ${
-              viewMode === "table"
-                ? "bg-(--surface) text-primary shadow-xs font-semibold"
-                : "text-(--text-muted) hover:text-(--text-title)"
-            }`}
+            className="relative p-2 rounded-lg transition-colors cursor-pointer overflow-hidden"
             title="Visualização em Tabela"
           >
-            <List size={16} />
+            {viewMode === "table" && (
+              <motion.div
+                layoutId="active-view-mode-pill"
+                className="absolute inset-0 rounded-lg bg-(--surface) shadow-xs border border-(--border) z-0"
+                transition={{ type: "spring", stiffness: 450, damping: 32 }}
+              />
+            )}
+            <List
+              size={16}
+              className={`relative z-10 transition-colors ${
+                viewMode === "table"
+                  ? "text-primary"
+                  : "text-(--text-muted) hover:text-(--text-title)"
+              }`}
+            />
           </button>
         </div>
       </div>
