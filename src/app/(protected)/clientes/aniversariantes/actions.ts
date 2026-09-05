@@ -122,3 +122,75 @@ export async function getMonthlyBirthdayCounts(): Promise<MonthlyCount[]> {
 
   return result;
 }
+
+export async function getAllBirthdaysGrouped(
+  targetYear?: number
+): Promise<Record<number, BirthdayCustomer[]>> {
+  await requireAuth();
+
+  const currentYear = targetYear || new Date().getFullYear();
+
+  const rows = await db.$queryRaw<
+    Array<{
+      id: string;
+      name: string;
+      birthDate: Date;
+      day: number;
+      month: number;
+      year: number;
+      mobile: string | null;
+      phone: string | null;
+      email: string | null;
+      city: string | null;
+      state: string | null;
+      cpf: string | null;
+    }>
+  >`
+    SELECT
+      id,
+      name,
+      "birthDate",
+      EXTRACT(DAY FROM "birthDate")::int AS day,
+      EXTRACT(MONTH FROM "birthDate")::int AS month,
+      EXTRACT(YEAR FROM "birthDate")::int AS year,
+      mobile,
+      phone,
+      email,
+      city,
+      state,
+      cpf
+    FROM "Customer"
+    WHERE "birthDate" IS NOT NULL
+    ORDER BY EXTRACT(DAY FROM "birthDate") ASC, name ASC
+  `;
+
+  const grouped: Record<number, BirthdayCustomer[]> = {};
+  for (let m = 1; m <= 12; m++) {
+    grouped[m] = [];
+  }
+
+  for (const r of rows) {
+    const validYear = r.year && r.year > 1900 && r.year <= currentYear ? r.year : null;
+    const turningAge = validYear ? currentYear - validYear : null;
+
+    if (r.month >= 1 && r.month <= 12) {
+      grouped[r.month].push({
+        id: r.id,
+        name: r.name,
+        birthDate: r.birthDate.toISOString(),
+        day: r.day,
+        month: r.month,
+        year: validYear,
+        turningAge,
+        mobile: r.mobile,
+        phone: r.phone,
+        email: r.email,
+        city: r.city,
+        state: r.state,
+        cpf: r.cpf,
+      });
+    }
+  }
+
+  return grouped;
+}

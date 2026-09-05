@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Cake,
@@ -26,7 +26,12 @@ import {
   Send,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BirthdayCustomer, MonthlyCount, getBirthdaysByMonth } from "./actions";
+import {
+  BirthdayCustomer,
+  MonthlyCount,
+  getBirthdaysByMonth,
+  getAllBirthdaysGrouped,
+} from "./actions";
 
 interface BirthdaysContentProps {
   initialClients: BirthdayCustomer[];
@@ -94,12 +99,44 @@ export function BirthdaysContent({
   const todayDay = now.getDate();
 
   const [selectedMonth, setSelectedMonth] = useState<number>(initialMonth);
+  const [monthCache, setMonthCache] = useState<Record<number, BirthdayCustomer[]>>({
+    [initialMonth]: initialClients,
+  });
   const [clients, setClients] = useState<BirthdayCustomer[]>(initialClients);
   const [counts] = useState<MonthlyCount[]>(initialCounts);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "TODAY" | "UPCOMING" | "PAST">("ALL");
   const [viewMode, setViewMode] = useState<"cards" | "timeline" | "table">("cards");
   const [isPending, startTransition] = useTransition();
+
+  // Pré-carregamento silencioso em background de todos os 12 meses
+  useEffect(() => {
+    let isMounted = true;
+    getAllBirthdaysGrouped(currentYear)
+      .then((allMonths) => {
+        if (!isMounted) return;
+        setMonthCache((prev) => ({ ...allMonths, ...prev }));
+      })
+      .catch((err) => {
+        console.warn("Falha no pré-carregamento em background:", err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [currentYear]);
+
+  // Prefetch sob demanda no hover do mouse
+  const prefetchMonth = useCallback(
+    (m: number) => {
+      if (monthCache[m]) return;
+      getBirthdaysByMonth(m, currentYear)
+        .then((data) => {
+          setMonthCache((prev) => ({ ...prev, [m]: data }));
+        })
+        .catch(() => {});
+    },
+    [monthCache, currentYear]
+  );
 
   const handleMonthChange = (newMonth: number) => {
     let m = newMonth;
@@ -108,8 +145,16 @@ export function BirthdaysContent({
     setSelectedMonth(m);
     setStatusFilter("ALL");
 
+    // Transição INSTANTÂNEA (0ms) se já estiver no cache
+    if (monthCache[m]) {
+      setClients(monthCache[m]);
+      return;
+    }
+
+    // Se ainda não estiver em cache, busca e armazena
     startTransition(async () => {
       const data = await getBirthdaysByMonth(m, currentYear);
+      setMonthCache((prev) => ({ ...prev, [m]: data }));
       setClients(data);
     });
   };
@@ -246,8 +291,8 @@ export function BirthdaysContent({
           <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
             <button
               onClick={() => handleMonthChange(selectedMonth - 1)}
-              disabled={isPending}
-              className="w-10 h-10 rounded-xl border border-(--border) bg-(--surface-subtle) hover:bg-(--surface) text-(--text-title) flex items-center justify-center transition-colors cursor-pointer hover:border-primary/40 disabled:opacity-50"
+              onMouseEnter={() => prefetchMonth(selectedMonth - 1 < 1 ? 12 : selectedMonth - 1)}
+              className="w-10 h-10 rounded-xl border border-(--border) bg-(--surface-subtle) hover:bg-(--surface) text-(--text-title) flex items-center justify-center transition-colors cursor-pointer hover:border-primary/40"
               title="Mês Anterior"
             >
               <ChevronLeft size={18} />
@@ -262,8 +307,8 @@ export function BirthdaysContent({
 
             <button
               onClick={() => handleMonthChange(selectedMonth + 1)}
-              disabled={isPending}
-              className="w-10 h-10 rounded-xl border border-(--border) bg-(--surface-subtle) hover:bg-(--surface) text-(--text-title) flex items-center justify-center transition-colors cursor-pointer hover:border-primary/40 disabled:opacity-50"
+              onMouseEnter={() => prefetchMonth(selectedMonth + 1 > 12 ? 1 : selectedMonth + 1)}
+              className="w-10 h-10 rounded-xl border border-(--border) bg-(--surface-subtle) hover:bg-(--surface) text-(--text-title) flex items-center justify-center transition-colors cursor-pointer hover:border-primary/40"
               title="Próximo Mês"
             >
               <ChevronRight size={18} />
@@ -272,7 +317,7 @@ export function BirthdaysContent({
             {!isCurrentMonthActive && (
               <button
                 onClick={() => handleMonthChange(todayMonth)}
-                disabled={isPending}
+                onMouseEnter={() => prefetchMonth(todayMonth)}
                 className="ml-2 px-3 py-2 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-xs font-semibold border border-orange-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Sparkles size={14} />
@@ -286,7 +331,7 @@ export function BirthdaysContent({
             {isPending ? (
               <div className="flex items-center gap-1.5 text-primary font-medium animate-pulse">
                 <div className="w-2 h-2 rounded-full bg-primary" />
-                <span>Carregando aniversariantes...</span>
+                <span>Atualizando dados...</span>
               </div>
             ) : (
               <span className="text-xs">
@@ -308,7 +353,7 @@ export function BirthdaysContent({
               <button
                 key={m}
                 onClick={() => handleMonthChange(m)}
-                disabled={isPending}
+                onMouseEnter={() => prefetchMonth(m)}
                 className="relative flex flex-col items-center justify-center py-2 px-1 rounded-xl text-center transition-colors cursor-pointer group overflow-hidden select-none"
               >
                 {/* Transição suave do fundo ativo entre os meses com Spring Physics */}
@@ -690,10 +735,11 @@ export function BirthdaysContent({
         ) : viewMode === "cards" ? (
           /* MODO 1: CARDS */
           <motion.div
-            key="cards"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            key={`cards-${selectedMonth}`}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
           >
             {filteredClients.map((client) => {
@@ -704,11 +750,9 @@ export function BirthdaysContent({
               const weekday = getDayOfWeekName(currentYear, selectedMonth, client.day);
 
               return (
-                <motion.div
+                <div
                   key={client.id}
-                  whileHover={{ y: -2 }}
-                  transition={{ duration: 0.15 }}
-                  className={`p-5 rounded-2xl border transition-all relative flex flex-col justify-between ${
+                  className={`p-5 rounded-2xl border transition-all duration-200 relative flex flex-col justify-between hover:-translate-y-1 hover:shadow-lg ${
                     isToday
                       ? "bg-gradient-to-br from-amber-500/10 via-(--surface) to-(--surface) border-amber-500/40 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/30"
                       : isUpcoming
@@ -829,17 +873,18 @@ export function BirthdaysContent({
                       <ArrowRight size={13} />
                     </Link>
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </motion.div>
         ) : viewMode === "timeline" ? (
           /* MODO 2: LINHA DO TEMPO POR DIAS DO MÊS */
           <motion.div
-            key="timeline"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            key={`timeline-${selectedMonth}`}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
             className="space-y-6"
           >
             {sortedDays.map((day) => {
@@ -949,10 +994,11 @@ export function BirthdaysContent({
         ) : (
           /* MODO 3: TABELA / LISTA */
           <motion.div
-            key="table"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            key={`table-${selectedMonth}`}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
             className="rounded-2xl bg-(--surface) border border-(--border) shadow-(--shadow-card) overflow-hidden"
           >
             <div className="overflow-x-auto">
