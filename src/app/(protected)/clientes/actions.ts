@@ -70,7 +70,7 @@ export async function searchClients({
 
 import { z } from "zod";
 
-export const clientInputSchema = z.object({
+const clientInputSchema = z.object({
   name: z.string().trim().min(2, "Nome deve ter ao menos 2 caracteres."),
   cpf: z.string().trim().optional().nullable(),
   rg: z.string().trim().optional().nullable(),

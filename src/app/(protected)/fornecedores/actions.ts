@@ -74,7 +74,7 @@ export async function searchSuppliers({
 
 import { z } from "zod";
 
-export const supplierInputSchema = z.object({
+const supplierInputSchema = z.object({
   name: z.string().trim().min(2, "Nome da empresa/parceiro deve ter no mínimo 2 caracteres."),
   tradeName: z.string().trim().optional().nullable(),
   cnpj: z.string().trim().optional().nullable(),
