@@ -79,8 +79,17 @@ function generateGuestId(): string {
 }
 
 function capacityOf(tipo: string): number {
-  const key = tipo.trim().toLowerCase().replace(/\s*(casal|solteiro)\s*/g, "");
-  return ROOM_CAPACITY[key] ?? 2;
+  const lower = tipo.trim().toLowerCase();
+  for (const [key, cap] of Object.entries(ROOM_CAPACITY)) {
+    if (lower.includes(key)) return cap;
+  }
+  if (lower.includes("casal")) return 2;
+  if (lower.includes("solteiro")) return 1;
+  const numMatch = lower.match(/(\d+)/);
+  if (numMatch && parseInt(numMatch[1], 10) > 0) {
+    return parseInt(numMatch[1], 10);
+  }
+  return 2;
 }
 
 // Verifica se o aniversário cai no intervalo de datas da excursão
@@ -484,8 +493,13 @@ function RoomCard({
     }))
     .filter((item) => item.info?.isBirthday);
 
-  const shouldShowNextEmptySlot = !isFull || extraSlotsAllowed;
-  const nextSlotNumber = occupiedCount + 1;
+  // Quantidade de vagas regulares restantes para preencher todos os espaços da capacidade do quarto
+  const remainingSlotsCount = Math.max(0, capacity - occupiedCount);
+  const emptySlots = Array.from(
+    { length: remainingSlotsCount },
+    (_, idx) => occupiedCount + idx + 1
+  );
+  const showExtraSlot = extraSlotsAllowed && occupiedCount >= capacity;
 
   return (
     <motion.div
@@ -527,7 +541,7 @@ function RoomCard({
 
           <span className="text-text-muted">·</span>
           <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-surface-muted text-text-muted border border-border/70">
-            {room.tipo} (Capacidade: {capacity})
+            {room.tipo}
           </span>
 
           {/* Badge de Aniversariante no Quarto */}
@@ -593,12 +607,24 @@ function RoomCard({
           );
         })}
 
-        {/* Próximo Espaço Vago */}
-        {shouldShowNextEmptySlot && (
+        {/* Espaços Vagos Disponíveis (Pré-alocados para exibir todos os espaços da capacidade do quarto) */}
+        {emptySlots.map((slotNum) => (
           <EmptySlot
-            slotNumber={nextSlotNumber}
+            key={`empty-slot-${roomIdx}-${slotNum}`}
+            slotNumber={slotNum}
             roomIdx={roomIdx}
-            isExtra={occupiedCount >= capacity}
+            isExtra={false}
+            onOpenCustomerPicker={onOpenCustomerPicker}
+          />
+        ))}
+
+        {/* Cama Extra / Vaga Adicional */}
+        {showExtraSlot && (
+          <EmptySlot
+            key={`extra-slot-${roomIdx}`}
+            slotNumber={occupiedCount + 1}
+            roomIdx={roomIdx}
+            isExtra={true}
             onOpenCustomerPicker={onOpenCustomerPicker}
           />
         )}
