@@ -281,7 +281,7 @@ export function DestinationMapPicker({
 
     if (addingNewMode || stops.length === 0) {
       const newStop: DestinationStop = {
-        id: `stop_${Date.now()}`,
+        id: `stop_${crypto.randomUUID()}`,
         name,
         latitude: lat,
         longitude: lng,

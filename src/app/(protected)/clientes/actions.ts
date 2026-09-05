@@ -68,18 +68,46 @@ export async function searchClients({
   };
 }
 
+import { z } from "zod";
+
+export const clientInputSchema = z.object({
+  name: z.string().trim().min(2, "Nome deve ter ao menos 2 caracteres."),
+  cpf: z.string().trim().optional().nullable(),
+  rg: z.string().trim().optional().nullable(),
+  passport: z.string().trim().optional().nullable(),
+  birthDate: z.string().optional().nullable(),
+  gender: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  mobile: z.string().optional().nullable(),
+  email: z.string().trim().email("E-mail inválido").optional().or(z.literal("")).nullable(),
+  address: z.string().optional().nullable(),
+  number: z.string().optional().nullable(),
+  complement: z.string().optional().nullable(),
+  neighborhood: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zipCode: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+function parseValidDate(dateStr?: string | null): Date | null {
+  if (!dateStr || !dateStr.trim()) return null;
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export async function getClientStats() {
   await requireAuth();
 
-  const [total, withCpf, withMobile, withSales, states] = await Promise.all([
-    db.customer.count(),
-    db.customer.count({ where: { cpf: { not: null } } }),
-    db.customer.count({ where: { mobile: { not: null } } }),
-    db.customer.count({
-      where: {
-        OR: [{ firstSaleDate: { not: null } }, { lastSaleDate: { not: null } }],
-      },
-    }),
+  const [statsRows, states] = await Promise.all([
+    db.$queryRaw<Array<{ total: number; withCpf: number; withMobile: number; withSales: number }>>`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(cpf)::int AS "withCpf",
+        COUNT(mobile)::int AS "withMobile",
+        COUNT(CASE WHEN "firstSaleDate" IS NOT NULL OR "lastSaleDate" IS NOT NULL THEN 1 END)::int AS "withSales"
+      FROM "Customer"
+    `,
     db.customer.groupBy({
       by: ["state"],
       _count: { state: true },
@@ -89,11 +117,13 @@ export async function getClientStats() {
     }),
   ]);
 
+  const stats = statsRows[0] || { total: 0, withCpf: 0, withMobile: 0, withSales: 0 };
+
   return {
-    total,
-    withCpf,
-    withMobile,
-    withSales,
+    total: stats.total,
+    withCpf: stats.withCpf,
+    withMobile: stats.withMobile,
+    withSales: stats.withSales,
     states: states.map((s) => ({ state: s.state as string, count: s._count.state })),
   };
 }
@@ -102,26 +132,33 @@ export async function updateClient(id: string, data: any) {
   try {
     await requireWritePermission();
 
+    const parsed = clientInputSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const cleanData = parsed.data;
+
     const updated = await db.customer.update({
       where: { id },
       data: {
-        name: data.name,
-        cpf: data.cpf || null,
-        rg: data.rg || null,
-        passport: data.passport || null,
-        birthDate: data.birthDate ? new Date(data.birthDate) : null,
-        gender: data.gender || null,
-        phone: data.phone || null,
-        mobile: data.mobile || null,
-        email: data.email || null,
-        address: data.address || null,
-        number: data.number || null,
-        complement: data.complement || null,
-        neighborhood: data.neighborhood || null,
-        city: data.city || null,
-        state: data.state || null,
-        zipCode: data.zipCode || null,
-        notes: data.notes || null,
+        name: cleanData.name.toUpperCase(),
+        cpf: cleanData.cpf?.replace(/[^\d]/g, "") || null,
+        rg: cleanData.rg || null,
+        passport: cleanData.passport || null,
+        birthDate: parseValidDate(cleanData.birthDate),
+        gender: cleanData.gender || null,
+        phone: cleanData.phone || null,
+        mobile: cleanData.mobile || null,
+        email: cleanData.email || null,
+        address: cleanData.address || null,
+        number: cleanData.number || null,
+        complement: cleanData.complement || null,
+        neighborhood: cleanData.neighborhood || null,
+        city: cleanData.city || null,
+        state: cleanData.state || null,
+        zipCode: cleanData.zipCode?.replace(/[^\d]/g, "") || null,
+        notes: cleanData.notes || null,
       },
     });
 
@@ -136,25 +173,32 @@ export async function createClient(data: any) {
   try {
     await requireWritePermission();
 
+    const parsed = clientInputSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const cleanData = parsed.data;
+
     const created = await db.customer.create({
       data: {
-        name: data.name,
-        cpf: data.cpf || null,
-        rg: data.rg || null,
-        passport: data.passport || null,
-        birthDate: data.birthDate ? new Date(data.birthDate) : null,
-        gender: data.gender || null,
-        phone: data.phone || null,
-        mobile: data.mobile || null,
-        email: data.email || null,
-        address: data.address || null,
-        number: data.number || null,
-        complement: data.complement || null,
-        neighborhood: data.neighborhood || null,
-        city: data.city || null,
-        state: data.state || null,
-        zipCode: data.zipCode || null,
-        notes: data.notes || null,
+        name: cleanData.name.toUpperCase(),
+        cpf: cleanData.cpf?.replace(/[^\d]/g, "") || null,
+        rg: cleanData.rg || null,
+        passport: cleanData.passport || null,
+        birthDate: parseValidDate(cleanData.birthDate),
+        gender: cleanData.gender || null,
+        phone: cleanData.phone || null,
+        mobile: cleanData.mobile || null,
+        email: cleanData.email || null,
+        address: cleanData.address || null,
+        number: cleanData.number || null,
+        complement: cleanData.complement || null,
+        neighborhood: cleanData.neighborhood || null,
+        city: cleanData.city || null,
+        state: cleanData.state || null,
+        zipCode: cleanData.zipCode?.replace(/[^\d]/g, "") || null,
+        notes: cleanData.notes || null,
       },
     });
 

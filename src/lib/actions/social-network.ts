@@ -53,6 +53,10 @@ function pickColor(companionsCount: number): string {
   return "#94a3b8";                             // Conexões mínimas - Cinza ardósia clássico do Obsidian
 }
 
+// Cache em memória de 5 minutos para o grafo da rede social
+const socialGraphCache = new Map<string, { data: SocialGraphData; timestamp: number }>();
+const SOCIAL_GRAPH_TTL_MS = 1000 * 60 * 5; // 5 minutos
+
 export async function getCustomerSocialGraph(params?: {
   mode?: SocialConnectionMode;
   minConnections?: number;
@@ -64,6 +68,12 @@ export async function getCustomerSocialGraph(params?: {
   const minConn = params?.minConnections ?? 1;
   const maxNodesLimit = params?.limit ?? 550;
   const searchQuery = params?.query?.trim().toLowerCase() || "";
+
+  const cacheKey = `${params?.mode || "ALL"}_${minConn}_${maxNodesLimit}_${searchQuery}`;
+  const cached = socialGraphCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SOCIAL_GRAPH_TTL_MS) {
+    return cached.data;
+  }
 
   // 1. Busca todas as viagens dos clientes
   const allTrips = await db.customerTrip.findMany({
@@ -328,8 +338,8 @@ export async function getCustomerSocialGraph(params?: {
     .slice(0, 5)
     .map((n) => ({ customerName: n.name, companionsCount: n.companionsCount }));
 
-  return {
-    mode: "TODOS",
+  const result: SocialGraphData = {
+    mode: params?.mode || "TODOS",
     nodes,
     links,
     stats: {
@@ -339,4 +349,7 @@ export async function getCustomerSocialGraph(params?: {
       largestGroups,
     },
   };
+
+  socialGraphCache.set(cacheKey, { data: result, timestamp: Date.now() });
+  return result;
 }

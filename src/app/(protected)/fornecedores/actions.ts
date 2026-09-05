@@ -72,18 +72,40 @@ export async function searchSuppliers({
   };
 }
 
+import { z } from "zod";
+
+export const supplierInputSchema = z.object({
+  name: z.string().trim().min(2, "Nome da empresa/parceiro deve ter no mínimo 2 caracteres."),
+  tradeName: z.string().trim().optional().nullable(),
+  cnpj: z.string().trim().optional().nullable(),
+  ie: z.string().trim().optional().nullable(),
+  category: z.string().trim().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  mobile: z.string().optional().nullable(),
+  email: z.string().trim().email("E-mail inválido").optional().or(z.literal("")).nullable(),
+  website: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  number: z.string().optional().nullable(),
+  complement: z.string().optional().nullable(),
+  neighborhood: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zipCode: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
 export async function getSupplierStats() {
   await requireAuth();
 
-  const [total, withCnpj, withPhone, withEmail, categories] = await Promise.all([
-    db.supplier.count(),
-    db.supplier.count({ where: { cnpj: { not: null } } }),
-    db.supplier.count({
-      where: {
-        OR: [{ phone: { not: null } }, { mobile: { not: null } }],
-      },
-    }),
-    db.supplier.count({ where: { email: { not: null } } }),
+  const [statsRows, categories] = await Promise.all([
+    db.$queryRaw<Array<{ total: number; withCnpj: number; withPhone: number; withEmail: number }>>`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(cnpj)::int AS "withCnpj",
+        COUNT(CASE WHEN phone IS NOT NULL OR mobile IS NOT NULL THEN 1 END)::int AS "withPhone",
+        COUNT(email)::int AS "withEmail"
+      FROM "Supplier"
+    `,
     db.supplier.groupBy({
       by: ["category"],
       _count: { category: true },
@@ -93,11 +115,13 @@ export async function getSupplierStats() {
     }),
   ]);
 
+  const stats = statsRows[0] || { total: 0, withCnpj: 0, withPhone: 0, withEmail: 0 };
+
   return {
-    total,
-    withCnpj,
-    withPhone,
-    withEmail,
+    total: stats.total,
+    withCnpj: stats.withCnpj,
+    withPhone: stats.withPhone,
+    withEmail: stats.withEmail,
     categories: categories.map((c) => ({
       name: c.category as string,
       count: c._count.category,
@@ -109,26 +133,33 @@ export async function updateSupplier(id: string, data: any) {
   try {
     await requireWritePermission();
 
+    const parsed = supplierInputSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const clean = parsed.data;
+
     const updated = await db.supplier.update({
       where: { id },
       data: {
-        name: data.name,
-        tradeName: data.tradeName || null,
-        cnpj: data.cnpj || null,
-        ie: data.ie || null,
-        category: data.category || null,
-        phone: data.phone || null,
-        mobile: data.mobile || null,
-        email: data.email || null,
-        website: data.website || null,
-        address: data.address || null,
-        number: data.number || null,
-        complement: data.complement || null,
-        neighborhood: data.neighborhood || null,
-        city: data.city || null,
-        state: data.state || null,
-        zipCode: data.zipCode || null,
-        notes: data.notes || null,
+        name: clean.name,
+        tradeName: clean.tradeName || null,
+        cnpj: clean.cnpj?.replace(/[^\d]/g, "") || null,
+        ie: clean.ie || null,
+        category: clean.category || null,
+        phone: clean.phone || null,
+        mobile: clean.mobile || null,
+        email: clean.email || null,
+        website: clean.website || null,
+        address: clean.address || null,
+        number: clean.number || null,
+        complement: clean.complement || null,
+        neighborhood: clean.neighborhood || null,
+        city: clean.city || null,
+        state: clean.state || null,
+        zipCode: clean.zipCode?.replace(/[^\d]/g, "") || null,
+        notes: clean.notes || null,
       },
     });
 
@@ -143,25 +174,32 @@ export async function createSupplier(data: any) {
   try {
     await requireWritePermission();
 
+    const parsed = supplierInputSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const clean = parsed.data;
+
     const created = await db.supplier.create({
       data: {
-        name: data.name,
-        tradeName: data.tradeName || null,
-        cnpj: data.cnpj || null,
-        ie: data.ie || null,
-        category: data.category || "Parceiro Geral",
-        phone: data.phone || null,
-        mobile: data.mobile || null,
-        email: data.email || null,
-        website: data.website || null,
-        address: data.address || null,
-        number: data.number || null,
-        complement: data.complement || null,
-        neighborhood: data.neighborhood || null,
-        city: data.city || null,
-        state: data.state || null,
-        zipCode: data.zipCode || null,
-        notes: data.notes || null,
+        name: clean.name,
+        tradeName: clean.tradeName || null,
+        cnpj: clean.cnpj?.replace(/[^\d]/g, "") || null,
+        ie: clean.ie || null,
+        category: clean.category || "Parceiro Geral",
+        phone: clean.phone || null,
+        mobile: clean.mobile || null,
+        email: clean.email || null,
+        website: clean.website || null,
+        address: clean.address || null,
+        number: clean.number || null,
+        complement: clean.complement || null,
+        neighborhood: clean.neighborhood || null,
+        city: clean.city || null,
+        state: clean.state || null,
+        zipCode: clean.zipCode?.replace(/[^\d]/g, "") || null,
+        notes: clean.notes || null,
       },
     });
 
