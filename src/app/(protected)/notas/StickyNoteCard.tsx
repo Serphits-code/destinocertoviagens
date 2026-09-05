@@ -21,6 +21,7 @@ interface StickyNoteCardProps {
   onDragEnd?: (id: string, newX: number, newY: number) => void;
   isHighlighted?: boolean;
   isDimmed?: boolean;
+  zoomLevel?: number;
 }
 
 export const COLOR_CONFIG: Record<
@@ -114,6 +115,7 @@ export function StickyNoteCard({
   onDragEnd,
   isHighlighted = false,
   isDimmed = false,
+  zoomLevel = 1,
 }: StickyNoteCardProps) {
   const [title, setTitle] = useState(note.title || "");
   const [content, setContent] = useState(note.content || "");
@@ -158,8 +160,9 @@ export function StickyNoteCard({
       dragElastic={0.05}
       onDragEnd={(_e, info) => {
         if (onDragEnd && isCanvasView) {
-          const newX = Math.round(note.posX + info.offset.x);
-          const newY = Math.round(note.posY + info.offset.y);
+          const effectiveZoom = zoomLevel || 1;
+          const newX = Math.round(note.posX + info.offset.x / effectiveZoom);
+          const newY = Math.round(note.posY + info.offset.y / effectiveZoom);
           onDragEnd(note.id, Math.max(0, newX), Math.max(0, newY));
         }
       }}

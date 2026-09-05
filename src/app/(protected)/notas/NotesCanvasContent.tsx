@@ -60,6 +60,9 @@ export function NotesCanvasContent({
 
   const [isPending, startTransition] = useTransition();
   const canvasScrollRef = useRef<HTMLDivElement | null>(null);
+  const canvasContentRef = useRef<HTMLDivElement | null>(null);
+  const zoomRef = useRef<number>(zoomLevel);
+  zoomRef.current = zoomLevel;
 
   // Pan / Arrastar tela do mural (estilo Miro/Figma)
   const [isPanning, setIsPanning] = useState(false);
@@ -255,9 +258,18 @@ export function NotesCanvasContent({
   const handleCreateSticky = (color: NoteColor = "yellow") => {
     const scrollLeft = canvasScrollRef.current?.scrollLeft || 0;
     const scrollTop = canvasScrollRef.current?.scrollTop || 0;
+    const viewportWidth = canvasScrollRef.current?.clientWidth || 800;
+    const viewportHeight = canvasScrollRef.current?.clientHeight || 600;
+    const currentZoom = zoomRef.current || 1;
 
-    const basePosX = Math.max(80, scrollLeft + 180 + Math.floor(Math.random() * 120));
-    const basePosY = Math.max(80, scrollTop + 120 + Math.floor(Math.random() * 80));
+    const basePosX = Math.max(
+      80,
+      Math.round((scrollLeft + viewportWidth / 2 - 128 + Math.floor((Math.random() - 0.5) * 80)) / currentZoom)
+    );
+    const basePosY = Math.max(
+      80,
+      Math.round((scrollTop + viewportHeight / 2 - 110 + Math.floor((Math.random() - 0.5) * 60)) / currentZoom)
+    );
 
     const tempId = `temp_${Date.now()}`;
     const optimisticNote: NoteItem = {
@@ -297,9 +309,18 @@ export function NotesCanvasContent({
   const handleCreateFreeText = () => {
     const scrollLeft = canvasScrollRef.current?.scrollLeft || 0;
     const scrollTop = canvasScrollRef.current?.scrollTop || 0;
+    const viewportWidth = canvasScrollRef.current?.clientWidth || 800;
+    const viewportHeight = canvasScrollRef.current?.clientHeight || 600;
+    const currentZoom = zoomRef.current || 1;
 
-    const basePosX = Math.max(80, scrollLeft + 250 + Math.floor(Math.random() * 80));
-    const basePosY = Math.max(80, scrollTop + 160 + Math.floor(Math.random() * 60));
+    const basePosX = Math.max(
+      80,
+      Math.round((scrollLeft + viewportWidth / 2 - 100 + Math.floor((Math.random() - 0.5) * 80)) / currentZoom)
+    );
+    const basePosY = Math.max(
+      80,
+      Math.round((scrollTop + viewportHeight / 2 - 40 + Math.floor((Math.random() - 0.5) * 60)) / currentZoom)
+    );
 
     const tempId = `temp_txt_${Date.now()}`;
     const optimisticText: NoteItem = {
@@ -522,26 +543,83 @@ export function NotesCanvasContent({
     });
   }, [notes, searchTerm, selectedColorFilter]);
 
+  // Zoom centrado em um ponto específico do cursor ou centro da tela
+  const applyZoom = useCallback(
+    (targetZoom: number, anchorX?: number, anchorY?: number) => {
+      const el = canvasScrollRef.current;
+      if (!el) return;
+
+      const currentZoom = zoomRef.current;
+      const clampedZoom = Math.min(
+        Math.max(Number(targetZoom.toFixed(2)), 0.2),
+        2.5
+      );
+      if (Math.abs(clampedZoom - currentZoom) < 0.001) return;
+
+      const rect = el.getBoundingClientRect();
+      const mX = anchorX !== undefined ? anchorX : rect.width / 2;
+      const mY = anchorY !== undefined ? anchorY : rect.height / 2;
+
+      // Ponto no espaço do conteúdo unscaled correspondente ao cursor/âncora
+      const contentX = (el.scrollLeft + mX) / currentZoom;
+      const contentY = (el.scrollTop + mY) / currentZoom;
+
+      // Atualiza ref e estado do zoom
+      zoomRef.current = clampedZoom;
+      setZoomLevel(clampedZoom);
+
+      // Aplica transform imediatamente no elemento DOM do canvas para evitar dessincronização de quadros
+      if (canvasContentRef.current) {
+        canvasContentRef.current.style.transform = `scale(${clampedZoom})`;
+      }
+
+      // Calcula novo scroll para manter o ponto do conteúdo sob o cursor/âncora
+      const newScrollLeft = Math.max(0, contentX * clampedZoom - mX);
+      const newScrollTop = Math.max(0, contentY * clampedZoom - mY);
+
+      el.scrollLeft = newScrollLeft;
+      el.scrollTop = newScrollTop;
+    },
+    []
+  );
+
   const handleZoom = (delta: number) => {
-    setZoomLevel((prev) => {
-      const next = Number((prev + delta).toFixed(2));
-      return Math.min(Math.max(next, 0.2), 2.0);
-    });
+    applyZoom(zoomRef.current + delta);
   };
 
-  // Zoom suave com a roda do mouse segurando Ctrl ou gesto de pinça no trackpad
+  // Zoom suave e preciso que segue o ponteiro do mouse e gesto de pinça no trackpad
   useEffect(() => {
     const el = canvasScrollRef.current;
     if (!el) return;
 
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
+      // Zoom acionado com Ctrl/Cmd (atalho padrão em ferramentas de canvas) ou gesto de pinça no trackpad (que o navegador emite com ctrlKey = true)
+      if (e.ctrlKey || e.metaKey || e.altKey) {
         e.preventDefault();
-        const delta = e.deltaY < 0 ? 0.05 : -0.05;
-        setZoomLevel((prev) => {
-          const next = Number((prev + delta).toFixed(2));
-          return Math.min(Math.max(next, 0.2), 2.0);
-        });
+
+        const rect = el.getBoundingClientRect();
+        // Coordenadas relativas do ponteiro do mouse na área visível
+        const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const mouseY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+
+        const currentZoom = zoomRef.current;
+        let nextZoom: number;
+
+        // Normalização do delta para lidar com trackpads contínuos e mouses físicos com cliques na roda
+        const pixelDelta =
+          e.deltaMode === 1 ? e.deltaY * 20 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+
+        if (Math.abs(pixelDelta) < 40) {
+          // Gesto de pinça contínuo do trackpad
+          const factor = Math.exp(-pixelDelta * 0.008);
+          nextZoom = currentZoom * factor;
+        } else {
+          // Entalhe da roda do mouse físico
+          const delta = pixelDelta < 0 ? 0.1 : -0.1;
+          nextZoom = currentZoom + delta;
+        }
+
+        applyZoom(nextZoom, mouseX, mouseY);
       }
     };
 
@@ -549,7 +627,7 @@ export function NotesCanvasContent({
     return () => {
       el.removeEventListener("wheel", handleWheel);
     };
-  }, []);
+  }, [applyZoom]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-4.5rem)] -m-6 w-[calc(100%+3rem)] max-w-[calc(100vw-260px)] overflow-hidden bg-background relative select-none">
@@ -794,7 +872,8 @@ export function NotesCanvasContent({
         ) : viewMode === "canvas" ? (
           /* Canvas Livre Estilo Miro */
           <div
-            className={`relative min-w-[2400px] min-h-[1600px] transition-transform origin-top-left ${
+            ref={canvasContentRef}
+            className={`relative min-w-[4000px] min-h-[3000px] origin-top-left ${
               activeTool === "pen"
                 ? "cursor-crosshair"
                 : activeTool === "eraser"
@@ -840,6 +919,7 @@ export function NotesCanvasContent({
                     onDragEnd={handleDragEnd}
                     isHighlighted={isCurrentMatch}
                     isDimmed={isDimmed}
+                    zoomLevel={zoomLevel}
                   />
                 ) : (
                   <StickyNoteCard
@@ -851,6 +931,7 @@ export function NotesCanvasContent({
                     onDragEnd={handleDragEnd}
                     isHighlighted={isCurrentMatch}
                     isDimmed={isDimmed}
+                    zoomLevel={zoomLevel}
                   />
                 );
               })}
@@ -912,7 +993,7 @@ export function NotesCanvasContent({
             ) : (
               <>
                 <span className="text-sm leading-none">✋</span>
-                <span>Arraste o fundo para navegar</span>
+                <span>Arraste o fundo para navegar • Zoom no cursor com roda ou pinça</span>
               </>
             )}
           </div>
@@ -937,7 +1018,7 @@ export function NotesCanvasContent({
             <button
               type="button"
               onClick={() => handleZoom(0.1)}
-              disabled={zoomLevel >= 2.0}
+              disabled={zoomLevel >= 2.5}
               className="p-1.5 rounded-lg text-text-muted hover:text-text-title hover:bg-surface-muted transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               title="Aumentar Zoom"
             >
@@ -946,7 +1027,7 @@ export function NotesCanvasContent({
 
             <button
               type="button"
-              onClick={() => setZoomLevel(1)}
+              onClick={() => applyZoom(1)}
               className="p-1.5 rounded-lg text-text-muted hover:text-text-title hover:bg-surface-muted transition-colors cursor-pointer ml-1"
               title="Resetar Zoom (100%)"
             >

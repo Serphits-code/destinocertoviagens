@@ -13,6 +13,7 @@ interface FreeTextCardProps {
   onDragEnd?: (id: string, newX: number, newY: number) => void;
   isHighlighted?: boolean;
   isDimmed?: boolean;
+  zoomLevel?: number;
 }
 
 const FONT_SIZES: Record<string, { cls: string; label: string }> = {
@@ -30,6 +31,7 @@ export function FreeTextCard({
   onDragEnd,
   isHighlighted = false,
   isDimmed = false,
+  zoomLevel = 1,
 }: FreeTextCardProps) {
   const [content, setContent] = useState(note.content || note.title || "");
   const [isFocused, setIsFocused] = useState(false);
@@ -68,8 +70,9 @@ export function FreeTextCard({
       dragElastic={0.05}
       onDragEnd={(_e, info) => {
         if (onDragEnd && isCanvasView) {
-          const newX = Math.round(note.posX + info.offset.x);
-          const newY = Math.round(note.posY + info.offset.y);
+          const effectiveZoom = zoomLevel || 1;
+          const newX = Math.round(note.posX + info.offset.x / effectiveZoom);
+          const newY = Math.round(note.posY + info.offset.y / effectiveZoom);
           onDragEnd(note.id, Math.max(0, newX), Math.max(0, newY));
         }
       }}

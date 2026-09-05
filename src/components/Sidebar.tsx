@@ -14,15 +14,37 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Share2,
   StickyNote,
+  Cake,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
-const menuItems = [
+interface SubMenuItem {
+  icon: any;
+  label: string;
+  href: string;
+}
+
+interface MenuItem {
+  icon: any;
+  label: string;
+  href: string;
+  subItems?: SubMenuItem[];
+}
+
+const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: "Cockpit", href: "/cockpit" },
   { icon: Map, label: "Excursões", href: "/excursoes" },
-  { icon: Users, label: "Clientes & Passageiros", href: "/clientes" },
+  {
+    icon: Users,
+    label: "Clientes & Passageiros",
+    href: "/clientes",
+    subItems: [
+      { icon: Cake, label: "Aniversariantes", href: "/clientes/aniversariantes" },
+    ],
+  },
   { icon: StickyNote, label: "Quadro de Notas", href: "/notas" },
   { icon: Share2, label: "Rede Social", href: "/rede-social" },
   { icon: Building2, label: "Fornecedores & Parceiros", href: "/fornecedores" },
@@ -31,7 +53,16 @@ const menuItems = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({
+    "/clientes": true,
+  });
   const pathname = usePathname();
+
+  const toggleSubmenu = (href: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpenSubmenus((prev) => ({ ...prev, [href]: !prev[href] }));
+  };
 
   return (
     <motion.aside
@@ -98,51 +129,154 @@ export function Sidebar() {
       {/* Navegação Principal do Menu */}
       <nav className="flex-1 py-4 px-3 space-y-1.5 overflow-y-auto">
         {menuItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          const hasSubItems = Boolean(item.subItems && item.subItems.length > 0);
+          const isSubActive = hasSubItems && item.subItems?.some((sub) => pathname === sub.href);
+          const isParentActive =
+            pathname === item.href || (pathname.startsWith(item.href) && !isSubActive);
+          const isSubmenuOpen =
+            openSubmenus[item.href] ?? pathname.startsWith(item.href);
           const Icon = item.icon;
 
           return (
-            <Link key={item.href} href={item.href} className="block group">
-              <motion.div
-                whileHover={{ x: collapsed ? 0 : 3 }}
-                transition={{ duration: 0.15 }}
-                className={`relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
-                  isActive
-                    ? "bg-gradient-to-r from-primary to-[#ff7a22] text-white font-bold shadow-lg shadow-primary/25 border border-primary-strong/40"
-                    : "text-slate-300/75 hover:text-white bg-transparent hover:bg-white/[0.06] border border-transparent hover:border-white/10"
-                }`}
-              >
-                {/* Indicador Branco na borda esquerda apenas quando ativo */}
-                {isActive && (
-                  <div className="w-1.5 h-4 rounded-full bg-white shrink-0 -ml-0.5 shadow-xs" />
-                )}
-
-                {/* Ícone com destaque: Laranja no hover inativo, Branco no ativo */}
-                <Icon
-                  size={19}
-                  className={`shrink-0 transition-colors ${
-                    isActive
-                      ? "text-white drop-shadow-xs"
-                      : "text-slate-400 group-hover:text-primary"
+            <div key={item.href} className="space-y-1">
+              <Link href={item.href} className="block group">
+                <motion.div
+                  whileHover={{ x: collapsed ? 0 : 3 }}
+                  transition={{ duration: 0.15 }}
+                  className={`relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
+                    isParentActive
+                      ? "bg-gradient-to-r from-primary to-[#ff7a22] text-white font-bold shadow-lg shadow-primary/25 border border-primary-strong/40"
+                      : isSubActive
+                      ? "text-white bg-white/[0.08] border border-white/10 font-semibold"
+                      : "text-slate-300/75 hover:text-white bg-transparent hover:bg-white/[0.06] border border-transparent hover:border-white/10"
                   }`}
-                />
+                >
+                  {/* Indicador Branco na borda esquerda apenas quando ativo */}
+                  {isParentActive && (
+                    <div className="w-1.5 h-4 rounded-full bg-white shrink-0 -ml-0.5 shadow-xs" />
+                  )}
 
+                  {/* Ícone com destaque */}
+                  <Icon
+                    size={19}
+                    className={`shrink-0 transition-colors ${
+                      isParentActive || isSubActive
+                        ? "text-white drop-shadow-xs"
+                        : "text-slate-400 group-hover:text-primary"
+                    }`}
+                  />
+
+                  <AnimatePresence>
+                    {!collapsed && (
+                      <motion.div
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: "auto" }}
+                        exit={{ opacity: 0, width: 0 }}
+                        className="flex-1 flex items-center justify-between min-w-0 overflow-hidden"
+                      >
+                        <span
+                          className={`whitespace-nowrap truncate text-sm ${
+                            isParentActive ? "font-bold text-white" : isSubActive ? "font-semibold text-white" : "font-medium"
+                          }`}
+                        >
+                          {item.label}
+                        </span>
+
+                        {hasSubItems && (
+                          <button
+                            onClick={(e) => toggleSubmenu(item.href, e)}
+                            className="p-1 rounded-md hover:bg-white/15 text-slate-400 hover:text-white transition-colors cursor-pointer ml-1.5"
+                            title={isSubmenuOpen ? "Recolher subitens" : "Expandir subitens"}
+                          >
+                            <ChevronDown
+                              size={14}
+                              className={`transition-transform duration-200 ${
+                                isSubmenuOpen ? "rotate-180 text-white" : ""
+                              }`}
+                            />
+                          </button>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              </Link>
+
+              {/* Renderização dos Sub-itens */}
+              {hasSubItems && !collapsed && (
                 <AnimatePresence>
-                  {!collapsed && (
-                    <motion.span
-                      initial={{ opacity: 0, width: 0 }}
-                      animate={{ opacity: 1, width: "auto" }}
-                      exit={{ opacity: 0, width: 0 }}
-                      className={`whitespace-nowrap overflow-hidden text-sm ${
-                        isActive ? "font-bold text-white" : "font-medium"
-                      }`}
+                  {isSubmenuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="ml-5 pl-3 border-l-2 border-white/10 mt-1 space-y-1 overflow-hidden"
                     >
-                      {item.label}
-                    </motion.span>
+                      {item.subItems?.map((sub) => {
+                        const isThisSubActive = pathname === sub.href;
+                        const SubIcon = sub.icon;
+
+                        return (
+                          <Link key={sub.href} href={sub.href} className="block group/sub">
+                            <motion.div
+                              whileHover={{ x: 2 }}
+                              transition={{ duration: 0.15 }}
+                              className={`relative flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs transition-all duration-200 cursor-pointer ${
+                                isThisSubActive
+                                  ? "bg-gradient-to-r from-primary to-[#ff7a22] text-white font-bold shadow-md shadow-primary/20 border border-primary-strong/40"
+                                  : "text-slate-300/75 hover:text-white bg-transparent hover:bg-white/[0.06] border border-transparent hover:border-white/10 font-medium"
+                              }`}
+                            >
+                              {isThisSubActive && (
+                                <div className="w-1.5 h-3.5 rounded-full bg-white shrink-0 -ml-1 shadow-xs" />
+                              )}
+                              <SubIcon
+                                size={15}
+                                className={`shrink-0 transition-colors ${
+                                  isThisSubActive
+                                    ? "text-white"
+                                    : "text-slate-400 group-hover/sub:text-primary"
+                                }`}
+                              />
+                              <span className="whitespace-nowrap truncate">{sub.label}</span>
+                            </motion.div>
+                          </Link>
+                        );
+                      })}
+                    </motion.div>
                   )}
                 </AnimatePresence>
-              </motion.div>
-            </Link>
+              )}
+
+              {/* Sub-itens no Modo Recolhido (collapsed) */}
+              {hasSubItems && collapsed && (
+                <div className="space-y-1 pt-0.5">
+                  {item.subItems?.map((sub) => {
+                    const isThisSubActive = pathname === sub.href;
+                    const SubIcon = sub.icon;
+                    return (
+                      <Link
+                        key={sub.href}
+                        href={sub.href}
+                        className="block"
+                        title={sub.label}
+                      >
+                        <div
+                          className={`w-9 h-9 mx-auto rounded-xl flex items-center justify-center transition-all ${
+                            isThisSubActive
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-slate-400 hover:text-white hover:bg-white/10"
+                          }`}
+                        >
+                          <SubIcon size={15} />
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
