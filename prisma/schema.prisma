@@ -227,6 +227,7 @@ model FinancialEntry {
   @@index([supplierId])
   @@index([kind, dueDate])
   @@index([status])
+  @@index([status, dueDate])
   @@index([kind, status, dueDate])
 }
 

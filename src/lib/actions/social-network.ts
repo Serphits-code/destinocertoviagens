@@ -212,7 +212,7 @@ export async function getCustomerSocialGraph(params?: {
   });
 
   // 3. Filtra nós pelo critério mínimo de conexões ou busca
-  let candidateCustomers = Array.from(customerMap.values()).filter(
+  const candidateCustomers = Array.from(customerMap.values()).filter(
     (c) => c.companionsSet.size >= minConn
   );
 

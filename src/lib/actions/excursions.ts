@@ -1,11 +1,9 @@
 "use server";
 
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  requireAuth,
   requireWritePermission,
   requireAdmin,
 } from "@/lib/auth-guards";

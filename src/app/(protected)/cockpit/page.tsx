@@ -17,7 +17,7 @@ export default async function CockpitPage() {
   const now = new Date();
   now.setUTCHours(0, 0, 0, 0);
 
-  // Executa todas as consultas de forma concorrente no PostgreSQL
+  // Executa todas as consultas de forma concorrente e otimizada no PostgreSQL
   const [
     recPaidAgg,
     recPendingAgg,
@@ -28,8 +28,9 @@ export default async function CockpitPage() {
     activeExcursionsCount,
     pendingEntriesRaw,
     excursionsRaw,
-    supplierCategoriesRaw,
-    recentEntriesRaw,
+    categoryDataRaw,
+    cashFlowRows,
+    [exactAlertSummary],
   ] = await Promise.all([
     // Total recebido de clientes (RECEBIMENTO PAGO)
     db.financialEntry.aggregate({
@@ -57,7 +58,7 @@ export default async function CockpitPage() {
     db.supplier.count(),
     // Excursões ativas
     db.excursion.count({ where: { status: "ATIVA" } }),
-    // Lançamentos pendentes com cliente/fornecedor para Central de Alertas
+    // Amostra de lançamentos pendentes para listagem visual na Central de Alertas
     db.financialEntry.findMany({
       where: { status: "PENDENTE" },
       orderBy: [{ dueDate: "asc" }, { amount: "desc" }],
@@ -75,28 +76,64 @@ export default async function CockpitPage() {
         _count: { select: { blocks: true } },
       },
     }),
-    // Fornecedores por categoria com pagamentos
-    db.supplier.findMany({
-      where: { category: { not: null } },
-      select: {
-        category: true,
-        financialEntries: {
-          where: { kind: "PAGAMENTO" },
-          select: { amount: true },
-        },
-      },
-    }),
-    // Amostra de lançamentos ordenados por vencimento para o gráfico de fluxo de caixa
-    db.financialEntry.findMany({
-      select: {
-        amount: true,
-        kind: true,
-        status: true,
-        dueDate: true,
-      },
-      take: 3000,
-      orderBy: { dueDate: "desc" },
-    }),
+    // Agrupamento de fornecedores por categoria com pagamentos feito diretamente no PostgreSQL
+    db.$queryRaw<Array<{ category: string; amount: number; count: number }>>`
+      SELECT
+        COALESCE(s.category, 'Outros') AS category,
+        COALESCE(SUM(fe.amount), 0)::float AS amount,
+        COUNT(fe.id)::int AS count
+      FROM "Supplier" s
+      JOIN "FinancialEntry" fe ON fe."supplierId" = s.id AND fe.kind = 'PAGAMENTO'
+      WHERE s.category IS NOT NULL
+      GROUP BY s.category
+      ORDER BY amount DESC
+      LIMIT 6;
+    `,
+    // Agregação de fluxo de caixa mensal direto no banco (evita carregar milhares de linhas em memória)
+    db.$queryRaw<Array<{
+      month_key: string;
+      recebido: number;
+      aReceber: number;
+      pago: number;
+    }>>`
+      SELECT
+        to_char("dueDate", 'YYYY-MM') AS month_key,
+        COALESCE(SUM(CASE WHEN kind = 'RECEBIMENTO' AND status = 'PAGO' THEN amount ELSE 0 END), 0)::float AS recebido,
+        COALESCE(SUM(CASE WHEN kind = 'RECEBIMENTO' AND status = 'PENDENTE' THEN amount ELSE 0 END), 0)::float AS "aReceber",
+        COALESCE(SUM(CASE WHEN kind = 'PAGAMENTO' AND status = 'PAGO' THEN amount ELSE 0 END), 0)::float AS pago
+      FROM "FinancialEntry"
+      WHERE "dueDate" IS NOT NULL
+      GROUP BY month_key
+      HAVING (
+        SUM(CASE WHEN kind = 'RECEBIMENTO' AND status = 'PAGO' THEN amount ELSE 0 END) > 0
+        OR SUM(CASE WHEN kind = 'RECEBIMENTO' AND status = 'PENDENTE' THEN amount ELSE 0 END) > 0
+        OR SUM(CASE WHEN kind = 'PAGAMENTO' AND status = 'PAGO' THEN amount ELSE 0 END) > 0
+      )
+      ORDER BY month_key ASC;
+    `,
+    // Totais exatos de alertas calculados sobre toda a base (17.500+ lançamentos)
+    db.$queryRaw<Array<{
+      totalOverdueReceivables: number;
+      countOverdueReceivables: number;
+      totalOverduePayables: number;
+      countOverduePayables: number;
+      totalUpcomingReceivables: number;
+      countUpcomingReceivables: number;
+      totalUpcomingPayables: number;
+      countUpcomingPayables: number;
+    }>>`
+      SELECT
+        COALESCE(SUM(CASE WHEN kind = 'RECEBIMENTO' AND "dueDate" < ${now} THEN amount ELSE 0 END), 0)::float AS "totalOverdueReceivables",
+        COALESCE(COUNT(CASE WHEN kind = 'RECEBIMENTO' AND "dueDate" < ${now} THEN 1 END), 0)::int AS "countOverdueReceivables",
+        COALESCE(SUM(CASE WHEN kind = 'PAGAMENTO' AND "dueDate" < ${now} THEN amount ELSE 0 END), 0)::float AS "totalOverduePayables",
+        COALESCE(COUNT(CASE WHEN kind = 'PAGAMENTO' AND "dueDate" < ${now} THEN 1 END), 0)::int AS "countOverduePayables",
+        COALESCE(SUM(CASE WHEN kind = 'RECEBIMENTO' AND "dueDate" >= ${now} THEN amount ELSE 0 END), 0)::float AS "totalUpcomingReceivables",
+        COALESCE(COUNT(CASE WHEN kind = 'RECEBIMENTO' AND "dueDate" >= ${now} THEN 1 END), 0)::int AS "countUpcomingReceivables",
+        COALESCE(SUM(CASE WHEN kind = 'PAGAMENTO' AND "dueDate" >= ${now} THEN amount ELSE 0 END), 0)::float AS "totalUpcomingPayables",
+        COALESCE(COUNT(CASE WHEN kind = 'PAGAMENTO' AND "dueDate" >= ${now} THEN 1 END), 0)::int AS "countUpcomingPayables"
+      FROM "FinancialEntry"
+      WHERE status = 'PENDENTE' AND "dueDate" IS NOT NULL;
+    `,
   ]);
 
   const totalReceived = Number(recPaidAgg._sum?.amount ?? 0);
@@ -105,7 +142,7 @@ export default async function CockpitPage() {
   const totalPendingPayables = Number(payPendingAgg._sum?.amount ?? 0);
   const netOperatingResult = totalReceived - totalPaidOut;
 
-  // Processa os alertas de vencimento
+  // Processa os alertas para a listagem
   const alertEntries: DueEntry[] = pendingEntriesRaw.map((e) => ({
     id: e.id,
     type: e.kind as "RECEBIMENTO" | "PAGAMENTO",
@@ -118,107 +155,67 @@ export default async function CockpitPage() {
     supplier: e.supplier,
   }));
 
-  let totalOverdueReceivables = 0;
-  let countOverdueReceivables = 0;
-  let totalOverduePayables = 0;
-  let countOverduePayables = 0;
-  let totalUpcomingReceivables = 0;
-  let countUpcomingReceivables = 0;
-  let totalUpcomingPayables = 0;
-  let countUpcomingPayables = 0;
+  // Resumo de alertas com dados contábeis 100% precisos
+  const alertSummary = {
+    totalOverdueReceivables: exactAlertSummary?.totalOverdueReceivables || 0,
+    countOverdueReceivables: exactAlertSummary?.countOverdueReceivables || 0,
+    totalOverduePayables: exactAlertSummary?.totalOverduePayables || 0,
+    countOverduePayables: exactAlertSummary?.countOverduePayables || 0,
+    totalUpcomingReceivables: exactAlertSummary?.totalUpcomingReceivables || 0,
+    countUpcomingReceivables: exactAlertSummary?.countUpcomingReceivables || 0,
+    totalUpcomingPayables: exactAlertSummary?.totalUpcomingPayables || 0,
+    countUpcomingPayables: exactAlertSummary?.countUpcomingPayables || 0,
+  };
 
-  for (const e of alertEntries) {
-    const isOverdue = e.dueDate ? new Date(e.dueDate).getTime() < now.getTime() : false;
-    if (e.type === "RECEBIMENTO") {
-      if (isOverdue) {
-        totalOverdueReceivables += e.amount;
-        countOverdueReceivables++;
-      } else {
-        totalUpcomingReceivables += e.amount;
-        countUpcomingReceivables++;
-      }
-    } else {
-      if (isOverdue) {
-        totalOverduePayables += e.amount;
-        countOverduePayables++;
-      } else {
-        totalUpcomingPayables += e.amount;
-        countUpcomingPayables++;
-      }
-    }
+  // Mapeia os dados do fluxo de caixa mensal
+  const cashFlowMap = new Map<string, { month: string; recebido: number; pago: number; aReceber: number }>();
+  for (const row of cashFlowRows) {
+    const [y, m] = row.month_key.split("-");
+    const monthIndex = parseInt(m, 10) - 1;
+    const label = `${MONTHS_PT[monthIndex] || m}/${y.slice(2)}`;
+    cashFlowMap.set(row.month_key, {
+      month: label,
+      recebido: row.recebido,
+      pago: row.pago,
+      aReceber: row.aReceber,
+    });
   }
 
-  // Processa fluxo de caixa mensal
-  const monthMap = new Map<string, { month: string; recebido: number; pago: number; aReceber: number }>();
-
+  // Prepara janela dos últimos 6 meses para o gráfico
+  const windowMonthMap = new Map<string, { month: string; recebido: number; pago: number; aReceber: number }>();
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const label = `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
-    monthMap.set(key, { month: label, recebido: 0, pago: 0, aReceber: 0 });
+    const fromDb = cashFlowMap.get(key);
+    windowMonthMap.set(key, fromDb || { month: label, recebido: 0, pago: 0, aReceber: 0 });
   }
 
-  for (const t of recentEntriesRaw) {
-    if (!t.dueDate) continue;
-    const d = new Date(t.dueDate);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const existing = monthMap.get(key);
-    if (existing) {
-      const val = Number(t.amount);
-      if (t.kind === "RECEBIMENTO") {
-        if (t.status === "PAGO") {
-          existing.recebido += val;
-        } else {
-          existing.aReceber += val;
-        }
-      } else if (t.kind === "PAGAMENTO" && t.status === "PAGO") {
-        existing.pago += val;
-      }
-    }
+  const windowCashFlow = Array.from(windowMonthMap.values());
+  const hasWindowData = windowCashFlow.some((c) => c.recebido > 0 || c.pago > 0 || c.aReceber > 0);
+
+  let finalCashFlow = windowCashFlow;
+  if (!hasWindowData && cashFlowRows.length > 0) {
+    // Exibe os últimos 6 meses com movimentação ativa
+    finalCashFlow = cashFlowRows.slice(-6).map((r) => {
+      const [y, m] = r.month_key.split("-");
+      const monthIndex = parseInt(m, 10) - 1;
+      const label = `${MONTHS_PT[monthIndex] || m}/${y.slice(2)}`;
+      return {
+        month: label,
+        recebido: r.recebido,
+        pago: r.pago,
+        aReceber: r.aReceber,
+      };
+    });
   }
 
-  const cashFlow = Array.from(monthMap.values());
-  const hasCashFlowData = cashFlow.some((c) => c.recebido > 0 || c.pago > 0 || c.aReceber > 0);
-
-  let finalCashFlow = cashFlow;
-  if (!hasCashFlowData && recentEntriesRaw.length > 0) {
-    // Monta série com os meses mais recentes com movimentação no dump
-    const dynamicMap = new Map<string, { month: string; recebido: number; pago: number; aReceber: number }>();
-    for (const t of recentEntriesRaw) {
-      if (!t.dueDate) continue;
-      const d = new Date(t.dueDate);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      if (!dynamicMap.has(key)) {
-        const label = `${MONTHS_PT[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
-        dynamicMap.set(key, { month: label, recebido: 0, pago: 0, aReceber: 0 });
-      }
-      const item = dynamicMap.get(key)!;
-      const val = Number(t.amount);
-      if (t.kind === "RECEBIMENTO") {
-        if (t.status === "PAGO") item.recebido += val;
-        else item.aReceber += val;
-      } else if (t.kind === "PAGAMENTO" && t.status === "PAGO") {
-        item.pago += val;
-      }
-    }
-    const sortedKeys = Array.from(dynamicMap.keys()).sort();
-    finalCashFlow = sortedKeys.slice(-6).map((k) => dynamicMap.get(k)!);
-  }
-
-  // Agrupamento de categorias de fornecedores
-  const categoryTotals: Record<string, { amount: number; count: number }> = {};
-  for (const s of supplierCategoriesRaw) {
-    const cat = s.category || "Outros";
-    if (!categoryTotals[cat]) categoryTotals[cat] = { amount: 0, count: 0 };
-    for (const f of s.financialEntries) {
-      categoryTotals[cat].amount += Number(f.amount);
-      categoryTotals[cat].count++;
-    }
-  }
-  const categoryData = Object.entries(categoryTotals)
-    .map(([category, data]) => ({ category, amount: data.amount, count: data.count }))
-    .sort((a, b) => b.amount - a.amount)
-    .slice(0, 6);
+  // Categorias de fornecedores
+  const categoryData = categoryDataRaw.map((c) => ({
+    category: c.category,
+    amount: c.amount,
+    count: c.count,
+  }));
 
   // Processa excursões
   const upcomingExcursions: ExcursionSummary[] = excursionsRaw.map((e) => ({
@@ -247,16 +244,7 @@ export default async function CockpitPage() {
       cashFlow={finalCashFlow}
       categoryData={categoryData}
       alertEntries={alertEntries}
-      alertSummary={{
-        totalOverdueReceivables,
-        countOverdueReceivables,
-        totalOverduePayables,
-        countOverduePayables,
-        totalUpcomingReceivables,
-        countUpcomingReceivables,
-        totalUpcomingPayables,
-        countUpcomingPayables,
-      }}
+      alertSummary={alertSummary}
       upcomingExcursions={upcomingExcursions}
     />
   );

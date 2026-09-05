@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useTransition } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sun,
@@ -9,7 +9,6 @@ import {
   CloudSun,
   CloudRain,
   Cloud,
-  Thermometer,
   Umbrella,
   Briefcase,
   MapPin,
@@ -17,7 +16,6 @@ import {
   X,
   Loader2,
   Calendar,
-  Sparkles,
   Info,
 } from "lucide-react";
 import {
@@ -72,17 +70,23 @@ export function WeatherClimateBadge({
 
   // Consulta o clima sempre que o período, destino ou coordenadas mudarem
   useEffect(() => {
-    if (!periodStart || !periodEnd || (!activeDestination.trim() && !latitude)) {
-      setClimate(null);
-      setError(null);
-      return;
-    }
-
     let isMounted = true;
-    setLoading(true);
-    setError(null);
 
     const timer = setTimeout(async () => {
+      if (!periodStart || !periodEnd || (!activeDestination.trim() && !latitude)) {
+        if (isMounted) {
+          setClimate(null);
+          setError(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (isMounted) {
+        setLoading(true);
+        setError(null);
+      }
+
       const res = await getDestinationClimate({
         destination: customDestination ? customDestination : activeDestination,
         latitude: !customDestination && latitude ? latitude : undefined,

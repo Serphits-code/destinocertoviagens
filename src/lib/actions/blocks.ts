@@ -1,16 +1,10 @@
 "use server";
 
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { CATEGORY_DEFINITIONS } from "@/lib/categories";
 import type { BlockCategoryId, BlockData } from "@/lib/editor-types";
-
-async function requireAuth() {
-  const session = await auth();
-  if (!session) throw new Error("Não autenticado.");
-  return session;
-}
+import { requireAuth, requireWritePermission } from "@/lib/auth-guards";
 
 // ---- Cabeçalho do pacote ----
 
@@ -23,7 +17,7 @@ export async function updateExcursionHeader(
     slots?: number;
   }
 ) {
-  await requireAuth();
+  await requireWritePermission();
 
   await db.excursion.update({
     where: { id: excursionId },
@@ -51,7 +45,7 @@ export async function addBlock(
   categoryId: BlockCategoryId,
   insertIndex?: number
 ) {
-  await requireAuth();
+  await requireWritePermission();
   const catDef = CATEGORY_DEFINITIONS[categoryId] ?? CATEGORY_DEFINITIONS.personalizada;
   const data = JSON.parse(JSON.stringify(catDef.defaultData)) as BlockData;
 
@@ -84,7 +78,7 @@ export async function addBlockFromPreset(
   presetId: string,
   insertIndex?: number
 ) {
-  await requireAuth();
+  await requireWritePermission();
   const preset = await db.preset.findUnique({ where: { id: presetId } });
   if (!preset) return { error: "Preset não encontrado." };
 
@@ -118,7 +112,7 @@ export async function updateBlockData(
   data: BlockData,
   title?: string
 ) {
-  await requireAuth();
+  await requireWritePermission();
 
   const block = await db.block.update({
     where: { id: blockId },
@@ -133,7 +127,7 @@ export async function updateBlockData(
 }
 
 export async function deleteBlock(blockId: string) {
-  await requireAuth();
+  await requireWritePermission();
   const block = await db.block.delete({ where: { id: blockId } });
 
   // Reordena os blocos restantes
@@ -147,7 +141,7 @@ export async function deleteBlock(blockId: string) {
 }
 
 export async function duplicateBlock(blockId: string) {
-  await requireAuth();
+  await requireWritePermission();
   const original = await db.block.findUnique({ where: { id: blockId } });
   if (!original) return { error: "Bloco não encontrado." };
 
@@ -174,7 +168,7 @@ export async function duplicateBlock(blockId: string) {
 }
 
 export async function reorderBlocks(excursionId: string, orderedIds: string[]) {
-  await requireAuth();
+  await requireWritePermission();
 
   await db.$transaction(
     orderedIds.map((id, index) =>
@@ -187,7 +181,7 @@ export async function reorderBlocks(excursionId: string, orderedIds: string[]) {
 }
 
 export async function toggleBlockCollapsed(blockId: string, collapsed: boolean) {
-  await requireAuth();
+  await requireWritePermission();
   const block = await db.block.update({
     where: { id: blockId },
     data: { collapsed },
@@ -199,7 +193,7 @@ export async function toggleBlockCollapsed(blockId: string, collapsed: boolean) 
 // ---- Presets ----
 
 export async function saveBlockPreset(blockId: string, name: string) {
-  const session = await requireAuth();
+  const user = await requireWritePermission();
   const block = await db.block.findUnique({ where: { id: blockId } });
   if (!block) return { error: "Bloco não encontrado." };
 
@@ -211,7 +205,7 @@ export async function saveBlockPreset(blockId: string, name: string) {
         categoryId: block.type,
         data: block.configJson as BlockData,
       },
-      createdById: session.user.id,
+      createdById: user.id,
     },
   });
 
