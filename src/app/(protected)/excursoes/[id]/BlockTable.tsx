@@ -505,73 +505,337 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
     }
 
     // ---- Hospedagem ----
-    case "hospedagem":
+    case "hospedagem": {
+      const getRoomCapacity = (tipo: string): number => {
+        const lower = (tipo || "").trim().toLowerCase();
+        if (lower.includes("single")) return 1;
+        if (lower.includes("duplo")) return 2;
+        if (lower.includes("triplo")) return 3;
+        if (lower.includes("quadruplo") || lower.includes("quádruplo")) return 4;
+        if (lower.includes("quintuplo") || lower.includes("quíntuplo")) return 5;
+        return 2;
+      };
+
+      const handleDiariasChange = (newDiarias: string) => {
+        const dNum = parseNum(newDiarias);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rooms = (d.rooms ?? []).map((r: any) => {
+          const diariaNum = parseNum(r.diaria);
+          if (diariaNum <= 0) return r;
+          const effectiveDiarias = dNum > 0 ? dNum : 1;
+          const totalQuarto = (diariaNum * effectiveDiarias).toFixed(2);
+          const cap = getRoomCapacity(r.tipo);
+          const porPessoa = (parseNum(totalQuarto) / cap).toFixed(2);
+          const qtdNum = parseNum(r.qtd);
+          const totalPeriodo =
+            qtdNum > 0 && !String(r.totalPeriodo || "").toLowerCase().includes("cortesia")
+              ? (parseNum(totalQuarto) * qtdNum).toFixed(2)
+              : r.totalPeriodo;
+          return {
+            ...r,
+            totalQuarto,
+            porPessoa,
+            totalPeriodo,
+          };
+        });
+
+        let sumReserva = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const rm of rooms) {
+          sumReserva += parseNum(rm.totalPeriodo);
+        }
+
+        onUpdate({
+          ...d,
+          diarias: newDiarias,
+          rooms,
+          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+        });
+      };
+
+      const handleRoomTypeChange = (idx: number, newTipo: string) => {
+        const rooms = [...(d.rooms ?? [])];
+        const r = { ...rooms[idx], tipo: newTipo };
+        const cap = getRoomCapacity(newTipo);
+        const totalQuartoNum = parseNum(r.totalQuarto);
+        const diariaNum = parseNum(r.diaria);
+        const dNum = parseNum(d.diarias) || 1;
+
+        if (totalQuartoNum > 0) {
+          r.porPessoa = (totalQuartoNum / cap).toFixed(2);
+        } else if (diariaNum > 0) {
+          const tq = (diariaNum * dNum).toFixed(2);
+          r.totalQuarto = tq;
+          r.porPessoa = (parseNum(tq) / cap).toFixed(2);
+        }
+        rooms[idx] = r;
+        onUpdate({ ...d, rooms });
+      };
+
+      const handleRoomDiariaChange = (idx: number, newDiaria: string) => {
+        const rooms = [...(d.rooms ?? [])];
+        const r = { ...rooms[idx], diaria: newDiaria };
+        const diariaNum = parseNum(newDiaria);
+        const dNum = parseNum(d.diarias) || 1;
+        const cap = getRoomCapacity(r.tipo);
+
+        if (diariaNum > 0) {
+          const totalQuarto = (diariaNum * dNum).toFixed(2);
+          r.totalQuarto = totalQuarto;
+          r.porPessoa = (parseNum(totalQuarto) / cap).toFixed(2);
+          const qtdNum = parseNum(r.qtd);
+          if (qtdNum > 0 && !String(r.totalPeriodo || "").toLowerCase().includes("cortesia")) {
+            r.totalPeriodo = (parseNum(totalQuarto) * qtdNum).toFixed(2);
+          }
+        } else if (!newDiaria) {
+          r.totalQuarto = "";
+          r.porPessoa = "";
+        }
+
+        rooms[idx] = r;
+
+        let sumReserva = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const rm of rooms) {
+          sumReserva += parseNum(rm.totalPeriodo);
+        }
+
+        onUpdate({
+          ...d,
+          rooms,
+          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+        });
+      };
+
+      const handleRoomTotalQuartoChange = (idx: number, newTotalQuarto: string) => {
+        const rooms = [...(d.rooms ?? [])];
+        const r = { ...rooms[idx], totalQuarto: newTotalQuarto };
+        const tNum = parseNum(newTotalQuarto);
+        const cap = getRoomCapacity(r.tipo);
+        const qtdNum = parseNum(r.qtd);
+
+        if (tNum > 0) {
+          r.porPessoa = (tNum / cap).toFixed(2);
+          if (qtdNum > 0 && !String(r.totalPeriodo || "").toLowerCase().includes("cortesia")) {
+            r.totalPeriodo = (tNum * qtdNum).toFixed(2);
+          }
+        }
+
+        rooms[idx] = r;
+
+        let sumReserva = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const rm of rooms) {
+          sumReserva += parseNum(rm.totalPeriodo);
+        }
+
+        onUpdate({
+          ...d,
+          rooms,
+          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+        });
+      };
+
+      const handleRoomQtdChange = (idx: number, newQtd: string) => {
+        const rooms = [...(d.rooms ?? [])];
+        const r = { ...rooms[idx], qtd: newQtd };
+        const qtdNum = parseNum(newQtd);
+        const totalQuartoNum = parseNum(r.totalQuarto);
+
+        if (qtdNum > 0 && totalQuartoNum > 0 && !String(r.totalPeriodo || "").toLowerCase().includes("cortesia")) {
+          r.totalPeriodo = (totalQuartoNum * qtdNum).toFixed(2);
+        }
+
+        rooms[idx] = r;
+
+        let sumReserva = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const rm of rooms) {
+          sumReserva += parseNum(rm.totalPeriodo);
+        }
+
+        onUpdate({
+          ...d,
+          rooms,
+          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+        });
+      };
+
+      const handleRoomTotalPeriodoChange = (idx: number, newTotalPeriodo: string) => {
+        const rooms = [...(d.rooms ?? [])];
+        rooms[idx] = { ...rooms[idx], totalPeriodo: newTotalPeriodo };
+
+        let sumReserva = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const rm of rooms) {
+          sumReserva += parseNum(rm.totalPeriodo);
+        }
+
+        onUpdate({
+          ...d,
+          rooms,
+          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+        });
+      };
+
       return (
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <label className="text-xs text-text-muted">
-              Hotel
-              <input className={inputCls} value={d.hotel ?? ""} onChange={(e) => set("hotel", e.target.value)} />
+              <span className="block mb-1 font-medium">Hotel / Pousada</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.hotel ?? ""}
+                placeholder="Ex: Tarobá Hotel, Pousada Alvorada"
+                onChange={(e) => set("hotel", e.target.value)}
+              />
             </label>
             <label className="text-xs text-text-muted">
-              Cidade
-              <input className={inputCls} value={d.cidade ?? ""} onChange={(e) => set("cidade", e.target.value)} />
+              <span className="block mb-1 font-medium">Cidade</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.cidade ?? ""}
+                placeholder="Ex: Foz do Iguaçu, Noronha"
+                onChange={(e) => set("cidade", e.target.value)}
+              />
             </label>
             <label className="text-xs text-text-muted">
-              Diárias
-              <input className={inputCls} value={d.diarias ?? ""} onChange={(e) => set("diarias", e.target.value)} />
+              <span className="block mb-1 font-medium">Diárias</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm font-semibold focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.diarias ?? ""}
+                placeholder="Ex: 3"
+                onChange={(e) => handleDiariasChange(e.target.value)}
+              />
             </label>
           </div>
 
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                {["Tipo", "Diária (R$)", "Total Quarto", "Por Pessoa", "Qtd", "Total Período", ""].map((h) => (
-                  <th key={h} className={`${thCls} text-left`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(d.rooms ?? []).map(
-                (
-                  r: { tipo: string; diaria: string; totalQuarto: string; porPessoa: string; qtd: string; totalPeriodo: string },
-                  i: number
-                ) => (
-                  <tr key={i}>
-                    {(["tipo", "diaria", "totalQuarto", "porPessoa", "qtd", "totalPeriodo"] as const).map((k) => (
-                      <td key={k} className={tdCls}>
-                        <input className={k === "tipo" ? inputCls : numCls} value={r[k]} onChange={(e) => setRow("rooms", i, k, e.target.value)} />
-                      </td>
-                    ))}
-                    <td className={`${tdCls} text-center`}>
-                      <DeleteRowBtn onClick={() => removeRow("rooms", i)} />
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  {["Tipo", "Diária (R$)", "Total Quarto", "Por Pessoa", "Qtd", "Total Período", ""].map((h) => (
+                    <th key={h} className={`${thCls} text-left`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(d.rooms ?? []).map(
+                  (
+                    r: { tipo: string; diaria: string; totalQuarto: string; porPessoa: string; qtd: string; totalPeriodo: string },
+                    i: number
+                  ) => {
+                    const normalizedTipo =
+                      ["single", "duplo", "triplo", "quádruplo", "quadruplo"].includes(String(r.tipo || "").toLowerCase())
+                        ? (r.tipo.charAt(0).toUpperCase() + r.tipo.slice(1).toLowerCase()).replace(/quadruplo/i, "Quádruplo")
+                        : r.tipo || "Duplo";
+
+                    return (
+                      <tr key={i}>
+                        <td className={tdCls}>
+                          <select
+                            value={normalizedTipo}
+                            onChange={(e) => handleRoomTypeChange(i, e.target.value)}
+                            className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer transition-all"
+                          >
+                            <option value="Single">Single (1 pessoa)</option>
+                            <option value="Duplo">Duplo (2 pessoas)</option>
+                            <option value="Triplo">Triplo (3 pessoas)</option>
+                            <option value="Quádruplo">Quádruplo (4 pessoas)</option>
+                            {!["Single", "Duplo", "Triplo", "Quádruplo"].includes(normalizedTipo) && normalizedTipo && (
+                              <option value={normalizedTipo}>{normalizedTipo}</option>
+                            )}
+                          </select>
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                            value={r.diaria ?? ""}
+                            placeholder="0.00"
+                            onChange={(e) => handleRoomDiariaChange(i, e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                            value={r.totalQuarto ?? ""}
+                            placeholder="0.00"
+                            onChange={(e) => handleRoomTotalQuartoChange(i, e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                            value={r.porPessoa ?? ""}
+                            placeholder="0.00"
+                            onChange={(e) => setRow("rooms", i, "porPessoa", e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                            value={r.qtd ?? ""}
+                            placeholder="1"
+                            onChange={(e) => handleRoomQtdChange(i, e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                            value={r.totalPeriodo ?? ""}
+                            placeholder="0.00"
+                            onChange={(e) => handleRoomTotalPeriodoChange(i, e.target.value)}
+                          />
+                        </td>
+                        <td className={`${tdCls} text-center`}>
+                          <DeleteRowBtn onClick={() => removeRow("rooms", i)} />
+                        </td>
+                      </tr>
+                    );
+                  }
+                )}
+              </tbody>
+            </table>
+          </div>
           <button
-            onClick={() =>
-              addRow("rooms", { tipo: "Duplo", diaria: "0.00", totalQuarto: "0.00", porPessoa: "0.00", qtd: "1", totalPeriodo: "0.00" })
-            }
-            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
+            onClick={() => {
+              addRow("rooms", {
+                tipo: "Duplo",
+                diaria: "0.00",
+                totalQuarto: "0.00",
+                porPessoa: "0.00",
+                qtd: "1",
+                totalPeriodo: "0.00",
+              });
+            }}
+            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Quarto
           </button>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/40">
             <label className="text-xs text-text-muted">
-              Total Reserva (R$)
-              <input className={numCls} value={d.totalReserva ?? ""} onChange={(e) => set("totalReserva", e.target.value)} />
+              <span className="block mb-1 font-medium">Total Reserva (R$)</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.totalReserva ?? ""}
+                placeholder="0.00"
+                onChange={(e) => set("totalReserva", e.target.value)}
+              />
             </label>
             <label className="text-xs text-text-muted">
-              Observação
-              <input className={inputCls} value={d.observation ?? ""} onChange={(e) => set("observation", e.target.value)} />
+              <span className="block mb-1 font-medium">Observação</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.observation ?? ""}
+                placeholder="Ex: Cortesia concedida no quarto duplo solteiro..."
+                onChange={(e) => set("observation", e.target.value)}
+              />
             </label>
           </div>
         </div>
       );
+    }
 
     // ---- Rodoviário ----
     case "rodoviario":
