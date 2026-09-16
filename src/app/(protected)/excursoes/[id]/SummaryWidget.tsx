@@ -30,14 +30,24 @@ export function SummaryWidget({
   const [isEditingMargin, setIsEditingMargin] = useState(false);
   const [tempMargin, setTempMargin] = useState(String(profitMargin || 0));
 
-  // Quantidade de pessoas ativa: do campo de simulação se informado; caso contrário, quantidade oficial de vagas
+  // Descobre a quantidade de vagas base configurada nos cards ou nos slots da excursão
+  const defaultCardVagas = useMemo(() => {
+    for (const b of blocks) {
+      if (b.categoryId === "aereo" && parseNum(b.data.vagas) > 0) return parseNum(b.data.vagas);
+      if (b.categoryId === "personalizados" && parseNum(b.data.vagas) > 0) return parseNum(b.data.vagas);
+      if (b.categoryId === "guias" && parseNum(b.data.vagas) > 0) return parseNum(b.data.vagas);
+      if (b.categoryId === "rodoviario" && parseNum(b.data.vagas) > 0) return parseNum(b.data.vagas);
+    }
+    return slots > 0 ? slots : 20;
+  }, [blocks, slots]);
+
+  // Quantidade de pessoas ativa: do campo de simulação se informado; caso contrário, vagas dos cards
   const testPeopleNum = parseNum(testPeople);
   const isSimulationActive = testPeople.trim() !== "" && testPeopleNum > 0;
-  const officialVagas = slots > 0 ? slots : 20;
-  const activePeople = isSimulationActive ? testPeopleNum : officialVagas;
+  const activePeople = isSimulationActive ? testPeopleNum : defaultCardVagas;
 
-  // 1. Cálculo do Valor Total dos Custos Estimados de acordo com activePeople (simulada ou total de vagas oficial)
-  const totalGroupCost = useMemo(() => {
+  // 1. Cálculo da Soma Total dos Custos dos Cards (soma exata dos cards sem forçar os 20 do pacote)
+  const baseTotalCardsCost = useMemo(() => {
     let total = 0;
 
     for (const block of blocks) {
@@ -47,23 +57,24 @@ export function SummaryWidget({
       if (block.categoryId === "aereo") {
         const netTotal = parseNum(d.valorNetTotal ?? d.valorNet);
         const netUnit = parseNum(d.valorNetUnitario);
-        const blockVagas = parseNum(d.vagas) || officialVagas;
+        const blockVagas = parseNum(d.vagas) || defaultCardVagas;
         const custoTotal = parseNum(d.custoTotal);
         const custoUnit = parseNum(d.custoUnitario ?? d.custoPassagem);
 
-        if (netUnit > 0) {
-          total += netUnit * activePeople;
-        } else if (netTotal > 0) {
-          total += (netTotal / blockVagas) * activePeople;
-        } else if (custoUnit > 0) {
-          total += custoUnit * activePeople;
+        if (netTotal > 0) {
+          total += netTotal;
+        } else if (netUnit > 0) {
+          total += netUnit * blockVagas;
         } else if (custoTotal > 0) {
-          total += (custoTotal / blockVagas) * activePeople;
+          total += custoTotal;
+        } else if (custoUnit > 0) {
+          total += custoUnit * blockVagas;
         }
       }
 
-      // Hospedagem: Total dos quartos ou Total da Reserva
+      // Hospedagem: Total da Reserva ou soma dos quartos
       else if (block.categoryId === "hospedagem") {
+        const totalReserva = parseNum(d.totalReserva);
         let sumRooms = 0;
         const dDiarias = parseNum(d.diarias) || 1;
         if (Array.isArray(d.rooms) && d.rooms.length > 0) {
@@ -93,28 +104,28 @@ export function SummaryWidget({
             }
           }
         }
-        const totalHospedagem = sumRooms > 0 ? sumRooms : parseNum(d.totalReserva);
-        if (totalHospedagem > 0) {
-          total += (totalHospedagem / officialVagas) * activePeople;
+        if (totalReserva > 0) {
+          total += totalReserva;
+        } else if (sumRooms > 0) {
+          total += sumRooms;
         }
       }
 
-      // Rodoviário: Valor do Contrato ou Rateio por Pessoa
+      // Rodoviário: Valor do Contrato ou rateio * vagas
       else if (block.categoryId === "rodoviario") {
         const vContrato = parseNum(d.valorContrato);
-        const blockVagas = parseNum(d.vagas) || officialVagas;
+        const blockVagas = parseNum(d.vagas) || defaultCardVagas;
         const rateio = parseNum(d.rateioPorPessoa);
-        if (rateio > 0 && (vContrato === 0 || parseNum((vContrato / blockVagas).toFixed(2)) !== rateio)) {
-          total += rateio * activePeople;
-        } else if (vContrato > 0) {
-          total += (vContrato / blockVagas) * activePeople;
+        if (vContrato > 0) {
+          total += vContrato;
         } else if (rateio > 0) {
-          total += rateio * activePeople;
+          total += rateio * blockVagas;
         }
       }
 
-      // Guias e Monitores: Diárias dos Guias + Despesas Adicionais em tempo real
+      // Guias e Monitores: Diárias dos Guias + Despesas Adicionais
       else if (block.categoryId === "guias") {
+        const totalDesp = parseNum(d.totalDespesas);
         let gTot = 0;
         for (const g of d.guias ?? []) {
           const dNum = parseNum(g.diarias);
@@ -125,59 +136,60 @@ export function SummaryWidget({
         for (const desp of d.despesas ?? []) {
           gTot += parseNum(desp.valor);
         }
-        const blockVagas = parseNum(d.vagas) || officialVagas;
-        const totalGuias = gTot > 0 ? gTot : parseNum(d.totalDespesas);
-        if (totalGuias > 0) {
-          total += (totalGuias / blockVagas) * activePeople;
+        if (totalDesp > 0) {
+          total += totalDesp;
+        } else if (gTot > 0) {
+          total += gTot;
         } else if (parseNum(d.rateioPorPessoa) > 0) {
-          total += parseNum(d.rateioPorPessoa) * activePeople;
+          const blockVagas = parseNum(d.vagas) || defaultCardVagas;
+          total += parseNum(d.rateioPorPessoa) * blockVagas;
         }
       }
 
-      // Personalizados: Despesas Personalizadas em tempo real
+      // Personalizados: Despesas Personalizadas
       else if (block.categoryId === "personalizados") {
-        const blockVagas = parseNum(d.vagas) || officialVagas;
-        if (Array.isArray(d.rows) && d.rows.length > 0) {
+        const totalDesp = parseNum(d.totalDespesas);
+        const blockVagas = parseNum(d.vagas) || defaultCardVagas;
+        if (totalDesp > 0) {
+          total += totalDesp;
+        } else if (Array.isArray(d.rows) && d.rows.length > 0) {
           let rTot = 0;
           for (const r of d.rows) {
             const unit = parseNum(r.valor ?? r.custo);
             const rTotal = parseNum(r.total);
-            if (unit > 0) {
-              rTot += unit * activePeople;
-            } else if (rTotal > 0) {
-              rTot += (rTotal / blockVagas) * activePeople;
+            if (rTotal > 0) {
+              rTot += rTotal;
+            } else if (unit > 0) {
+              rTot += unit * blockVagas;
             }
           }
           total += rTot;
-        } else {
-          const totalDesp = parseNum(d.totalDespesas);
-          total += (totalDesp / blockVagas) * activePeople;
         }
       }
 
       // Itens Inclusos (caso existam)
       else if (block.categoryId === "itens_inclusos" && Array.isArray(d.rows)) {
         for (const r of d.rows) {
-          total += parseNum(r.custo) * activePeople;
+          total += parseNum(r.custo) * defaultCardVagas;
         }
       }
 
       // Outros personalizados genéricos
       else if (block.categoryId === "personalizada" && Array.isArray(d.rows)) {
         for (const r of d.rows) {
-          total += parseNum(r.valor ?? r.custo) * activePeople;
+          total += parseNum(r.valor ?? r.custo) * defaultCardVagas;
         }
       }
 
       // Serviços Inclusos
       else if (block.categoryId === "servicos_inclusos") {
         const tot = parseNum(d.totalGeral || d.valorContrato);
-        if (tot > 0) total += (tot / officialVagas) * activePeople;
+        if (tot > 0) total += tot;
       }
     }
 
     return total;
-  }, [blocks, activePeople, officialVagas]);
+  }, [blocks, defaultCardVagas]);
 
   const fmt = (v: number) =>
     v.toLocaleString("pt-BR", {
@@ -186,8 +198,12 @@ export function SummaryWidget({
       minimumFractionDigits: 2,
     });
 
-  // Custo por passageiro rateado
-  const costPerPerson = activePeople > 0 ? totalGroupCost / activePeople : 0;
+  // Custo base por pessoa a partir da soma dos cards e vagas configuradas
+  const baseCostPerPerson = defaultCardVagas > 0 ? baseTotalCardsCost / defaultCardVagas : 0;
+
+  // Valor total dos custos estimados: se em simulação, escala por activePeople; se não, é a soma exata dos cards
+  const totalGroupCost = isSimulationActive ? baseCostPerPerson * activePeople : baseTotalCardsCost;
+  const costPerPerson = baseCostPerPerson;
 
   // Margem e lucro da agência
   const marginNum = Number(profitMargin) || 0;
@@ -273,7 +289,7 @@ export function SummaryWidget({
             min="1"
             value={testPeople}
             onChange={(e) => setTestPeople(e.target.value)}
-            placeholder={`${officialVagas} vagas`}
+            placeholder={`${defaultCardVagas} vagas`}
             className="w-full px-3 py-1.5 rounded-lg bg-black/25 border border-white/20 text-white placeholder:text-white/40 text-sm font-bold focus:outline-none focus:border-green-400 transition-all"
           />
           <span className="text-xs text-white/70 font-medium shrink-0">
@@ -286,7 +302,7 @@ export function SummaryWidget({
               ⚡ Simulação ativa para {activePeople} pessoas
             </span>
           ) : (
-            <span>Calculando com as {officialVagas} vagas oficiais do pacote</span>
+            <span>Calculando com as {defaultCardVagas} vagas configuradas nos cards</span>
           )}
         </p>
       </div>
