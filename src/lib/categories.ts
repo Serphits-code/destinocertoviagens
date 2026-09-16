@@ -130,7 +130,7 @@ export const CATEGORY_DEFINITIONS: Record<string, CategoryDefinition> = {
         { descricao: "Transporte / Deslocamento Local", valor: "120.00" },
       ],
       totalDespesas: "1020.00",
-      rateioPorPessoa: "102.00",
+      rateioPorPessoa: "51.00",
       observation: "",
     },
   },

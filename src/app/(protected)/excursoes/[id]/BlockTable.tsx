@@ -1624,14 +1624,9 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                 )}
               </div>
               <input
-                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-text-title focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                value={
-                  d.rateioPorPessoa !== undefined && d.rateioPorPessoa !== "" && d.rateioPorPessoa !== "102.00"
-                    ? d.rateioPorPessoa
-                    : rateioCalculado || d.rateioPorPessoa || ""
-                }
-                placeholder="0.00"
-                onChange={(e) => set("rateioPorPessoa", e.target.value)}
+                readOnly
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface/70 text-text-body text-sm text-right tabular-nums font-bold text-primary focus:outline-none"
+                value={rateioCalculado}
               />
             </label>
           </div>
