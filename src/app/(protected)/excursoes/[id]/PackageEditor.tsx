@@ -299,38 +299,77 @@ export function PackageEditor({
     return list;
   }, [rooms]);
 
-  // Custo base por pessoa estimado a partir dos cards do pacote
+  // Custo base por pessoa estimado a partir dos custos totais dos cards do pacote
   const totalBaseCostPerPerson = useMemo(() => {
-    let cost = 0;
+    let totalGroup = 0;
+    const defaultVagas = slots > 0 ? slots : 20;
+
     for (const block of blocks) {
       const d = block.data;
-      if (block.categoryId === "itens_inclusos" && Array.isArray(d.rows)) {
-        for (const r of d.rows) cost += parseFloat(String(r.custo || 0).replace(",", ".")) || 0;
-      }
-      if (block.categoryId === "personalizados" && Array.isArray(d.rows)) {
-        for (const r of d.rows) cost += parseFloat(String(r.custo || 0).replace(",", ".")) || 0;
-      }
+
       if (block.categoryId === "aereo") {
-        cost += parseFloat(String(d.custoUnitario || 0).replace(",", ".")) || 0;
-      }
-      if (block.categoryId === "hospedagem" && Array.isArray(d.rooms)) {
-        for (const r of d.rooms) {
-          const p = parseFloat(String(r.porPessoa || 0).replace(",", ".")) || 0;
-          if (p > 0) cost += p;
+        const netTotal = parseFloat(String(d.valorNetTotal || d.valorNet || 0).replace(",", ".")) || 0;
+        const netUnit = parseFloat(String(d.valorNetUnitario || 0).replace(",", ".")) || 0;
+        const vagas = parseFloat(String(d.vagas || 0).replace(",", ".")) || defaultVagas;
+        const custoTotal = parseFloat(String(d.custoTotal || 0).replace(",", ".")) || 0;
+        if (netTotal > 0) totalGroup += netTotal;
+        else if (netUnit > 0) totalGroup += netUnit * vagas;
+        else if (custoTotal > 0) totalGroup += custoTotal;
+        else totalGroup += (parseFloat(String(d.custoUnitario || 0).replace(",", ".")) || 0) * defaultVagas;
+      } else if (block.categoryId === "hospedagem") {
+        const totalRes = parseFloat(String(d.totalReserva || 0).replace(",", ".")) || 0;
+        if (totalRes > 0) {
+          totalGroup += totalRes;
+        } else if (Array.isArray(d.rooms)) {
+          for (const r of d.rooms) {
+            const totPer = parseFloat(String(r.totalPeriodo || 0).replace(",", ".")) || 0;
+            const totQ = parseFloat(String(r.totalQuarto || 0).replace(",", ".")) || 0;
+            const qtd = parseFloat(String(r.qtd || 1).replace(",", ".")) || 1;
+            if (totPer > 0) totalGroup += totPer;
+            else if (totQ > 0) totalGroup += totQ * qtd;
+            else totalGroup += (parseFloat(String(r.porPessoa || 0).replace(",", ".")) || 0) * defaultVagas;
+          }
         }
-      }
-      if (block.categoryId === "rodoviario") {
-        cost += parseFloat(String(d.rateioPorPessoa || 0).replace(",", ".")) || 0;
-      }
-      if (block.categoryId === "guias") {
-        cost += parseFloat(String(d.rateioPorPessoa || 0).replace(",", ".")) || 0;
-      }
-      if (block.categoryId === "personalizada" && Array.isArray(d.rows)) {
-        for (const r of d.rows) cost += parseFloat(String(r.valor ?? r.custo ?? 0).replace(",", ".")) || 0;
+      } else if (block.categoryId === "rodoviario") {
+        const vContrato = parseFloat(String(d.valorContrato || 0).replace(",", ".")) || 0;
+        if (vContrato > 0) totalGroup += vContrato;
+        else totalGroup += (parseFloat(String(d.rateioPorPessoa || 0).replace(",", ".")) || 0) * defaultVagas;
+      } else if (block.categoryId === "guias") {
+        const totalDesp = parseFloat(String(d.totalDespesas || 0).replace(",", ".")) || 0;
+        if (totalDesp > 0) {
+          totalGroup += totalDesp;
+        } else {
+          let gTot = 0;
+          for (const g of d.guias ?? []) gTot += parseFloat(String(g.valorTotal || 0).replace(",", ".")) || 0;
+          for (const desp of d.despesas ?? []) gTot += parseFloat(String(desp.valor || 0).replace(",", ".")) || 0;
+          if (gTot > 0) totalGroup += gTot;
+          else totalGroup += (parseFloat(String(d.rateioPorPessoa || 0).replace(",", ".")) || 0) * defaultVagas;
+        }
+      } else if (block.categoryId === "personalizados") {
+        const totalDesp = parseFloat(String(d.totalDespesas || 0).replace(",", ".")) || 0;
+        if (totalDesp > 0) {
+          totalGroup += totalDesp;
+        } else if (Array.isArray(d.rows)) {
+          let rTot = 0;
+          const vNum = parseFloat(String(d.vagas || 0).replace(",", ".")) || defaultVagas;
+          for (const r of d.rows) {
+            const rowUnit = parseFloat(String(r.valor ?? r.custo ?? 0).replace(",", ".")) || 0;
+            const rowTot = r.total !== undefined && r.total !== ""
+              ? parseFloat(String(r.total).replace(",", ".")) || 0
+              : rowUnit * vNum;
+            rTot += rowTot;
+          }
+          totalGroup += rTot;
+        }
+      } else if (block.categoryId === "itens_inclusos" && Array.isArray(d.rows)) {
+        for (const r of d.rows) totalGroup += (parseFloat(String(r.custo || 0).replace(",", ".")) || 0) * defaultVagas;
+      } else if (block.categoryId === "personalizada" && Array.isArray(d.rows)) {
+        for (const r of d.rows) totalGroup += (parseFloat(String(r.valor ?? r.custo ?? 0).replace(",", ".")) || 0) * defaultVagas;
       }
     }
-    return cost;
-  }, [blocks]);
+
+    return defaultVagas > 0 ? totalGroup / defaultVagas : totalGroup;
+  }, [blocks, slots]);
 
   // ---- Blocos ----
 
@@ -884,7 +923,12 @@ export function PackageEditor({
             </button>
           )}
 
-          <SummaryWidget blocks={blocks} slots={slots} profitMargin={profitMargin} />
+          <SummaryWidget
+            blocks={blocks}
+            slots={slots}
+            profitMargin={profitMargin}
+            onUpdateProfitMargin={handleUpdateProfitMargin}
+          />
           <div className="bg-surface rounded-2xl border border-border shadow-shadow-card p-4 space-y-2">
             <h4 className="text-sm font-semibold text-text-title">⚡ Ações Rápidas</h4>
             <button
