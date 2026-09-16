@@ -60,8 +60,14 @@ export interface GuiaEntry {
   tipo: string;
   telefone: string;
   diarias: string;
+  valorDiaria?: string;
   valorTotal: string;
   status: RowStatus;
+}
+
+export interface GuiaDespesa {
+  descricao: string;
+  valor: string;
 }
 
 export interface RoteiroEntry {

@@ -175,45 +175,210 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       );
 
     // ---- Personalizados ----
-    case "personalizados":
+    case "personalizados": {
+      const vagasNum = parseNum(d.vagas) || 20;
+
+      const handleVagasChange = (newVagas: string) => {
+        const vNum = parseNum(newVagas) || 1;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rows = (d.rows ?? []).map((r: any) => {
+          const unit = parseNum(r.valor ?? r.custo);
+          return {
+            ...r,
+            total: unit > 0 ? (unit * vNum).toFixed(2) : r.total,
+          };
+        });
+
+        let totalGeral = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const r of rows) {
+          totalGeral += parseNum(r.total ?? (parseNum(r.valor ?? r.custo) * vNum));
+        }
+
+        onUpdate({
+          ...d,
+          vagas: newVagas,
+          rows,
+          totalDespesas: totalGeral.toFixed(2),
+        });
+      };
+
+      const handleRowValorChange = (idx: number, newVal: string) => {
+        const rows = [...(d.rows ?? [])];
+        const vNum = parseNum(newVal);
+        const total = vNum > 0 ? (vNum * vagasNum).toFixed(2) : (newVal ? "0.00" : "");
+        rows[idx] = {
+          ...rows[idx],
+          valor: newVal,
+          custo: newVal,
+          total,
+        };
+
+        let totalGeral = 0;
+        for (const r of rows) {
+          totalGeral += parseNum(r.total);
+        }
+
+        onUpdate({
+          ...d,
+          rows,
+          totalDespesas: totalGeral.toFixed(2),
+        });
+      };
+
+      const handleRowTotalChange = (idx: number, newTotal: string) => {
+        const rows = [...(d.rows ?? [])];
+        const tNum = parseNum(newTotal);
+        const unit = vagasNum > 0 && tNum > 0 ? (tNum / vagasNum).toFixed(2) : rows[idx].valor;
+        rows[idx] = {
+          ...rows[idx],
+          total: newTotal,
+          valor: unit,
+          custo: unit,
+        };
+
+        let totalGeral = 0;
+        for (const r of rows) {
+          totalGeral += parseNum(r.total);
+        }
+
+        onUpdate({
+          ...d,
+          rows,
+          totalDespesas: totalGeral.toFixed(2),
+        });
+      };
+
+      const handleAddRow = () => {
+        const newRow = { nome: "Nova Despesa", valor: "0.00", custo: "0.00", total: "0.00" };
+        const rows = [...(d.rows ?? []), newRow];
+        onUpdate({ ...d, rows });
+      };
+
+      const handleRemoveRow = (idx: number) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rows = (d.rows ?? []).filter((_: any, i: number) => i !== idx);
+        let totalGeral = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const r of rows) {
+          totalGeral += parseNum(r.total ?? (parseNum(r.valor ?? r.custo) * vagasNum));
+        }
+        onUpdate({
+          ...d,
+          rows,
+          totalDespesas: totalGeral.toFixed(2),
+        });
+      };
+
+      let totalGeralCalc = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of d.rows ?? []) {
+        totalGeralCalc += parseNum(
+          r.total !== undefined && r.total !== "" ? r.total : parseNum(r.valor ?? r.custo) * vagasNum
+        );
+      }
+
       return (
-        <div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                <th className={`${thCls} text-left w-[50%]`}>Nome do Item</th>
-                <th className={`${thCls} text-right w-[22%]`}>Custo (R$)</th>
-                <th className={`${thCls} text-right w-[22%]`}>Lucro (R$)</th>
-                <th className="w-[6%]" />
-              </tr>
-            </thead>
-            <tbody>
-              {(d.rows ?? []).map(
-                (r: { nome: string; custo: string; lucro: string }, i: number) => (
-                  <tr key={i}>
-                    <td className={tdCls}>
-                      <input className={inputCls} value={r.nome} placeholder="Nome do item..." onChange={(e) => setRow("rows", i, "nome", e.target.value)} />
-                    </td>
-                    <td className={tdCls}>
-                      <input className={numCls} value={r.custo} onChange={(e) => setRow("rows", i, "custo", e.target.value)} />
-                    </td>
-                    <td className={tdCls}>
-                      <input className={numCls} value={r.lucro} onChange={(e) => setRow("rows", i, "lucro", e.target.value)} />
-                    </td>
-                    <td className={`${tdCls} text-center`}>
-                      <DeleteRowBtn onClick={() => removeRow("rows", i)} />
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-border/40">
+            <span className="text-xs text-text-muted">
+              Preencha o valor unitário de cada despesa personalizada por passageiro.
+            </span>
+            <label className="flex items-center gap-2 text-xs text-text-muted">
+              <span className="font-medium">Total de Vagas:</span>
+              <input
+                className="w-20 px-2.5 py-1 rounded-lg border border-border bg-surface text-text-body text-sm font-semibold text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.vagas ?? "20"}
+                placeholder="20"
+                onChange={(e) => handleVagasChange(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className={`${thCls} text-left w-[50%]`}>Nome do Item</th>
+                  <th className={`${thCls} text-right w-[24%]`}>Valor Unitário (R$)</th>
+                  <th className={`${thCls} text-right w-[20%]`}>
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Valor Total (R$)</span>
+                      <span className="text-[10px] text-text-muted font-normal">({vagasNum}x)</span>
+                    </div>
+                  </th>
+                  <th className="w-[6%]" />
+                </tr>
+              </thead>
+              <tbody>
+                {(d.rows ?? []).map(
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (r: any, i: number) => {
+                    const unitVal = r.valor ?? r.custo ?? "";
+                    const totalVal =
+                      r.total !== undefined && r.total !== ""
+                        ? r.total
+                        : parseNum(unitVal) > 0
+                        ? (parseNum(unitVal) * vagasNum).toFixed(2)
+                        : "";
+
+                    return (
+                      <tr key={i}>
+                        <td className={tdCls}>
+                          <input
+                            className={inputCls}
+                            value={r.nome ?? ""}
+                            placeholder="Nome do item..."
+                            onChange={(e) => setRow("rows", i, "nome", e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className={numCls}
+                            value={unitVal}
+                            placeholder="0.00"
+                            onChange={(e) => handleRowValorChange(i, e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className={`${numCls} font-semibold text-primary`}
+                            value={totalVal}
+                            placeholder="0.00"
+                            onChange={(e) => handleRowTotalChange(i, e.target.value)}
+                          />
+                        </td>
+                        <td className={`${tdCls} text-center`}>
+                          <DeleteRowBtn onClick={() => handleRemoveRow(i)} />
+                        </td>
+                      </tr>
+                    );
+                  }
+                )}
+              </tbody>
+            </table>
+          </div>
+
           <button
-            onClick={() => addRow("rows", { nome: "Novo Item", custo: "0.00", lucro: "0.00" })}
-            className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
+            onClick={handleAddRow}
+            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Item
           </button>
+
+          {/* Valor total no fim do card */}
+          <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-surface-subtle/50">
+            <span className="text-xs font-semibold text-text-title uppercase tracking-wide">
+              Valor Total de Despesas Personalizadas
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-text-muted font-medium">({vagasNum} vagas):</span>
+              <span className="text-base font-bold text-primary tabular-nums">
+                R$ {totalGeralCalc.toFixed(2)}
+              </span>
+            </div>
+          </div>
+
           <BlockObservation
             value={d.observation}
             onChange={(v) => set("observation", v)}
@@ -221,6 +386,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           />
         </div>
       );
+    }
 
     // ---- Aéreo ----
     case "aereo": {
@@ -991,88 +1157,348 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
     }
 
     // ---- Guias ----
-    case "guias":
+    case "guias": {
+      // Helper to calculate totals
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let sumGuias = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const g of d.guias ?? []) {
+        const dNum = parseNum(g.diarias);
+        const vDiaria = parseNum(g.valorDiaria);
+        const total =
+          g.valorTotal !== undefined && g.valorTotal !== ""
+            ? parseNum(g.valorTotal)
+            : dNum > 0 && vDiaria > 0
+            ? dNum * vDiaria
+            : 0;
+        sumGuias += total;
+      }
+
+      let sumDespesas = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const desp of d.despesas ?? []) {
+        sumDespesas += parseNum(desp.valor);
+      }
+
+      const totalGeralDespesas = sumGuias + sumDespesas;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updateGuiasAndTotals = (newGuias: any[], newDespesas: any[]) => {
+        let sG = 0;
+        for (const g of newGuias) {
+          sG += parseNum(g.valorTotal);
+        }
+        let sD = 0;
+        for (const dp of newDespesas) {
+          sD += parseNum(dp.valor);
+        }
+        const tot = sG + sD;
+        onUpdate({
+          ...d,
+          guias: newGuias,
+          despesas: newDespesas,
+          totalDiarias: sG.toFixed(2),
+          totalOutrasDespesas: sD.toFixed(2),
+          totalDespesas: tot.toFixed(2),
+        });
+      };
+
+      const handleGuiaDiariasChange = (idx: number, diariasVal: string) => {
+        const guias = [...(d.guias ?? [])];
+        const g = { ...guias[idx], diarias: diariasVal };
+        const dNum = parseNum(diariasVal);
+        const currentDiaria =
+          g.valorDiaria !== undefined
+            ? g.valorDiaria
+            : parseNum(g.valorTotal) > 0 && parseNum(guias[idx].diarias) > 0
+            ? (parseNum(g.valorTotal) / parseNum(guias[idx].diarias)).toFixed(2)
+            : "";
+        const vDiariaNum = parseNum(currentDiaria);
+        g.valorDiaria = currentDiaria;
+        if (diariasVal === "" || currentDiaria === "") {
+          g.valorTotal = "";
+        } else {
+          g.valorTotal = (dNum * vDiariaNum).toFixed(2);
+        }
+        guias[idx] = g;
+        updateGuiasAndTotals(guias, d.despesas ?? []);
+      };
+
+      const handleGuiaValorDiariaChange = (idx: number, vDiariaVal: string) => {
+        const guias = [...(d.guias ?? [])];
+        const dNum = parseNum(guias[idx].diarias);
+        const vDiariaNum = parseNum(vDiariaVal);
+        const g = {
+          ...guias[idx],
+          valorDiaria: vDiariaVal,
+          valorTotal: vDiariaVal === "" ? "" : (dNum * vDiariaNum).toFixed(2),
+        };
+        guias[idx] = g;
+        updateGuiasAndTotals(guias, d.despesas ?? []);
+      };
+
+      const handleGuiaValorTotalChange = (idx: number, vTotalVal: string) => {
+        const guias = [...(d.guias ?? [])];
+        const dNum = parseNum(guias[idx].diarias);
+        const vTotalNum = parseNum(vTotalVal);
+        const g = {
+          ...guias[idx],
+          valorTotal: vTotalVal,
+          valorDiaria: vTotalVal === "" ? "" : (dNum > 0 ? (vTotalNum / dNum).toFixed(2) : guias[idx].valorDiaria ?? ""),
+        };
+        guias[idx] = g;
+        updateGuiasAndTotals(guias, d.despesas ?? []);
+      };
+
+      const handleAddGuia = () => {
+        const newGuia = {
+          nome: "",
+          tipo: "Acompanhante",
+          telefone: "",
+          diarias: "1",
+          valorDiaria: "0.00",
+          valorTotal: "0.00",
+          status: "PENDENTE",
+        };
+        const guias = [...(d.guias ?? []), newGuia];
+        updateGuiasAndTotals(guias, d.despesas ?? []);
+      };
+
+      const handleRemoveGuia = (idx: number) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const guias = (d.guias ?? []).filter((_: any, i: number) => i !== idx);
+        updateGuiasAndTotals(guias, d.despesas ?? []);
+      };
+
+      // Despesas handlers
+      const handleDespesaDescricaoChange = (idx: number, desc: string) => {
+        const despesas = [...(d.despesas ?? [])];
+        despesas[idx] = { ...despesas[idx], descricao: desc };
+        updateGuiasAndTotals(d.guias ?? [], despesas);
+      };
+
+      const handleDespesaValorChange = (idx: number, val: string) => {
+        const despesas = [...(d.despesas ?? [])];
+        despesas[idx] = { ...despesas[idx], valor: val };
+        updateGuiasAndTotals(d.guias ?? [], despesas);
+      };
+
+      const handleAddDespesa = () => {
+        const newDesp = { descricao: "", valor: "0.00" };
+        const despesas = [...(d.despesas ?? []), newDesp];
+        updateGuiasAndTotals(d.guias ?? [], despesas);
+      };
+
+      const handleRemoveDespesa = (idx: number) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const despesas = (d.despesas ?? []).filter((_: any, i: number) => i !== idx);
+        updateGuiasAndTotals(d.guias ?? [], despesas);
+      };
+
       return (
         <div className="space-y-4">
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                {["Nome", "Tipo", "Telefone", "Diárias", "Valor Total (R$)", "Status", ""].map((h) => (
-                  <th key={h} className={`${thCls} text-left`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(d.guias ?? []).map(
-                (
-                  g: { nome: string; tipo: string; telefone: string; diarias: string; valorTotal: string; status: RowStatus },
-                  i: number
-                ) => (
-                  <tr key={i}>
-                    {(["nome", "tipo", "telefone", "diarias"] as const).map((k) => (
-                      <td key={k} className={tdCls}>
-                        <input className={inputCls} value={g[k]} onChange={(e) => setRow("guias", i, k, e.target.value)} />
-                      </td>
-                    ))}
-                    <td className={tdCls}>
-                      <input className={numCls} value={g.valorTotal} onChange={(e) => setRow("guias", i, "valorTotal", e.target.value)} />
-                    </td>
-                    <td className={`${tdCls} text-center`}>
-                      <StatusSelect value={g.status} onChange={(v) => setRow("guias", i, "status", v)} />
-                    </td>
-                    <td className={`${tdCls} text-center`}>
-                      <DeleteRowBtn onClick={() => removeRow("guias", i)} />
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
+          {/* Tabela de Guias */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className={`${thCls} text-left`}>Nome</th>
+                  <th className={`${thCls} text-left`}>Tipo</th>
+                  <th className={`${thCls} text-left`}>Telefone</th>
+                  <th className={`${thCls} text-right w-20`}>Diárias</th>
+                  <th className={`${thCls} text-right w-28`}>Valor Diária (R$)</th>
+                  <th className={`${thCls} text-right w-28`}>Valor Total (R$)</th>
+                  <th className={`${thCls} text-center w-28`}>Status</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {(d.guias ?? []).map(
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (g: any, i: number) => {
+                    const dNum = parseNum(g.diarias);
+                    const tNum = parseNum(g.valorTotal);
+                    const vDiariaDisplay =
+                      g.valorDiaria !== undefined
+                        ? g.valorDiaria
+                        : dNum > 0 && tNum > 0
+                        ? (tNum / dNum).toFixed(2)
+                        : "";
+
+                    const vTotalDisplay = g.valorTotal ?? "";
+
+                    return (
+                      <tr key={i}>
+                        <td className={tdCls}>
+                          <input
+                            className={inputCls}
+                            value={g.nome ?? ""}
+                            placeholder="Nome do guia..."
+                            onChange={(e) => setRow("guias", i, "nome", e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className={inputCls}
+                            value={g.tipo ?? ""}
+                            placeholder="Ex: Acompanhante, Local..."
+                            onChange={(e) => setRow("guias", i, "tipo", e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className={inputCls}
+                            value={g.telefone ?? ""}
+                            placeholder="(00) 00000-0000"
+                            onChange={(e) => setRow("guias", i, "telefone", e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className={numCls}
+                            value={g.diarias ?? ""}
+                            placeholder="1"
+                            onChange={(e) => handleGuiaDiariasChange(i, e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className={numCls}
+                            value={vDiariaDisplay}
+                            placeholder="0.00"
+                            onChange={(e) => handleGuiaValorDiariaChange(i, e.target.value)}
+                          />
+                        </td>
+                        <td className={tdCls}>
+                          <input
+                            className={`${numCls} font-semibold text-primary`}
+                            value={vTotalDisplay}
+                            placeholder="0.00"
+                            onChange={(e) => handleGuiaValorTotalChange(i, e.target.value)}
+                          />
+                        </td>
+                        <td className={`${tdCls} text-center`}>
+                          <StatusSelect value={g.status ?? "CONFIRMADO"} onChange={(v) => setRow("guias", i, "status", v)} />
+                        </td>
+                        <td className={`${tdCls} text-center`}>
+                          <DeleteRowBtn onClick={() => handleRemoveGuia(i)} />
+                        </td>
+                      </tr>
+                    );
+                  }
+                )}
+              </tbody>
+            </table>
+          </div>
           <button
-            onClick={() =>
-              addRow("guias", { nome: "", tipo: "Acompanhante", telefone: "", diarias: "1", valorTotal: "0.00", status: "PENDENTE" })
-            }
-            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
+            onClick={handleAddGuia}
+            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Guia
           </button>
 
-          <div>
-            <p className="text-xs text-text-muted mb-1">Rateio por Pessoa (R$)</p>
-            <input className={`${numCls} max-w-40`} value={d.rateioPorPessoa ?? ""} onChange={(e) => set("rateioPorPessoa", e.target.value)} />
-          </div>
+          {/* Seção de Despesas Extras do Guia (substituindo Roteiro) */}
+          <div className="space-y-2 pt-3 border-t border-border/40">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                <DollarSign size={14} className="text-primary" />
+                <span>Despesas Adicionais do Guia</span>
+              </div>
+              <span className="text-xs text-text-muted font-medium">
+                Total Despesas Extras: R$ {sumDespesas.toFixed(2)}
+              </span>
+            </div>
 
-          <div>
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Roteiro</p>
             <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className={`${thCls} text-left w-[70%]`}>Descrição da Despesa</th>
+                  <th className={`${thCls} text-right w-[24%]`}>Valor (R$)</th>
+                  <th className="w-[6%]" />
+                </tr>
+              </thead>
               <tbody>
-                {(d.roteiro ?? []).map(
-                  (r: { horario: string; atividade: string; status: RowStatus }, i: number) => (
+                {(d.despesas ?? []).map(
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (desp: any, i: number) => (
                     <tr key={i}>
-                      <td className={tdCls} style={{ width: "90px" }}>
-                        <input className={inputCls} value={r.horario} onChange={(e) => setRow("roteiro", i, "horario", e.target.value)} />
+                      <td className={tdCls}>
+                        <input
+                          className={inputCls}
+                          value={desp.descricao ?? ""}
+                          placeholder="Ex: Alimentação, Transfer, Hospedagem do guia..."
+                          onChange={(e) => handleDespesaDescricaoChange(i, e.target.value)}
+                        />
                       </td>
                       <td className={tdCls}>
-                        <input className={inputCls} value={r.atividade} onChange={(e) => setRow("roteiro", i, "atividade", e.target.value)} />
+                        <input
+                          className={numCls}
+                          value={desp.valor ?? ""}
+                          placeholder="0.00"
+                          onChange={(e) => handleDespesaValorChange(i, e.target.value)}
+                        />
                       </td>
-                      <td className={`${tdCls} text-center`} style={{ width: "130px" }}>
-                        <StatusSelect value={r.status} onChange={(v) => setRow("roteiro", i, "status", v)} />
-                      </td>
-                      <td className={`${tdCls} text-center`} style={{ width: "40px" }}>
-                        <DeleteRowBtn onClick={() => removeRow("roteiro", i)} />
+                      <td className={`${tdCls} text-center`}>
+                        <DeleteRowBtn onClick={() => handleRemoveDespesa(i)} />
                       </td>
                     </tr>
                   )
                 )}
+                {(!d.despesas || d.despesas.length === 0) && (
+                  <tr>
+                    <td colSpan={3} className="py-2.5 text-center text-xs text-text-muted italic">
+                      Nenhuma despesa extra adicionada. Clique abaixo para incluir alimentação, transporte, etc.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
+
             <button
-              onClick={() => addRow("roteiro", { horario: "00:00", atividade: "Nova Atividade", status: "CONFIRMADO" })}
-              className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
+              onClick={handleAddDespesa}
+              className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
             >
-              <Plus size={14} /> Adicionar Horário
+              <Plus size={14} /> Adicionar Despesa
             </button>
           </div>
+
+          {/* Resumo Financeiro de Guias e Despesas */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3.5 rounded-xl border border-border bg-surface-subtle/50">
+            <label className="text-xs text-text-muted">
+              <span className="block mb-1 font-medium">Total Diárias Guias (R$)</span>
+              <input
+                readOnly
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface/70 text-text-body text-sm text-right tabular-nums font-medium focus:outline-none"
+                value={sumGuias.toFixed(2)}
+              />
+            </label>
+            <label className="text-xs text-text-muted">
+              <span className="block mb-1 font-medium">Outras Despesas (R$)</span>
+              <input
+                readOnly
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface/70 text-text-body text-sm text-right tabular-nums font-medium focus:outline-none"
+                value={sumDespesas.toFixed(2)}
+              />
+            </label>
+            <label className="text-xs text-text-muted">
+              <span className="block mb-1 font-medium">Valor Total de Despesas (R$)</span>
+              <input
+                readOnly
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-primary focus:outline-none"
+                value={totalGeralDespesas.toFixed(2)}
+              />
+            </label>
+            <label className="text-xs text-text-muted">
+              <span className="block mb-1 font-medium">Rateio por Pessoa (R$)</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-text-title focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.rateioPorPessoa ?? ""}
+                placeholder="0.00"
+                onChange={(e) => set("rateioPorPessoa", e.target.value)}
+              />
+            </label>
+          </div>
+
           <BlockObservation
             value={d.observation}
             onChange={(v) => set("observation", v)}
@@ -1080,6 +1506,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           />
         </div>
       );
+    }
 
     // ---- Serviços Inclusos (Duplo/Triplo) ----
     case "servicos_inclusos": {

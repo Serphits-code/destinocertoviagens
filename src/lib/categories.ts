@@ -115,20 +115,18 @@ export const CATEGORY_DEFINITIONS: Record<string, CategoryDefinition> = {
     id: "guias",
     name: "Guias e Monitores",
     icon: "🧭",
-    description: "Informações do guia acompanhante/local, honorários e cronograma",
+    description: "Informações do guia acompanhante/local, honorários e despesas",
     defaultData: {
       title: "Guias e Monitores",
       guias: [
-        { nome: "George Silva", tipo: "Acompanhante", telefone: "(81) 98888-7777", diarias: "5", valorTotal: "750.00", status: "CONFIRMADO" },
+        { nome: "George Silva", tipo: "Acompanhante", telefone: "(81) 98888-7777", diarias: "5", valorDiaria: "150.00", valorTotal: "750.00", status: "CONFIRMADO" },
       ],
+      despesas: [
+        { descricao: "Alimentação do Guia", valor: "150.00" },
+        { descricao: "Transporte / Deslocamento Local", valor: "120.00" },
+      ],
+      totalDespesas: "1020.00",
       rateioPorPessoa: "102.00",
-      roteiro: [
-        { horario: "08:00", atividade: "Saída do Hotel", status: "CONFIRMADO" },
-        { horario: "09:00", atividade: "Passeio Parque das Cataratas", status: "CONFIRMADO" },
-        { horario: "12:30", atividade: "Almoço no Restaurante Porto Canoas", status: "CONFIRMADO" },
-        { horario: "15:00", atividade: "Parque das Aves", status: "CONFIRMADO" },
-        { horario: "18:00", atividade: "Retorno ao Hotel", status: "CONFIRMADO" },
-      ],
       observation: "",
     },
   },
