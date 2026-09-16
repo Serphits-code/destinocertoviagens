@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   BedDouble,
   Plus,
@@ -18,6 +18,10 @@ import {
   Bed,
   Cake,
   PartyPopper,
+  Hotel,
+  MapPin,
+  Moon,
+  Layers,
 } from "lucide-react";
 import {
   DndContext,
@@ -133,6 +137,7 @@ function syncRooms(
     0
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ensureGuestIds = (guests: any[] = []): RoomGuest[] =>
     guests.map((g) => ({
       id: g.id || generateGuestId(),
@@ -182,22 +187,19 @@ function syncRooms(
     }
   }
 
-  return result.length > 0 ? result : existing;
+  return result;
 }
 
 // ----------------------------------------------------
 // COMPONENTE: ITEM DE HÓSPEDE (DRAGGABLE)
 // ----------------------------------------------------
 interface DraggableGuestItemProps {
+  blockId: string;
   guest: RoomGuest;
   roomIdx: number;
   guestIdx: number;
   slotNumber: number;
-  birthdayInfo?: {
-    isBirthday: boolean;
-    dateFormatted: string;
-    turningAge?: number;
-  } | null;
+  birthdayInfo: { isBirthday: boolean; dateFormatted: string; turningAge?: number } | null;
   onUpdateGuest: (
     roomIdx: number,
     guestIdx: number,
@@ -205,10 +207,15 @@ interface DraggableGuestItemProps {
     value: string
   ) => void;
   onRemoveGuest: (roomIdx: number, guestIdx: number) => void;
-  onOpenCustomerPicker: (roomIdx: number, slotNumber: number, guestIdx?: number) => void;
+  onOpenCustomerPicker: (
+    roomIdx: number,
+    slotNumber: number,
+    guestIdx?: number
+  ) => void;
 }
 
 function DraggableGuestItem({
+  blockId,
   guest,
   roomIdx,
   guestIdx,
@@ -219,30 +226,30 @@ function DraggableGuestItem({
   onOpenCustomerPicker,
 }: DraggableGuestItemProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: guest.id,
-    data: { guest, roomIdx, guestIdx },
+    id: `guest-${guest.id}`,
+    data: {
+      guest,
+      blockId,
+      roomIdx,
+      guestIdx,
+    },
   });
 
-  const hasAlert =
-    guest.observacao.toLowerCase().includes("alergia") ||
-    guest.observacao.toLowerCase().includes("isent") ||
-    guest.observacao.toLowerCase().includes("vegetar") ||
-    guest.observacao.toLowerCase().includes("medic") ||
-    guest.observacao.toLowerCase().includes("restri");
+  const hasAlert = Boolean(guest.observacao && guest.observacao.trim().length > 0);
 
   return (
     <div
       ref={setNodeRef}
-      className={`group/guest relative flex flex-col md:flex-row items-stretch md:items-center gap-3 p-3.5 rounded-xl border bg-surface transition-all ${
-        birthdayInfo
-          ? "border-amber-500/40 bg-gradient-to-r from-amber-500/[0.03] to-surface shadow-2xs"
-          : "border-border/80 hover:border-primary/40 hover:shadow-xs"
-      } ${
-        isDragging ? "opacity-30 border-dashed border-primary scale-[0.98]" : ""
+      className={`group/guest relative flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-3 rounded-xl border transition-all duration-150 ${
+        isDragging
+          ? "opacity-30 border-dashed border-primary bg-primary/5"
+          : birthdayInfo
+            ? "border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50"
+            : "border-border/80 bg-surface hover:border-primary/40 hover:shadow-xs"
       }`}
     >
-      {/* Indicador do Espaço e Grip de Arraste */}
-      <div className="flex items-center gap-2">
+      {/* Alça de Arraste e Número do Espaço */}
+      <div className="flex items-center gap-2 shrink-0">
         <button
           type="button"
           {...attributes}
@@ -428,6 +435,7 @@ function EmptySlot({
 // COMPONENTE: CARD DO QUARTO (DROPPABLE)
 // ----------------------------------------------------
 interface RoomCardProps {
+  blockId: string;
   room: RoomEntry;
   roomIdx: number;
   isDraggingAny: boolean;
@@ -443,12 +451,17 @@ interface RoomCardProps {
     value: string
   ) => void;
   onRemoveGuest: (roomIdx: number, guestIdx: number) => void;
-  onOpenCustomerPicker: (roomIdx: number, slotNumber: number, guestIdx?: number) => void;
+  onOpenCustomerPicker: (
+    roomIdx: number,
+    slotNumber: number,
+    guestIdx?: number
+  ) => void;
   onAddExtraSlot: (roomIdx: number) => void;
   extraSlotsAllowed: boolean;
 }
 
 function RoomCard({
+  blockId,
   room,
   roomIdx,
   isDraggingAny,
@@ -464,7 +477,7 @@ function RoomCard({
   extraSlotsAllowed,
 }: RoomCardProps) {
   const { setNodeRef } = useDroppable({
-    id: `room-${roomIdx}`,
+    id: `room-${blockId}-${roomIdx}`,
   });
 
   const capacity = capacityOf(room.tipo);
@@ -595,6 +608,7 @@ function RoomCard({
           return (
             <DraggableGuestItem
               key={guest.id}
+              blockId={blockId}
               guest={guest}
               roomIdx={roomIdx}
               guestIdx={guestIdx}
@@ -610,7 +624,7 @@ function RoomCard({
         {/* Espaços Vagos Disponíveis (Pré-alocados para exibir todos os espaços da capacidade do quarto) */}
         {emptySlots.map((slotNum) => (
           <EmptySlot
-            key={`empty-slot-${roomIdx}-${slotNum}`}
+            key={`empty-slot-${blockId}-${roomIdx}-${slotNum}`}
             slotNumber={slotNum}
             roomIdx={roomIdx}
             isExtra={false}
@@ -621,7 +635,7 @@ function RoomCard({
         {/* Cama Extra / Vaga Adicional */}
         {showExtraSlot && (
           <EmptySlot
-            key={`extra-slot-${roomIdx}`}
+            key={`extra-slot-${blockId}-${roomIdx}`}
             slotNumber={occupiedCount + 1}
             roomIdx={roomIdx}
             isExtra={true}
@@ -656,32 +670,67 @@ export function RoomListView({
   periodStart,
   periodEnd,
 }: RoomListViewProps) {
-  const hospedagem = blocks.find((b) => b.categoryId === "hospedagem");
-  if (!hospedagem) return null;
-
-  const data = hospedagem.data;
-  const hospedagemRooms: HospedagemRoom[] = Array.isArray(data.rooms)
-    ? data.rooms
-    : [];
-  const existingRooms: RoomEntry[] = Array.isArray(data.roomList)
-    ? data.roomList
-    : [];
-
-  const [rooms, setRooms] = useState<RoomEntry[]>(() =>
-    syncRooms(hospedagemRooms, existingRooms)
+  // Filtra todos os blocos de categoria hospedagem presentes no pacote
+  const hospedagemBlocks = useMemo(
+    () => blocks.filter((b) => b.categoryId === "hospedagem"),
+    [blocks]
   );
 
+  // Armazena a lista de quartos sincronizada para cada bloco de hospedagem (indexado por block.id)
+  const [roomsByBlock, setRoomsByBlock] = useState<Record<string, RoomEntry[]>>(() => {
+    const initial: Record<string, RoomEntry[]> = {};
+    for (const b of hospedagemBlocks) {
+      const hRooms: HospedagemRoom[] = Array.isArray(b.data.rooms) ? b.data.rooms : [];
+      const exRooms: RoomEntry[] = Array.isArray(b.data.roomList) ? b.data.roomList : [];
+      initial[b.id] = syncRooms(hRooms, exRooms);
+    }
+    return initial;
+  });
+
+  // Filtro de seleção de hotel (quando há mais de uma hospedagem: "all" ou id do bloco)
+  const [selectedHotelId, setSelectedHotelId] = useState<string>("all");
+
   const [justSaved, setJustSaved] = useState(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Mapa de aniversários carregado do banco de dados para os passageiros atuais
   const [birthdaysMap, setBirthdaysMap] = useState<Record<string, string>>({});
 
+  // Sincroniza se os blocos de hospedagem mudarem externamente (ex.: alteração de quantidade no pacote)
+  useEffect(() => {
+    setRoomsByBlock((prev) => {
+      let changed = false;
+      const next: Record<string, RoomEntry[]> = { ...prev };
+      for (const b of hospedagemBlocks) {
+        const hRooms: HospedagemRoom[] = Array.isArray(b.data.rooms) ? b.data.rooms : [];
+        const exRooms: RoomEntry[] = Array.isArray(b.data.roomList) ? b.data.roomList : [];
+        const totalQtd = hRooms.reduce((sum, r) => sum + (parseInt(r.qtd) || 0), 0);
+
+        if (!next[b.id]) {
+          next[b.id] = syncRooms(hRooms, exRooms);
+          changed = true;
+        } else if (next[b.id].length !== totalQtd && totalQtd > 0) {
+          next[b.id] = syncRooms(hRooms, exRooms.length > 0 ? exRooms : next[b.id]);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [hospedagemBlocks]);
+
   // Carrega aniversários dos clientes cadastrados para os hóspedes atuais
   useEffect(() => {
-    const guestsToQuery = rooms
-      .flatMap((r) => r.hospedes)
-      .filter((g) => g.nome && !g.birthDate);
+    const guestsToQuery: Array<{ customerId?: string; nome: string; documento: string; birthDate?: string | null }> = [];
+    for (const b of hospedagemBlocks) {
+      const bRooms = roomsByBlock[b.id] ?? [];
+      bRooms.forEach((r) => {
+        r.hospedes.forEach((g) => {
+          if (g.nome && !g.birthDate) {
+            guestsToQuery.push(g);
+          }
+        });
+      });
+    }
 
     if (guestsToQuery.length > 0) {
       getCustomersBirthdays(
@@ -694,56 +743,56 @@ export function RoomListView({
         setBirthdaysMap((prev) => ({ ...prev, ...map }));
       });
     }
-  }, [rooms]);
+  }, [hospedagemBlocks, roomsByBlock]);
 
-  // Sincroniza se o bloco de hospedagem mudar externamente
-  const blockIdRef = useRef(hospedagem.id);
-  useEffect(() => {
-    if (blockIdRef.current !== hospedagem.id) {
-      blockIdRef.current = hospedagem.id;
-      setRooms(syncRooms(hospedagemRooms, existingRooms));
-    }
-  }, [hospedagem.id, hospedagemRooms, existingRooms]);
+  // Persistência debounced por bloco de hospedagem
+  const persistRoomsForBlock = useCallback(
+    (blockId: string, newRooms: RoomEntry[]) => {
+      const targetBlock = blocks.find((b) => b.id === blockId);
+      if (!targetBlock) return;
 
-  // Persistência debounced
-  const persistRooms = useCallback(
-    (newRooms: RoomEntry[]) => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        onUpdateBlock(hospedagem.id, { ...data, roomList: newRooms });
+      if (saveTimersRef.current[blockId]) {
+        clearTimeout(saveTimersRef.current[blockId]);
+      }
+      saveTimersRef.current[blockId] = setTimeout(() => {
+        onUpdateBlock(blockId, { ...targetBlock.data, roomList: newRooms });
         setJustSaved(true);
         setTimeout(() => setJustSaved(false), 2000);
       }, 400);
     },
-    [hospedagem.id, data, onUpdateBlock]
+    [blocks, onUpdateBlock]
   );
 
-  // Camas extras por quarto
-  const [extraSlotsRooms, setExtraSlotsRooms] = useState<Record<number, boolean>>({});
+  // Camas extras por quarto (identificadas por "blockId-roomIdx")
+  const [extraSlotsRooms, setExtraSlotsRooms] = useState<Record<string, boolean>>({});
 
-  const handleAddExtraSlot = (roomIdx: number) => {
-    setExtraSlotsRooms((prev) => ({ ...prev, [roomIdx]: true }));
+  const handleAddExtraSlot = (blockId: string, roomIdx: number) => {
+    setExtraSlotsRooms((prev) => ({ ...prev, [`${blockId}-${roomIdx}`]: true }));
   };
 
   // Modal de Seleção de Clientes
   const [modalState, setModalState] = useState<{
     open: boolean;
+    blockId: string;
     roomIdx: number;
     slotNumber: number;
     guestIdx?: number;
   }>({
     open: false,
+    blockId: "",
     roomIdx: 0,
     slotNumber: 1,
   });
 
   const handleOpenCustomerPicker = (
+    blockId: string,
     roomIdx: number,
     slotNumber: number,
     guestIdx?: number
   ) => {
     setModalState({
       open: true,
+      blockId,
       roomIdx,
       slotNumber,
       guestIdx,
@@ -758,98 +807,108 @@ export function RoomListView({
     customerId?: string;
     birthDate?: string | null;
   }) => {
-    const { roomIdx, guestIdx } = modalState;
+    const { blockId, roomIdx, guestIdx } = modalState;
+    if (!blockId) return;
 
-    setRooms((prev) => {
-      const next = prev.map((r, i) => {
-        if (i !== roomIdx) return r;
+    setRoomsByBlock((prev) => {
+      const currentRooms = prev[blockId] ? [...prev[blockId]] : [];
+      const targetRoom = currentRooms[roomIdx];
+      if (!targetRoom) return prev;
 
-        const newGuest: RoomGuest = {
-          id:
-            guestIdx !== undefined && r.hospedes[guestIdx]?.id
-              ? r.hospedes[guestIdx].id
-              : generateGuestId(),
-          customerId: guestData.customerId,
-          nome: guestData.nome,
-          documento: guestData.documento,
-          tipo: guestData.tipo,
-          observacao: guestData.observacao,
-          birthDate: guestData.birthDate || null,
-        };
+      const hospedes = [...targetRoom.hospedes];
+      const newGuest: RoomGuest = {
+        id:
+          guestIdx !== undefined && hospedes[guestIdx]?.id
+            ? hospedes[guestIdx].id
+            : generateGuestId(),
+        customerId: guestData.customerId,
+        nome: guestData.nome,
+        documento: guestData.documento,
+        tipo: guestData.tipo || "Adulto",
+        observacao: guestData.observacao,
+        birthDate: guestData.birthDate || null,
+      };
 
-        let updatedGuests: RoomGuest[];
-        if (guestIdx !== undefined && guestIdx < r.hospedes.length) {
-          updatedGuests = r.hospedes.map((g, gi) =>
-            gi === guestIdx ? newGuest : g
-          );
-        } else {
-          updatedGuests = [...r.hospedes, newGuest];
-        }
+      if (guestIdx !== undefined && guestIdx < hospedes.length) {
+        hospedes[guestIdx] = newGuest;
+      } else {
+        hospedes.push(newGuest);
+      }
 
-        return { ...r, hospedes: updatedGuests };
-      });
-
-      persistRooms(next);
-      return next;
+      currentRooms[roomIdx] = { ...targetRoom, hospedes };
+      persistRoomsForBlock(blockId, currentRooms);
+      return { ...prev, [blockId]: currentRooms };
     });
+
+    setModalState((prev) => ({ ...prev, open: false }));
   };
 
-  const handleSetRoomNumber = (idx: number, value: string) => {
-    setRooms((prev) => {
-      const next = prev.map((r, i) => (i === idx ? { ...r, numero: value } : r));
-      persistRooms(next);
-      return next;
+  const handleSetRoomNumber = (blockId: string, idx: number, value: string) => {
+    setRoomsByBlock((prev) => {
+      const currentRooms = prev[blockId] ? [...prev[blockId]] : [];
+      if (!currentRooms[idx]) return prev;
+      currentRooms[idx] = { ...currentRooms[idx], numero: value };
+      persistRoomsForBlock(blockId, currentRooms);
+      return { ...prev, [blockId]: currentRooms };
     });
   };
 
   const handleUpdateGuest = (
+    blockId: string,
     roomIdx: number,
     guestIdx: number,
     key: keyof RoomGuest,
     value: string
   ) => {
-    setRooms((prev) => {
-      const next = prev.map((r, i) =>
-        i === roomIdx
-          ? {
-              ...r,
-              hospedes: r.hospedes.map((g, gi) =>
-                gi === guestIdx ? { ...g, [key]: value } : g
-              ),
-            }
-          : r
+    setRoomsByBlock((prev) => {
+      const currentRooms = prev[blockId] ? [...prev[blockId]] : [];
+      const room = currentRooms[roomIdx];
+      if (!room || !room.hospedes[guestIdx]) return prev;
+
+      const hospedes = room.hospedes.map((g, gi) =>
+        gi === guestIdx ? { ...g, [key]: value } : g
       );
-      persistRooms(next);
-      return next;
+      currentRooms[roomIdx] = { ...room, hospedes };
+      persistRoomsForBlock(blockId, currentRooms);
+      return { ...prev, [blockId]: currentRooms };
     });
   };
 
-  const handleRemoveGuest = (roomIdx: number, guestIdx: number) => {
-    setRooms((prev) => {
-      const next = prev.map((r, i) =>
-        i === roomIdx
-          ? { ...r, hospedes: r.hospedes.filter((_, gi) => gi !== guestIdx) }
-          : r
-      );
-      persistRooms(next);
-      return next;
+  const handleRemoveGuest = (blockId: string, roomIdx: number, guestIdx: number) => {
+    setRoomsByBlock((prev) => {
+      const currentRooms = prev[blockId] ? [...prev[blockId]] : [];
+      const room = currentRooms[roomIdx];
+      if (!room) return prev;
+
+      const hospedes = room.hospedes.filter((_, gi) => gi !== guestIdx);
+      currentRooms[roomIdx] = { ...room, hospedes };
+      persistRoomsForBlock(blockId, currentRooms);
+      return { ...prev, [blockId]: currentRooms };
     });
   };
 
-  // Mapa de alocações existentes para evitar duplicidade
+  // Mapa de alocações existentes para evitar duplicidade e indicar em qual hospedagem/quarto está
   const existingAllocations = useMemo(() => {
     const map = new Map<string, string>();
-    rooms.forEach((r) => {
-      r.hospedes.forEach((g) => {
-        if (g.nome) map.set(g.nome.trim().toLowerCase(), r.numero);
-        if (g.documento) {
-          const cleanDoc = g.documento.replace(/\D/g, "");
-          if (cleanDoc) map.set(cleanDoc, r.numero);
-        }
+    for (const b of hospedagemBlocks) {
+      const bRooms = roomsByBlock[b.id] ?? [];
+      const hotelLabel = b.data.hotel || b.title || "Hospedagem";
+      bRooms.forEach((r) => {
+        r.hospedes.forEach((g) => {
+          const loc =
+            hospedagemBlocks.length > 1
+              ? `${r.numero} (${hotelLabel})`
+              : r.numero;
+          if (g.nome) map.set(g.nome.trim().toLowerCase(), loc);
+          if (g.documento) {
+            const cleanDoc = g.documento.replace(/\D/g, "");
+            if (cleanDoc) map.set(cleanDoc, loc);
+          }
+        });
       });
-    });
+    }
     return map;
-  }, [rooms]);
+  }, [hospedagemBlocks, roomsByBlock]);
 
   // Lista consolidada de todos os aniversariantes durante o período da excursão
   const allBirthdayGuests = useMemo(() => {
@@ -857,61 +916,58 @@ export function RoomListView({
 
     const list: Array<{
       guest: RoomGuest;
+      hotelName: string;
       roomNumero: string;
       birthdayInfo: { isBirthday: boolean; dateFormatted: string; turningAge?: number };
     }> = [];
 
-    rooms.forEach((r) => {
-      r.hospedes.forEach((g) => {
-        const bDate =
-          g.birthDate ||
-          (g.customerId ? birthdaysMap[g.customerId] : null) ||
-          (g.nome ? birthdaysMap[g.nome.trim().toLowerCase()] : null) ||
-          (g.documento ? birthdaysMap[g.documento.replace(/\D/g, "")] : null);
+    for (const b of hospedagemBlocks) {
+      const bRooms = roomsByBlock[b.id] ?? [];
+      const hotelName = b.data.hotel || b.title || "Hospedagem";
+      bRooms.forEach((r) => {
+        r.hospedes.forEach((g) => {
+          const bDate =
+            g.birthDate ||
+            (g.customerId ? birthdaysMap[g.customerId] : null) ||
+            (g.nome ? birthdaysMap[g.nome.trim().toLowerCase()] : null) ||
+            (g.documento ? birthdaysMap[g.documento.replace(/\D/g, "")] : null);
 
-        const info = isBirthdayInPeriod(bDate, periodStart, periodEnd);
-        if (info?.isBirthday) {
-          list.push({
-            guest: g,
-            roomNumero: r.numero,
-            birthdayInfo: info,
-          });
-        }
+          const info = isBirthdayInPeriod(bDate, periodStart, periodEnd);
+          if (info?.isBirthday) {
+            list.push({
+              guest: g,
+              hotelName,
+              roomNumero: r.numero,
+              birthdayInfo: info,
+            });
+          }
+        });
       });
-    });
+    }
 
     return list;
-  }, [rooms, periodStart, periodEnd, birthdaysMap]);
+  }, [hospedagemBlocks, roomsByBlock, periodStart, periodEnd, birthdaysMap]);
 
-  // Estatísticas gerais
-  const totalHospedes = useMemo(
-    () => rooms.reduce((sum, r) => sum + r.hospedes.length, 0),
-    [rooms]
-  );
-  const totalCapacidade = useMemo(
-    () => rooms.reduce((sum, r) => sum + capacityOf(r.tipo), 0),
-    [rooms]
-  );
-  const vagasLivres = Math.max(0, totalCapacidade - totalHospedes);
+  // Estatísticas consolidadas de todas as hospedagens
+  const overallStats = useMemo(() => {
+    let totalHotels = hospedagemBlocks.length;
+    let totalRooms = 0;
+    let totalGuests = 0;
+    let totalCapacity = 0;
+
+    for (const b of hospedagemBlocks) {
+      const bRooms = roomsByBlock[b.id] ?? [];
+      totalRooms += bRooms.length;
+      totalGuests += bRooms.reduce((sum, r) => sum + r.hospedes.length, 0);
+      totalCapacity += bRooms.reduce((sum, r) => sum + capacityOf(r.tipo), 0);
+    }
+
+    const vagasLivres = Math.max(0, totalCapacity - totalGuests);
+    return { totalHotels, totalRooms, totalGuests, totalCapacity, vagasLivres };
+  }, [hospedagemBlocks, roomsByBlock]);
 
   // Filtro de busca na Room List
   const [roomFilter, setRoomFilter] = useState("");
-
-  const filteredRooms = useMemo(() => {
-    if (!roomFilter.trim()) return rooms;
-    const q = roomFilter.toLowerCase();
-    return rooms.filter(
-      (r) =>
-        r.numero.toLowerCase().includes(q) ||
-        r.tipo.toLowerCase().includes(q) ||
-        r.hospedes.some(
-          (g) =>
-            g.nome.toLowerCase().includes(q) ||
-            g.documento.toLowerCase().includes(q) ||
-            g.observacao.toLowerCase().includes(q)
-        )
-    );
-  }, [rooms, roomFilter]);
 
   // ----------------------------------------------------
   // DRAG AND DROP COM @dnd-kit
@@ -922,6 +978,7 @@ export function RoomListView({
 
   const [activeDragItem, setActiveDragItem] = useState<{
     guest: RoomGuest;
+    blockId: string;
     roomIdx: number;
     guestIdx: number;
   } | null>(null);
@@ -929,16 +986,19 @@ export function RoomListView({
   const [overRoomId, setOverRoomId] = useState<string | null>(null);
 
   const handleDragStart = (event: DragStartEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = event.active.data.current as any;
     if (data?.guest) {
       setActiveDragItem({
         guest: data.guest,
+        blockId: data.blockId,
         roomIdx: data.roomIdx,
         guestIdx: data.guestIdx,
       });
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleDragOver = (event: any) => {
     setOverRoomId(event.over?.id ? String(event.over.id) : null);
   };
@@ -950,29 +1010,38 @@ export function RoomListView({
 
     if (!over) return;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sourceData = active.data.current as any;
     if (!sourceData) return;
 
+    const sourceBlockId = sourceData.blockId;
     const sourceRoomIdx = sourceData.roomIdx;
     const sourceGuestIdx = sourceData.guestIdx;
 
-    let targetRoomIdx: number | null = null;
     const overId = String(over.id);
-    if (overId.startsWith("room-")) {
-      targetRoomIdx = parseInt(overId.replace("room-", ""), 10);
-    }
+    const match = overId.match(/^room-(.+)-(\d+)$/);
+    if (!match) return;
 
-    if (
-      targetRoomIdx === null ||
-      isNaN(targetRoomIdx) ||
-      sourceRoomIdx === targetRoomIdx
-    ) {
+    const targetBlockId = match[1];
+    const targetRoomIdx = parseInt(match[2], 10);
+
+    if (isNaN(targetRoomIdx)) return;
+
+    if (sourceBlockId === targetBlockId && sourceRoomIdx === targetRoomIdx) {
       return;
     }
 
-    setRooms((prev) => {
-      const sourceRoom = prev[sourceRoomIdx];
-      const targetRoom = prev[targetRoomIdx!];
+    setRoomsByBlock((prev) => {
+      const sourceRooms = prev[sourceBlockId] ? [...prev[sourceBlockId]] : [];
+      const targetRooms =
+        sourceBlockId === targetBlockId
+          ? sourceRooms
+          : prev[targetBlockId]
+          ? [...prev[targetBlockId]]
+          : [];
+
+      const sourceRoom = sourceRooms[sourceRoomIdx];
+      const targetRoom = targetRooms[targetRoomIdx];
       if (!sourceRoom || !targetRoom) return prev;
 
       const guestToMove = sourceRoom.hospedes[sourceGuestIdx];
@@ -983,16 +1052,49 @@ export function RoomListView({
       );
       const newTargetGuests = [...targetRoom.hospedes, guestToMove];
 
-      const next = prev.map((r, i) => {
-        if (i === sourceRoomIdx) return { ...r, hospedes: newSourceGuests };
-        if (i === targetRoomIdx) return { ...r, hospedes: newTargetGuests };
-        return r;
-      });
-
-      persistRooms(next);
-      return next;
+      if (sourceBlockId === targetBlockId) {
+        sourceRooms[sourceRoomIdx] = { ...sourceRoom, hospedes: newSourceGuests };
+        sourceRooms[targetRoomIdx] = { ...targetRoom, hospedes: newTargetGuests };
+        persistRoomsForBlock(sourceBlockId, sourceRooms);
+        return {
+          ...prev,
+          [sourceBlockId]: sourceRooms,
+        };
+      } else {
+        sourceRooms[sourceRoomIdx] = { ...sourceRoom, hospedes: newSourceGuests };
+        targetRooms[targetRoomIdx] = { ...targetRoom, hospedes: newTargetGuests };
+        persistRoomsForBlock(sourceBlockId, sourceRooms);
+        persistRoomsForBlock(targetBlockId, targetRooms);
+        return {
+          ...prev,
+          [sourceBlockId]: sourceRooms,
+          [targetBlockId]: targetRooms,
+        };
+      }
     });
   };
+
+  // Se não houver nenhum bloco de hospedagem cadastrado
+  if (hospedagemBlocks.length === 0) {
+    return (
+      <div className="bg-surface rounded-2xl border border-border p-12 text-center shadow-xs">
+        <BedDouble size={48} className="mx-auto text-text-muted mb-3 opacity-40" />
+        <h3 className="text-lg font-bold text-text-title">
+          Nenhuma hospedagem cadastrada no pacote
+        </h3>
+        <p className="text-xs text-text-muted mt-1.5 max-w-md mx-auto">
+          Adicione um card de <strong>Hospedagem</strong> na aba Pacote (configurando a quantidade de quartos)
+          para gerenciar o Room List desta viagem.
+        </p>
+      </div>
+    );
+  }
+
+  // Hospedagens a exibir conforme seleção de tab
+  const displayedHospedagens =
+    selectedHotelId === "all"
+      ? hospedagemBlocks
+      : hospedagemBlocks.filter((b) => b.id === selectedHotelId);
 
   return (
     <DndContext
@@ -1001,7 +1103,7 @@ export function RoomListView({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="space-y-4">
+      <div className="space-y-6">
         {/* Banner de Aniversariantes no Período da Viagem */}
         {allBirthdayGuests.length > 0 && (
           <motion.div
@@ -1037,7 +1139,7 @@ export function RoomListView({
                         {bg.birthdayInfo.turningAge ? ` (${bg.birthdayInfo.turningAge} anos)` : ""}
                       </span>
                       <span className="text-text-muted text-[11px]">
-                        [{bg.roomNumero}]
+                        [{bg.roomNumero}{hospedagemBlocks.length > 1 ? ` · ${bg.hotelName}` : ""}]
                       </span>
                     </span>
                   ))}
@@ -1057,19 +1159,29 @@ export function RoomListView({
           </motion.div>
         )}
 
-        {/* Banner Superior com Estatísticas e Busca */}
+        {/* Banner Superior Geral com Estatísticas */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-surface border border-border shadow-xs">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
               <BedDouble size={24} />
             </div>
             <div>
               <h2 className="text-xl font-bold text-text-title flex items-center gap-2">
-                Room List — {data.hotel ?? "Hospedagem"}
+                Room List
+                {hospedagemBlocks.length === 1 ? (
+                  <span className="text-primary font-semibold">
+                    — {hospedagemBlocks[0].data.hotel || "Hospedagem"}
+                  </span>
+                ) : (
+                  <span className="text-text-muted text-base font-normal">
+                    ({hospedagemBlocks.length} hospedagens cadastradas)
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-text-muted mt-0.5">
-                Arraste hóspedes entre os quartos para remanejar. Os novos espaços
-                são liberados automaticamente conforme os anteriores são preenchidos.
+                {hospedagemBlocks.length > 1
+                  ? "Arraste hóspedes entre os quartos para remanejar. Os quartos estão organizados e agrupados por hospedagem."
+                  : "Arraste hóspedes entre os quartos para remanejar. Os novos espaços são liberados automaticamente."}
               </p>
             </div>
           </div>
@@ -1082,80 +1194,233 @@ export function RoomListView({
               </span>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {hospedagemBlocks.length > 1 && (
+                <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-surface-subtle border border-border text-text-title">
+                  {overallStats.totalHotels} hospedagens
+                </span>
+              )}
               <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-surface-subtle border border-border text-text-title">
-                {rooms.length} quarto{rooms.length !== 1 ? "s" : ""}
+                {overallStats.totalRooms} quarto{overallStats.totalRooms !== 1 ? "s" : ""}
               </span>
-              <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary">
-                {totalHospedes} hóspede{totalHospedes !== 1 ? "s" : ""}
+              <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold">
+                {overallStats.totalGuests} hóspede{overallStats.totalGuests !== 1 ? "s" : ""}
               </span>
               <span
                 className={`text-xs font-semibold px-3 py-1.5 rounded-xl border ${
-                  vagasLivres === 0
+                  overallStats.vagasLivres === 0
                     ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
                     : "bg-surface-subtle border-border text-text-muted"
                 }`}
               >
-                {vagasLivres} vaga{vagasLivres !== 1 ? "s" : ""} livre{vagasLivres !== 1 ? "s" : ""}
+                {overallStats.vagasLivres} vaga{overallStats.vagasLivres !== 1 ? "s" : ""} livre{overallStats.vagasLivres !== 1 ? "s" : ""}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Barra de Filtro de Hóspedes */}
-        {rooms.length > 0 && (
-          <div className="relative">
-            <Search
-              size={16}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-            />
-            <input
-              type="text"
-              value={roomFilter}
-              onChange={(e) => setRoomFilter(e.target.value)}
-              placeholder="Localizar hóspede por nome, documento ou quarto..."
-              className="w-full pl-9 pr-4 py-2 rounded-xl border border-border bg-surface text-text-title text-xs placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-            />
+        {/* Abas de Navegação Rápida entre Hospedagens (quando houver mais de 1) */}
+        {hospedagemBlocks.length > 1 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setSelectedHotelId("all")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                selectedHotelId === "all"
+                  ? "bg-primary text-white shadow-xs"
+                  : "bg-surface border border-border text-text-muted hover:text-text-title hover:bg-surface-subtle"
+              }`}
+            >
+              <Layers size={14} />
+              <span>Todas as Hospedagens</span>
+              <span
+                className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                  selectedHotelId === "all"
+                    ? "bg-white/20 text-white"
+                    : "bg-surface-subtle text-text-muted"
+                }`}
+              >
+                {hospedagemBlocks.length}
+              </span>
+            </button>
+
+            {hospedagemBlocks.map((b, idx) => {
+              const bRooms = roomsByBlock[b.id] ?? [];
+              const hotelName = b.data.hotel || b.title || `Hospedagem ${idx + 1}`;
+              const isSelected = selectedHotelId === b.id;
+
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setSelectedHotelId(b.id)}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    isSelected
+                      ? "bg-primary text-white shadow-xs"
+                      : "bg-surface border border-border text-text-muted hover:text-text-title hover:bg-surface-subtle"
+                  }`}
+                >
+                  <Hotel size={14} />
+                  <span>{hotelName}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                      isSelected
+                        ? "bg-white/20 text-white"
+                        : "bg-surface-subtle text-text-muted"
+                    }`}
+                  >
+                    {bRooms.length}q
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {/* Mensagem quando nenhum quarto está configurado */}
-        {rooms.length === 0 && (
-          <div className="bg-surface rounded-2xl border border-border p-12 text-center">
-            <BedDouble size={48} className="mx-auto text-text-muted mb-3 opacity-40" />
-            <p className="text-base text-text-title font-bold">
-              Nenhum quarto cadastrado
-            </p>
-            <p className="text-xs text-text-muted mt-1 max-w-md mx-auto">
-              Configure os quartos no card <strong>Hospedagem</strong> da aba Pacote
-              (coluna <em>Qtd</em>) para que eles apareçam aqui automaticamente.
-            </p>
-          </div>
-        )}
+        {/* Barra de Filtro de Hóspedes (busca global em todos os quartos/hotéis) */}
+        <div className="relative">
+          <Search
+            size={16}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+          />
+          <input
+            type="text"
+            value={roomFilter}
+            onChange={(e) => setRoomFilter(e.target.value)}
+            placeholder="Localizar hóspede por nome, documento ou quarto..."
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border bg-surface text-text-title text-xs placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all shadow-2xs"
+          />
+        </div>
 
-        {/* Grid de Quartos */}
-        <div className="space-y-4">
-          {filteredRooms.map((room) => {
-            const roomIdx = rooms.findIndex((r) => r === room);
-            const isHovered = overRoomId === `room-${roomIdx}`;
+        {/* Listagem Separada e Agrupada por Hospedagem */}
+        <div className="space-y-8">
+          {displayedHospedagens.map((block, hotelIdx) => {
+            const hotelRooms = roomsByBlock[block.id] ?? [];
+            const hotelName = block.data.hotel || block.title || `Hospedagem ${hotelIdx + 1}`;
+            const cidade = block.data.cidade;
+            const diarias = block.data.diarias;
+
+            // Filtro aplicado aos quartos desta hospedagem
+            const filteredHotelRooms = hotelRooms.filter((r) => {
+              if (!roomFilter.trim()) return true;
+              const q = roomFilter.toLowerCase();
+              return (
+                r.numero.toLowerCase().includes(q) ||
+                r.tipo.toLowerCase().includes(q) ||
+                r.hospedes.some(
+                  (g) =>
+                    g.nome.toLowerCase().includes(q) ||
+                    g.documento.toLowerCase().includes(q) ||
+                    g.observacao.toLowerCase().includes(q)
+                )
+              );
+            });
+
+            const hotelGuestsCount = hotelRooms.reduce(
+              (sum, r) => sum + r.hospedes.length,
+              0
+            );
+            const hotelCapacity = hotelRooms.reduce(
+              (sum, r) => sum + capacityOf(r.tipo),
+              0
+            );
+            const hotelVagasLivres = Math.max(0, hotelCapacity - hotelGuestsCount);
 
             return (
-              <RoomCard
-                key={roomIdx}
-                room={room}
-                roomIdx={roomIdx}
-                isDraggingAny={Boolean(activeDragItem)}
-                isHoveredByDrag={isHovered}
-                periodStart={periodStart}
-                periodEnd={periodEnd}
-                birthdaysMap={birthdaysMap}
-                onSetRoomNumber={handleSetRoomNumber}
-                onUpdateGuest={handleUpdateGuest}
-                onRemoveGuest={handleRemoveGuest}
-                onOpenCustomerPicker={handleOpenCustomerPicker}
-                onAddExtraSlot={handleAddExtraSlot}
-                extraSlotsAllowed={Boolean(extraSlotsRooms[roomIdx])}
-              />
+              <div
+                key={block.id}
+                className="rounded-3xl border border-border/90 bg-surface/60 p-5 sm:p-6 space-y-5 shadow-xs"
+              >
+                {/* Header da Hospedagem Agrupada */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border/70">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary flex items-center justify-center text-xl shadow-xs border border-primary/20 shrink-0">
+                      🏨
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                          Hospedagem {hospedagemBlocks.length > 1 ? `${hotelIdx + 1} de ${hospedagemBlocks.length}` : ""}
+                        </span>
+                        {cidade && (
+                          <span className="inline-flex items-center gap-1 text-xs text-text-muted font-medium">
+                            <MapPin size={12} className="text-primary" />
+                            {cidade}
+                          </span>
+                        )}
+                        {diarias && (
+                          <span className="inline-flex items-center gap-1 text-xs text-text-muted font-medium">
+                            <Moon size={12} className="text-amber-500" />
+                            {diarias} diária{Number(diarias) > 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-bold text-text-title mt-0.5">
+                        {hotelName}
+                      </h3>
+                    </div>
+                  </div>
+
+                  {/* Badges com Estatísticas desta Hospedagem */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-surface border border-border text-text-title shadow-2xs">
+                      {hotelRooms.length} quarto{hotelRooms.length !== 1 ? "s" : ""}
+                    </span>
+                    <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold shadow-2xs">
+                      {hotelGuestsCount} hóspede{hotelGuestsCount !== 1 ? "s" : ""}
+                    </span>
+                    <span
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-xl border shadow-2xs ${
+                        hotelVagasLivres === 0
+                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                          : "bg-surface border-border text-text-muted"
+                      }`}
+                    >
+                      {hotelVagasLivres} vaga{hotelVagasLivres !== 1 ? "s" : ""} livre{hotelVagasLivres !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quartos da Hospedagem */}
+                {filteredHotelRooms.length === 0 ? (
+                  <div className="py-10 text-center text-xs text-text-muted italic bg-surface-subtle/40 rounded-2xl border border-dashed border-border/80 p-6">
+                    {hotelRooms.length === 0
+                      ? "Nenhum quarto cadastrado nesta hospedagem. Configure a coluna Qtd na aba Pacote."
+                      : "Nenhum quarto ou hóspede corresponde ao filtro de busca nesta hospedagem."}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredHotelRooms.map((room) => {
+                      const roomIdx = hotelRooms.findIndex((r) => r === room);
+                      const isHovered = overRoomId === `room-${block.id}-${roomIdx}`;
+
+                      return (
+                        <RoomCard
+                          key={`${block.id}-${roomIdx}`}
+                          blockId={block.id}
+                          room={room}
+                          roomIdx={roomIdx}
+                          isDraggingAny={Boolean(activeDragItem)}
+                          isHoveredByDrag={isHovered}
+                          periodStart={periodStart}
+                          periodEnd={periodEnd}
+                          birthdaysMap={birthdaysMap}
+                          onSetRoomNumber={(rIdx, val) => handleSetRoomNumber(block.id, rIdx, val)}
+                          onUpdateGuest={(rIdx, gIdx, key, val) =>
+                            handleUpdateGuest(block.id, rIdx, gIdx, key, val)
+                          }
+                          onRemoveGuest={(rIdx, gIdx) => handleRemoveGuest(block.id, rIdx, gIdx)}
+                          onOpenCustomerPicker={(rIdx, slot, gIdx) =>
+                            handleOpenCustomerPicker(block.id, rIdx, slot, gIdx)
+                          }
+                          onAddExtraSlot={(rIdx) => handleAddExtraSlot(block.id, rIdx)}
+                          extraSlotsAllowed={Boolean(extraSlotsRooms[`${block.id}-${roomIdx}`])}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -1165,7 +1430,9 @@ export function RoomListView({
           open={modalState.open}
           onClose={() => setModalState((prev) => ({ ...prev, open: false }))}
           onSelect={handleSelectCustomerForSlot}
-          roomTitle={rooms[modalState.roomIdx]?.numero || "Quarto"}
+          roomTitle={
+            roomsByBlock[modalState.blockId]?.[modalState.roomIdx]?.numero || "Quarto"
+          }
           slotNumber={modalState.slotNumber}
           existingAllocations={existingAllocations}
         />
@@ -1176,9 +1443,11 @@ export function RoomListView({
             <div className="flex items-center gap-3 p-3.5 rounded-xl border-2 border-primary bg-surface shadow-2xl scale-[1.03] rotate-1 cursor-grabbing">
               <GripVertical size={16} className="text-primary" />
               <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xs uppercase">
-                {activeDragItem.guest.nome
-                  ? activeDragItem.guest.nome.slice(0, 2)
-                  : <UserCheck size={14} />}
+                {activeDragItem.guest.nome ? (
+                  activeDragItem.guest.nome.slice(0, 2)
+                ) : (
+                  <UserCheck size={14} />
+                )}
               </div>
               <div>
                 <h4 className="font-bold text-sm text-text-title">

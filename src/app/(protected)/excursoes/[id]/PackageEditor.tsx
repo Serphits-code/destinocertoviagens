@@ -271,16 +271,32 @@ export function PackageEditor({
     [excursionId, flashSaved]
   );
 
-  // Extrai quartos e passageiros da hospedagem para vincular em Adicionais e Checkout
-  const hospedagemBlock = blocks.find((b) => b.categoryId === "hospedagem");
+  // Extrai quartos e passageiros de todas as hospedagens para vincular em Adicionais e Checkout
+  const hospedagemBlocks = useMemo(
+    () => blocks.filter((b) => b.categoryId === "hospedagem"),
+    [blocks]
+  );
   const rooms: RoomEntry[] = useMemo(() => {
-    return Array.isArray(hospedagemBlock?.data?.roomList)
-      ? (hospedagemBlock?.data?.roomList as RoomEntry[])
-      : [];
-  }, [hospedagemBlock?.data?.roomList]);
+    return hospedagemBlocks.flatMap((b) =>
+      Array.isArray(b.data?.roomList) ? (b.data.roomList as RoomEntry[]) : []
+    );
+  }, [hospedagemBlocks]);
 
   const guests: RoomGuest[] = useMemo(() => {
-    return rooms.flatMap((r) => r.hospedes || []);
+    const seen = new Set<string>();
+    const list: RoomGuest[] = [];
+    for (const r of rooms) {
+      for (const g of r.hospedes || []) {
+        const key = g.customerId || g.documento || g.nome;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          list.push(g);
+        } else if (!key) {
+          list.push(g);
+        }
+      }
+    }
+    return list;
   }, [rooms]);
 
   // Custo base por pessoa estimado a partir dos cards do pacote
