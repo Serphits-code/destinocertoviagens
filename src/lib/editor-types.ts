@@ -36,6 +36,9 @@ export interface AereoBlockData {
   flights?: AereoFlight[];
   custoUnitario?: string;
   custoTotal?: string;
+  valorNet?: string;
+  valorNetUnitario?: string;
+  valorNetTotal?: string;
   sinalUnitario?: string;
   sinalTotal?: string;
   sinal?: string;

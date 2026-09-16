@@ -415,6 +415,22 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           ? (parseNum(d.sinalUnitario) * vagasNum).toFixed(2)
           : "";
 
+      const valorNetUnitarioDisplay =
+        d.valorNetUnitario !== undefined
+          ? d.valorNetUnitario
+          : d.valorNet && vagasNum > 0
+          ? (parseNum(d.valorNet) / vagasNum).toFixed(2)
+          : "";
+
+      const valorNetTotalDisplay =
+        d.valorNetTotal !== undefined
+          ? d.valorNetTotal
+          : d.valorNet !== undefined && d.valorNet !== ""
+          ? d.valorNet
+          : vagasNum > 0 && parseNum(d.valorNetUnitario) > 0
+          ? (parseNum(d.valorNetUnitario) * vagasNum).toFixed(2)
+          : "";
+
       const handleVagasChange = (newVagas: string) => {
         const vNum = parseNum(newVagas);
         const unitPassagem = parseNum(d.custoUnitario);
@@ -423,6 +439,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             ? d.sinalUnitario
             : d.sinal && parseNum(d.vagas) > 0
             ? parseNum(d.sinal) / parseNum(d.vagas)
+            : 0
+        );
+        const currentUnitNet = parseNum(
+          d.valorNetUnitario !== undefined && d.valorNetUnitario !== ""
+            ? d.valorNetUnitario
+            : d.valorNet && parseNum(d.vagas) > 0
+            ? parseNum(d.valorNet) / parseNum(d.vagas)
             : 0
         );
 
@@ -440,6 +463,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           updated.sinal = st;
           if (!d.sinalUnitario) {
             updated.sinalUnitario = currentUnitSinal.toFixed(2);
+          }
+        }
+        if (currentUnitNet > 0 && vNum > 0) {
+          const nt = (currentUnitNet * vNum).toFixed(2);
+          updated.valorNetTotal = nt;
+          updated.valorNet = nt;
+          if (!d.valorNetUnitario) {
+            updated.valorNetUnitario = currentUnitNet.toFixed(2);
           }
         }
         onUpdate(updated);
@@ -464,6 +495,30 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           ...d,
           custoTotal: val,
           custoUnitario: unit,
+        });
+      };
+
+      const handleUnitValorNetChange = (val: string) => {
+        const u = parseNum(val);
+        const vNum = parseNum(d.vagas);
+        const total = vNum > 0 && u > 0 ? (u * vNum).toFixed(2) : (vNum > 0 && !val ? "" : (d.valorNetTotal ?? d.valorNet));
+        onUpdate({
+          ...d,
+          valorNetUnitario: val,
+          valorNetTotal: total,
+          valorNet: total,
+        });
+      };
+
+      const handleTotalValorNetChange = (val: string) => {
+        const t = parseNum(val);
+        const vNum = parseNum(d.vagas);
+        const unit = vNum > 0 && t > 0 ? (t / vNum).toFixed(2) : d.valorNetUnitario;
+        onUpdate({
+          ...d,
+          valorNetTotal: val,
+          valorNet: val,
+          valorNetUnitario: unit,
         });
       };
 
@@ -568,17 +623,17 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             <Plus size={14} /> Adicionar Voo
           </button>
 
-          {/* Valores das Passagens e Sinal com cálculo por vagas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 rounded-xl border border-border bg-surface-subtle/50">
+          {/* Valores das Passagens, Valor NET e Sinal com cálculo por vagas */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 p-3.5 rounded-xl border border-border bg-surface-subtle/50">
             {/* Bloco Passagens */}
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
                 <Plane size={14} className="text-primary" />
                 <span>Valor das Passagens</span>
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs text-text-muted">
-                  <span className="block mb-1 font-medium">Valor Unitário (R$)</span>
+                  <span className="block mb-1 font-medium">Unitário (R$)</span>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -590,10 +645,10 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                 </label>
                 <label className="text-xs text-text-muted">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium">Valor Total (R$)</span>
+                    <span className="font-medium">Total (R$)</span>
                     {vagasNum > 0 && (
-                      <span className="text-[10px] text-text-muted">
-                        ({vagasNum} {vagasNum === 1 ? "vaga" : "vagas"})
+                      <span className="text-[10px] text-text-muted font-normal">
+                        ({vagasNum}v)
                       </span>
                     )}
                   </div>
@@ -609,15 +664,54 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               </div>
             </div>
 
+            {/* Bloco Valor NET */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                <DollarSign size={14} className="text-emerald-500" />
+                <span>Valor NET (Custo Líquido)</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-text-muted">
+                  <span className="block mb-1 font-medium">NET Unitário (R$)</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={valorNetUnitarioDisplay}
+                    onChange={(e) => handleUnitValorNetChange(e.target.value)}
+                  />
+                </label>
+                <label className="text-xs text-text-muted">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">NET Total (R$)</span>
+                    {vagasNum > 0 && (
+                      <span className="text-[10px] text-text-muted font-normal">
+                        ({vagasNum}v)
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={valorNetTotalDisplay}
+                    onChange={(e) => handleTotalValorNetChange(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+
             {/* Bloco Sinal */}
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
-                <DollarSign size={14} className="text-primary" />
+                <DollarSign size={14} className="text-amber-500" />
                 <span>Sinal / Entrada</span>
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs text-text-muted">
-                  <span className="block mb-1 font-medium">Sinal Unitário (R$)</span>
+                  <span className="block mb-1 font-medium">Sinal Unit. (R$)</span>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -631,8 +725,8 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-medium">Sinal Total (R$)</span>
                     {vagasNum > 0 && (
-                      <span className="text-[10px] text-text-muted">
-                        ({vagasNum} {vagasNum === 1 ? "vaga" : "vagas"})
+                      <span className="text-[10px] text-text-muted font-normal">
+                        ({vagasNum}v)
                       </span>
                     )}
                   </div>
