@@ -69,6 +69,30 @@ function toInputDate(val: unknown): string {
   return "";
 }
 
+function BlockObservation({
+  value,
+  onChange,
+  placeholder = "Observações...",
+}: {
+  value?: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="mt-4 pt-3 border-t border-border/40">
+      <label className="block text-xs text-text-muted">
+        <span className="block mb-1 font-medium text-text-title">Observação</span>
+        <input
+          className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+          value={value ?? ""}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </label>
+    </div>
+  );
+}
+
 export function BlockTable({ block, onUpdate }: BlockTableProps) {
   const d = block.data;
 
@@ -138,10 +162,15 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             onClick={() =>
               addRow("rows", { type: "Novo Item", icon: "📦", color: "#D97706", fornecedor: "", custo: "0.00", status: "PENDENTE" })
             }
-            className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
+            className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Item
           </button>
+          <BlockObservation
+            value={d.observation}
+            onChange={(v) => set("observation", v)}
+            placeholder="Observações sobre itens inclusos..."
+          />
         </div>
       );
 
@@ -181,10 +210,15 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           </table>
           <button
             onClick={() => addRow("rows", { nome: "Novo Item", custo: "0.00", lucro: "0.00" })}
-            className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
+            className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Item
           </button>
+          <BlockObservation
+            value={d.observation}
+            onChange={(v) => set("observation", v)}
+            placeholder="Observações sobre itens personalizados..."
+          />
         </div>
       );
 
@@ -880,10 +914,11 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               </div>
             </label>
           </div>
-          <label className="block text-xs text-text-muted">
-            Observação
-            <input className={inputCls} value={d.observation ?? ""} onChange={(e) => set("observation", e.target.value)} />
-          </label>
+          <BlockObservation
+            value={d.observation}
+            onChange={(v) => set("observation", v)}
+            placeholder="Observações sobre transporte rodoviário..."
+          />
         </div>
       );
 
@@ -965,11 +1000,16 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             </table>
             <button
               onClick={() => addRow("roteiro", { horario: "00:00", atividade: "Nova Atividade", status: "CONFIRMADO" })}
-              className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
+              className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
             >
               <Plus size={14} /> Adicionar Horário
             </button>
           </div>
+          <BlockObservation
+            value={d.observation}
+            onChange={(v) => set("observation", v)}
+            placeholder="Observações sobre guias e monitores..."
+          />
         </div>
       );
 
@@ -1057,11 +1097,16 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             </button>
             <button
               onClick={() => set("extraColumns", [...extraCols, `QUÁDRUPLO`])}
-              className="flex items-center gap-1.5 text-sm text-text-muted hover:text-primary font-medium transition-colors"
+              className="flex items-center gap-1.5 text-sm text-text-muted hover:text-primary font-medium transition-colors cursor-pointer"
             >
               <Plus size={14} /> Adicionar Coluna
             </button>
           </div>
+          <BlockObservation
+            value={d.observation}
+            onChange={(v) => set("observation", v)}
+            placeholder="Observações sobre serviços inclusos..."
+          />
         </div>
       );
     }
@@ -1106,10 +1151,15 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           </table>
           <button
             onClick={() => addRow("rows", { idade: "", inclusos: "", valor: "0.00", valor2: "0.00" })}
-            className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
+            className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Faixa Etária
           </button>
+          <BlockObservation
+            value={d.observation}
+            onChange={(v) => set("observation", v)}
+            placeholder="Observações sobre tabela de crianças..."
+          />
         </div>
       );
 
@@ -1136,10 +1186,15 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           ))}
           <button
             onClick={() => addRow("days", { dia: `DIA ${(d.days?.length ?? 0) + 1}`, descricao: "" })}
-            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
+            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Dia
           </button>
+          <BlockObservation
+            value={d.observation}
+            onChange={(v) => set("observation", v)}
+            placeholder="Observações gerais do roteiro..."
+          />
         </div>
       );
 
@@ -1187,10 +1242,15 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           </table>
           <button
             onClick={() => addRow("rows", { item: "Novo Item", fornecedor: "", valor: "0.00", status: "PENDENTE" })}
-            className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
+            className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Linha
           </button>
+          <BlockObservation
+            value={d.observation}
+            onChange={(v) => set("observation", v)}
+            placeholder="Observações da tabela..."
+          />
         </div>
       );
   }
