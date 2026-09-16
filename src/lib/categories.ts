@@ -121,6 +121,7 @@ export const CATEGORY_DEFINITIONS: Record<string, CategoryDefinition> = {
     description: "Informações do guia acompanhante/local, honorários e despesas",
     defaultData: {
       title: "Guias e Monitores",
+      vagas: "20",
       guias: [
         { nome: "George Silva", tipo: "Acompanhante", telefone: "(81) 98888-7777", diarias: "5", valorDiaria: "150.00", valorTotal: "750.00", status: "CONFIRMADO" },
       ],

@@ -1252,6 +1252,8 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
     // ---- Guias ----
     case "guias": {
+      const vagasNum = parseNum(d.vagas) || 20;
+
       // Helper to calculate totals
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let sumGuias = 0;
@@ -1276,6 +1278,19 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       const totalGeralDespesas = sumGuias + sumDespesas;
 
+      // Rateio por pessoa calculado automaticamente dividindo o total de despesas pelas vagas
+      const rateioCalculado = vagasNum > 0 ? (totalGeralDespesas / vagasNum).toFixed(2) : "0.00";
+
+      const handleVagasChange = (newVagas: string) => {
+        const vNum = parseNum(newVagas);
+        const rateio = vNum > 0 ? (totalGeralDespesas / vNum).toFixed(2) : "0.00";
+        onUpdate({
+          ...d,
+          vagas: newVagas,
+          rateioPorPessoa: rateio,
+        });
+      };
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const updateGuiasAndTotals = (newGuias: any[], newDespesas: any[]) => {
         let sG = 0;
@@ -1287,6 +1302,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           sD += parseNum(dp.valor);
         }
         const tot = sG + sD;
+        const rateio = vagasNum > 0 ? (tot / vagasNum).toFixed(2) : "0.00";
         onUpdate({
           ...d,
           guias: newGuias,
@@ -1294,6 +1310,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           totalDiarias: sG.toFixed(2),
           totalOutrasDespesas: sD.toFixed(2),
           totalDespesas: tot.toFixed(2),
+          rateioPorPessoa: rateio,
         });
       };
 
@@ -1391,6 +1408,21 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       return (
         <div className="space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-border/40">
+            <span className="text-xs text-text-muted">
+              Preencha os honorários, diárias e despesas adicionais dos guias com rateio automático por vagas.
+            </span>
+            <label className="flex items-center gap-2 text-xs text-text-muted">
+              <span className="font-medium">Total de Vagas:</span>
+              <input
+                className="w-20 px-2.5 py-1 rounded-lg border border-border bg-surface text-text-body text-sm font-semibold text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.vagas ?? "20"}
+                placeholder="20"
+                onChange={(e) => handleVagasChange(e.target.value)}
+              />
+            </label>
+          </div>
+
           {/* Tabela de Guias */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1583,10 +1615,21 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               />
             </label>
             <label className="text-xs text-text-muted">
-              <span className="block mb-1 font-medium">Rateio por Pessoa (R$)</span>
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-medium">Rateio por Pessoa (R$)</span>
+                {vagasNum > 0 && (
+                  <span className="text-[10px] text-text-muted font-normal">
+                    ({vagasNum} {vagasNum === 1 ? "vaga" : "vagas"})
+                  </span>
+                )}
+              </div>
               <input
                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-text-title focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                value={d.rateioPorPessoa ?? ""}
+                value={
+                  d.rateioPorPessoa !== undefined && d.rateioPorPessoa !== "" && d.rateioPorPessoa !== "102.00"
+                    ? d.rateioPorPessoa
+                    : rateioCalculado || d.rateioPorPessoa || ""
+                }
                 placeholder="0.00"
                 onChange={(e) => set("rateioPorPessoa", e.target.value)}
               />
