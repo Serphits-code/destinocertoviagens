@@ -30,10 +30,15 @@ export function SummaryWidget({
   const [isEditingMargin, setIsEditingMargin] = useState(false);
   const [tempMargin, setTempMargin] = useState(String(profitMargin || 0));
 
-  // 1. Cálculo do Valor Total dos Custos Estimados (Soma de todos os contratos e custos do pacote)
+  // Quantidade de pessoas ativa: do campo de simulação se informado; caso contrário, quantidade oficial de vagas
+  const testPeopleNum = parseNum(testPeople);
+  const isSimulationActive = testPeople.trim() !== "" && testPeopleNum > 0;
+  const officialVagas = slots > 0 ? slots : 20;
+  const activePeople = isSimulationActive ? testPeopleNum : officialVagas;
+
+  // 1. Cálculo do Valor Total dos Custos Estimados de acordo com activePeople (simulada ou total de vagas oficial)
   const totalGroupCost = useMemo(() => {
     let total = 0;
-    const defaultVagas = slots > 0 ? slots : 20;
 
     for (const block of blocks) {
       const d = block.data;
@@ -43,17 +48,20 @@ export function SummaryWidget({
         const netTotal = parseNum(d.valorNetTotal);
         const fallbackNet = parseNum(d.valorNet);
         const netUnit = parseNum(d.valorNetUnitario);
-        const vagas = parseNum(d.vagas) || defaultVagas;
+        const blockVagas = parseNum(d.vagas) || officialVagas;
         const custoTotal = parseNum(d.custoTotal);
+        const custoPassagem = parseNum(d.custoPassagem);
 
-        if (netTotal > 0) {
-          total += netTotal;
+        if (netUnit > 0) {
+          total += netUnit * activePeople;
+        } else if (netTotal > 0) {
+          total += (netTotal / blockVagas) * activePeople;
         } else if (fallbackNet > 0) {
-          total += fallbackNet;
-        } else if (netUnit > 0) {
-          total += netUnit * vagas;
+          total += (fallbackNet / blockVagas) * activePeople;
+        } else if (custoPassagem > 0) {
+          total += custoPassagem * activePeople;
         } else if (custoTotal > 0) {
-          total += custoTotal;
+          total += (custoTotal / blockVagas) * activePeople;
         }
       }
 
@@ -61,19 +69,20 @@ export function SummaryWidget({
       else if (block.categoryId === "hospedagem") {
         const totalReserva = parseNum(d.totalReserva);
         if (totalReserva > 0) {
-          total += totalReserva;
+          total += (totalReserva / officialVagas) * activePeople;
         } else if (Array.isArray(d.rooms)) {
           let sumRooms = 0;
           for (const r of d.rooms) {
             const totPeriodo = parseNum(r.totalPeriodo);
             const totQuarto = parseNum(r.totalQuarto);
             const qtd = parseNum(r.qtd) || 1;
-            if (totPeriodo > 0) {
-              sumRooms += totPeriodo;
+            const porPessoa = parseNum(r.porPessoa);
+            if (porPessoa > 0) {
+              sumRooms += porPessoa * activePeople;
+            } else if (totPeriodo > 0) {
+              sumRooms += (totPeriodo / officialVagas) * activePeople;
             } else if (totQuarto > 0) {
-              sumRooms += totQuarto * qtd;
-            } else {
-              sumRooms += parseNum(r.porPessoa) * defaultVagas;
+              sumRooms += ((totQuarto * qtd) / officialVagas) * activePeople;
             }
           }
           total += sumRooms;
@@ -83,68 +92,76 @@ export function SummaryWidget({
       // Rodoviário: Valor do Contrato
       else if (block.categoryId === "rodoviario") {
         const vContrato = parseNum(d.valorContrato);
+        const blockVagas = parseNum(d.vagas) || officialVagas;
+        const rateio = parseNum(d.rateioPorPessoa);
         if (vContrato > 0) {
-          total += vContrato;
-        } else {
-          total += parseNum(d.rateioPorPessoa) * (parseNum(d.vagas) || defaultVagas);
+          total += (vContrato / blockVagas) * activePeople;
+        } else if (rateio > 0) {
+          total += rateio * activePeople;
         }
       }
 
       // Guias e Monitores: Valor Total de Despesas (R$)
       else if (block.categoryId === "guias") {
         const totalDesp = parseNum(d.totalDespesas);
+        const blockVagas = parseNum(d.vagas) || officialVagas;
+        const rateio = parseNum(d.rateioPorPessoa);
         if (totalDesp > 0) {
-          total += totalDesp;
+          total += (totalDesp / blockVagas) * activePeople;
+        } else if (rateio > 0) {
+          total += rateio * activePeople;
         } else {
           let gTot = 0;
           for (const g of d.guias ?? []) gTot += parseNum(g.valorTotal);
           for (const desp of d.despesas ?? []) gTot += parseNum(desp.valor);
-          if (gTot > 0) {
-            total += gTot;
-          } else {
-            total += parseNum(d.rateioPorPessoa) * defaultVagas;
-          }
+          total += (gTot / blockVagas) * activePeople;
         }
       }
 
       // Personalizados: Valor Total de Despesas Personalizadas
       else if (block.categoryId === "personalizados") {
-        const totalDesp = parseNum(d.totalDespesas);
-        if (totalDesp > 0) {
-          total += totalDesp;
-        } else if (Array.isArray(d.rows)) {
+        const blockVagas = parseNum(d.vagas) || officialVagas;
+        if (Array.isArray(d.rows)) {
           let rTot = 0;
-          const vNum = parseNum(d.vagas) || defaultVagas;
           for (const r of d.rows) {
-            rTot += parseNum(r.total ?? (parseNum(r.valor ?? r.custo) * vNum));
+            const unit = parseNum(r.valor ?? r.custo);
+            if (unit > 0) {
+              rTot += unit * activePeople;
+            } else {
+              const rTotal = parseNum(r.total);
+              rTot += (rTotal / blockVagas) * activePeople;
+            }
           }
           total += rTot;
+        } else {
+          const totalDesp = parseNum(d.totalDespesas);
+          total += (totalDesp / blockVagas) * activePeople;
         }
       }
 
       // Itens Inclusos (caso existam)
       else if (block.categoryId === "itens_inclusos" && Array.isArray(d.rows)) {
         for (const r of d.rows) {
-          total += parseNum(r.custo) * defaultVagas;
+          total += parseNum(r.custo) * activePeople;
         }
       }
 
       // Outros personalizados genéricos
       else if (block.categoryId === "personalizada" && Array.isArray(d.rows)) {
         for (const r of d.rows) {
-          total += parseNum(r.valor ?? r.custo) * defaultVagas;
+          total += parseNum(r.valor ?? r.custo) * activePeople;
         }
       }
 
       // Serviços Inclusos
       else if (block.categoryId === "servicos_inclusos") {
         const tot = parseNum(d.totalGeral || d.valorContrato);
-        if (tot > 0) total += tot;
+        if (tot > 0) total += (tot / officialVagas) * activePeople;
       }
     }
 
     return total;
-  }, [blocks, slots]);
+  }, [blocks, slots, activePeople, officialVagas]);
 
   const fmt = (v: number) =>
     v.toLocaleString("pt-BR", {
@@ -152,11 +169,6 @@ export function SummaryWidget({
       currency: "BRL",
       minimumFractionDigits: 2,
     });
-
-  // Quantidade de pessoas ativa: do campo de simulação se informado; caso contrário, quantidade oficial de vagas
-  const testPeopleNum = parseNum(testPeople);
-  const isSimulationActive = testPeople.trim() !== "" && testPeopleNum > 0;
-  const activePeople = isSimulationActive ? testPeopleNum : (slots > 0 ? slots : 20);
 
   // Custo por passageiro rateado
   const costPerPerson = activePeople > 0 ? totalGroupCost / activePeople : 0;
@@ -178,7 +190,7 @@ export function SummaryWidget({
 
   return (
     <div className="bg-secondary rounded-2xl shadow-shadow-card p-5 text-white space-y-4">
-      {/* Header com ícone e controle da margem de lucro */}
+      {/* 1. Header com ícone e controle da margem de lucro */}
       <div className="flex items-center justify-between text-white/90">
         <div className="flex items-center gap-2 text-sm font-bold">
           <Calculator size={18} className="text-primary-contrast" />
@@ -222,20 +234,7 @@ export function SummaryWidget({
         )}
       </div>
 
-      {/* Valor Total dos Custos Estimados (Aéreos NET + Hospedagens + Rodoviários + Guias + Personalizados) */}
-      <div className="pt-1">
-        <p className="text-xs text-white/60 uppercase tracking-wider font-medium">
-          Valor total dos custos estimados
-        </p>
-        <p className="text-2xl font-extrabold text-white tracking-tight">
-          {fmt(totalGroupCost)}
-        </p>
-        <p className="text-[11px] text-white/60 mt-0.5">
-          Custo base: <span className="font-semibold text-white/90">{fmt(costPerPerson)}</span> / pessoa ({activePeople} {activePeople === 1 ? "vaga" : "vagas"})
-        </p>
-      </div>
-
-      {/* Campo de Simulação de Passageiros para Teste */}
+      {/* 2. Campo de Simulação de Passageiros para Teste - LOGO APÓS RESUMO FINANCEIRO */}
       <div className="bg-white/10 rounded-xl p-3 space-y-1.5 border border-white/10">
         <div className="flex items-center justify-between">
           <label className="text-xs text-white/80 font-semibold uppercase tracking-wider flex items-center gap-1.5">
@@ -258,7 +257,7 @@ export function SummaryWidget({
             min="1"
             value={testPeople}
             onChange={(e) => setTestPeople(e.target.value)}
-            placeholder={`${slots > 0 ? slots : 20} vagas`}
+            placeholder={`${officialVagas} vagas`}
             className="w-full px-3 py-1.5 rounded-lg bg-black/25 border border-white/20 text-white placeholder:text-white/40 text-sm font-bold focus:outline-none focus:border-green-400 transition-all"
           />
           <span className="text-xs text-white/70 font-medium shrink-0">
@@ -271,12 +270,25 @@ export function SummaryWidget({
               ⚡ Simulação ativa para {activePeople} pessoas
             </span>
           ) : (
-            <span>Calculando com as {slots > 0 ? slots : 20} vagas oficiais do pacote</span>
+            <span>Calculando com as {officialVagas} vagas oficiais do pacote</span>
           )}
         </p>
       </div>
 
-      {/* Lucro Estimado Líquido */}
+      {/* 3. Valor Total dos Custos Estimados */}
+      <div className="pt-1">
+        <p className="text-xs text-white/60 uppercase tracking-wider font-medium">
+          Valor total dos custos estimados
+        </p>
+        <p className="text-2xl font-extrabold text-white tracking-tight">
+          {fmt(totalGroupCost)}
+        </p>
+        <p className="text-[11px] text-white/60 mt-0.5">
+          Custo base: <span className="font-semibold text-white/90">{fmt(costPerPerson)}</span> / pessoa ({activePeople} {activePeople === 1 ? "vaga" : "vagas"}{isSimulationActive ? " simuladas" : ""})
+        </p>
+      </div>
+
+      {/* 4. Lucro Estimado Líquido */}
       <div className="bg-white/10 rounded-xl p-3.5 space-y-1 border border-white/10">
         <div className="flex items-center justify-between">
           <p className="text-xs text-white/60 uppercase tracking-wider font-medium">
@@ -298,7 +310,7 @@ export function SummaryWidget({
         </p>
       </div>
 
-      {/* Preço de Venda Por Passageiro & Faturamento Total */}
+      {/* 5. Preço de Venda Por Passageiro & Faturamento Total */}
       <div className="grid grid-cols-2 gap-2.5 pt-1">
         <div className="bg-white/5 rounded-xl p-3 border border-white/5">
           <p className="text-[11px] text-white/50 uppercase tracking-wider font-medium">
