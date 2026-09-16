@@ -1155,6 +1155,17 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         });
       };
 
+      const handleRateioChange = (newRateio: string) => {
+        const rNum = parseNum(newRateio);
+        const vagasNum = parseNum(d.vagas) || 20;
+        const vContrato = rNum > 0 && vagasNum > 0 ? (rNum * vagasNum).toFixed(2) : (newRateio === "" ? "" : d.valorContrato);
+        onUpdate({
+          ...d,
+          rateioPorPessoa: newRateio,
+          ...(vContrato !== undefined ? { valorContrato: vContrato } : {}),
+        });
+      };
+
       return (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -1230,7 +1241,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 value={d.rateioPorPessoa ?? ""}
                 placeholder="0.00"
-                onChange={(e) => set("rateioPorPessoa", e.target.value)}
+                onChange={(e) => handleRateioChange(e.target.value)}
               />
             </label>
             <label className="text-xs text-text-muted">

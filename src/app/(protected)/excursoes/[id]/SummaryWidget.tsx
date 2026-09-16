@@ -43,92 +43,108 @@ export function SummaryWidget({
     for (const block of blocks) {
       const d = block.data;
 
-      // Aéreo: Valor Total NET
+      // Aéreo: Valor Total NET ou Passagens
       if (block.categoryId === "aereo") {
-        const netTotal = parseNum(d.valorNetTotal);
-        const fallbackNet = parseNum(d.valorNet);
+        const netTotal = parseNum(d.valorNetTotal ?? d.valorNet);
         const netUnit = parseNum(d.valorNetUnitario);
         const blockVagas = parseNum(d.vagas) || officialVagas;
         const custoTotal = parseNum(d.custoTotal);
-        const custoPassagem = parseNum(d.custoPassagem);
+        const custoUnit = parseNum(d.custoUnitario ?? d.custoPassagem);
 
         if (netUnit > 0) {
           total += netUnit * activePeople;
         } else if (netTotal > 0) {
           total += (netTotal / blockVagas) * activePeople;
-        } else if (fallbackNet > 0) {
-          total += (fallbackNet / blockVagas) * activePeople;
-        } else if (custoPassagem > 0) {
-          total += custoPassagem * activePeople;
+        } else if (custoUnit > 0) {
+          total += custoUnit * activePeople;
         } else if (custoTotal > 0) {
           total += (custoTotal / blockVagas) * activePeople;
         }
       }
 
-      // Hospedagem: Total de Reserva (R$)
+      // Hospedagem: Total dos quartos ou Total da Reserva
       else if (block.categoryId === "hospedagem") {
-        const totalReserva = parseNum(d.totalReserva);
-        if (totalReserva > 0) {
-          total += (totalReserva / officialVagas) * activePeople;
-        } else if (Array.isArray(d.rooms)) {
-          let sumRooms = 0;
+        let sumRooms = 0;
+        const dDiarias = parseNum(d.diarias) || 1;
+        if (Array.isArray(d.rooms) && d.rooms.length > 0) {
           for (const r of d.rooms) {
-            const totPeriodo = parseNum(r.totalPeriodo);
-            const totQuarto = parseNum(r.totalQuarto);
+            if (String(r.totalPeriodo || "").toLowerCase().includes("cortesia")) continue;
+            const totPer = parseNum(r.totalPeriodo);
+            const totQ = parseNum(r.totalQuarto);
+            const diaria = parseNum(r.diaria);
             const qtd = parseNum(r.qtd) || 1;
             const porPessoa = parseNum(r.porPessoa);
-            if (porPessoa > 0) {
-              sumRooms += porPessoa * activePeople;
-            } else if (totPeriodo > 0) {
-              sumRooms += (totPeriodo / officialVagas) * activePeople;
-            } else if (totQuarto > 0) {
-              sumRooms += ((totQuarto * qtd) / officialVagas) * activePeople;
+            const cap = r.tipo?.toLowerCase().includes("single")
+              ? 1
+              : r.tipo?.toLowerCase().includes("triplo")
+              ? 3
+              : r.tipo?.toLowerCase().includes("quadr")
+              ? 4
+              : 2;
+
+            if (totPer > 0) {
+              sumRooms += totPer;
+            } else if (totQ > 0) {
+              sumRooms += totQ * qtd;
+            } else if (diaria > 0) {
+              sumRooms += diaria * dDiarias * qtd;
+            } else if (porPessoa > 0) {
+              sumRooms += porPessoa * cap * qtd;
             }
           }
-          total += sumRooms;
+        }
+        const totalHospedagem = sumRooms > 0 ? sumRooms : parseNum(d.totalReserva);
+        if (totalHospedagem > 0) {
+          total += (totalHospedagem / officialVagas) * activePeople;
         }
       }
 
-      // Rodoviário: Valor do Contrato
+      // Rodoviário: Valor do Contrato ou Rateio por Pessoa
       else if (block.categoryId === "rodoviario") {
         const vContrato = parseNum(d.valorContrato);
         const blockVagas = parseNum(d.vagas) || officialVagas;
         const rateio = parseNum(d.rateioPorPessoa);
-        if (vContrato > 0) {
+        if (rateio > 0 && (vContrato === 0 || parseNum((vContrato / blockVagas).toFixed(2)) !== rateio)) {
+          total += rateio * activePeople;
+        } else if (vContrato > 0) {
           total += (vContrato / blockVagas) * activePeople;
         } else if (rateio > 0) {
           total += rateio * activePeople;
         }
       }
 
-      // Guias e Monitores: Valor Total de Despesas (R$)
+      // Guias e Monitores: Diárias dos Guias + Despesas Adicionais em tempo real
       else if (block.categoryId === "guias") {
-        const totalDesp = parseNum(d.totalDespesas);
+        let gTot = 0;
+        for (const g of d.guias ?? []) {
+          const dNum = parseNum(g.diarias);
+          const vDiaria = parseNum(g.valorDiaria);
+          const vTot = parseNum(g.valorTotal);
+          gTot += vTot > 0 ? vTot : (dNum > 0 && vDiaria > 0 ? dNum * vDiaria : 0);
+        }
+        for (const desp of d.despesas ?? []) {
+          gTot += parseNum(desp.valor);
+        }
         const blockVagas = parseNum(d.vagas) || officialVagas;
-        const rateio = parseNum(d.rateioPorPessoa);
-        if (totalDesp > 0) {
-          total += (totalDesp / blockVagas) * activePeople;
-        } else if (rateio > 0) {
-          total += rateio * activePeople;
-        } else {
-          let gTot = 0;
-          for (const g of d.guias ?? []) gTot += parseNum(g.valorTotal);
-          for (const desp of d.despesas ?? []) gTot += parseNum(desp.valor);
-          total += (gTot / blockVagas) * activePeople;
+        const totalGuias = gTot > 0 ? gTot : parseNum(d.totalDespesas);
+        if (totalGuias > 0) {
+          total += (totalGuias / blockVagas) * activePeople;
+        } else if (parseNum(d.rateioPorPessoa) > 0) {
+          total += parseNum(d.rateioPorPessoa) * activePeople;
         }
       }
 
-      // Personalizados: Valor Total de Despesas Personalizadas
+      // Personalizados: Despesas Personalizadas em tempo real
       else if (block.categoryId === "personalizados") {
         const blockVagas = parseNum(d.vagas) || officialVagas;
-        if (Array.isArray(d.rows)) {
+        if (Array.isArray(d.rows) && d.rows.length > 0) {
           let rTot = 0;
           for (const r of d.rows) {
             const unit = parseNum(r.valor ?? r.custo);
+            const rTotal = parseNum(r.total);
             if (unit > 0) {
               rTot += unit * activePeople;
-            } else {
-              const rTotal = parseNum(r.total);
+            } else if (rTotal > 0) {
               rTot += (rTotal / blockVagas) * activePeople;
             }
           }
@@ -161,7 +177,7 @@ export function SummaryWidget({
     }
 
     return total;
-  }, [blocks, slots, activePeople, officialVagas]);
+  }, [blocks, activePeople, officialVagas]);
 
   const fmt = (v: number) =>
     v.toLocaleString("pt-BR", {
