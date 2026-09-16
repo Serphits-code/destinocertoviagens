@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Plane, DollarSign, Calendar } from "lucide-react";
 import type { EditorBlock, BlockData, RowStatus } from "@/lib/editor-types";
 
 interface BlockTableProps {
@@ -50,6 +50,23 @@ function DeleteRowBtn({ onClick }: { onClick: () => void }) {
       <Trash2 size={14} />
     </button>
   );
+}
+
+function parseNum(val: unknown): number {
+  if (typeof val === "number") return val;
+  if (!val) return 0;
+  const n = parseFloat(String(val).replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+
+function toInputDate(val: unknown): string {
+  if (!val || typeof val !== "string") return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const match = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+  return "";
 }
 
 export function BlockTable({ block, onUpdate }: BlockTableProps) {
@@ -172,83 +189,320 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       );
 
     // ---- Aéreo ----
-    case "aereo":
+    case "aereo": {
+      const vagasNum = parseNum(d.vagas);
+
+      const custoTotalDisplay =
+        d.custoTotal !== undefined && d.custoTotal !== ""
+          ? d.custoTotal
+          : vagasNum > 0 && parseNum(d.custoUnitario) > 0
+          ? (parseNum(d.custoUnitario) * vagasNum).toFixed(2)
+          : "";
+
+      const sinalUnitarioDisplay =
+        d.sinalUnitario !== undefined && d.sinalUnitario !== ""
+          ? d.sinalUnitario
+          : vagasNum > 0 && parseNum(d.sinal) > 0
+          ? (parseNum(d.sinal) / vagasNum).toFixed(2)
+          : "";
+
+      const sinalTotalDisplay =
+        d.sinalTotal !== undefined && d.sinalTotal !== ""
+          ? d.sinalTotal
+          : d.sinal !== undefined && d.sinal !== ""
+          ? d.sinal
+          : vagasNum > 0 && parseNum(d.sinalUnitario) > 0
+          ? (parseNum(d.sinalUnitario) * vagasNum).toFixed(2)
+          : "";
+
+      const handleVagasChange = (newVagas: string) => {
+        const vNum = parseNum(newVagas);
+        const unitPassagem = parseNum(d.custoUnitario);
+        const currentUnitSinal = parseNum(
+          d.sinalUnitario !== undefined && d.sinalUnitario !== ""
+            ? d.sinalUnitario
+            : d.sinal && parseNum(d.vagas) > 0
+            ? parseNum(d.sinal) / parseNum(d.vagas)
+            : 0
+        );
+
+        const updated: Record<string, unknown> = {
+          ...d,
+          vagas: newVagas,
+        };
+
+        if (unitPassagem > 0 && vNum > 0) {
+          updated.custoTotal = (unitPassagem * vNum).toFixed(2);
+        }
+        if (currentUnitSinal > 0 && vNum > 0) {
+          const st = (currentUnitSinal * vNum).toFixed(2);
+          updated.sinalTotal = st;
+          updated.sinal = st;
+          if (!d.sinalUnitario) {
+            updated.sinalUnitario = currentUnitSinal.toFixed(2);
+          }
+        }
+        onUpdate(updated);
+      };
+
+      const handleUnitPassagemChange = (val: string) => {
+        const u = parseNum(val);
+        const vNum = parseNum(d.vagas);
+        const total = vNum > 0 && u > 0 ? (u * vNum).toFixed(2) : (vNum > 0 && !val ? "" : d.custoTotal);
+        onUpdate({
+          ...d,
+          custoUnitario: val,
+          custoTotal: total,
+        });
+      };
+
+      const handleTotalPassagemChange = (val: string) => {
+        const t = parseNum(val);
+        const vNum = parseNum(d.vagas);
+        const unit = vNum > 0 && t > 0 ? (t / vNum).toFixed(2) : d.custoUnitario;
+        onUpdate({
+          ...d,
+          custoTotal: val,
+          custoUnitario: unit,
+        });
+      };
+
+      const handleUnitSinalChange = (val: string) => {
+        const u = parseNum(val);
+        const vNum = parseNum(d.vagas);
+        const total = vNum > 0 && u > 0 ? (u * vNum).toFixed(2) : (vNum > 0 && !val ? "" : (d.sinalTotal ?? d.sinal));
+        onUpdate({
+          ...d,
+          sinalUnitario: val,
+          sinalTotal: total,
+          sinal: total,
+        });
+      };
+
+      const handleTotalSinalChange = (val: string) => {
+        const t = parseNum(val);
+        const vNum = parseNum(d.vagas);
+        const unit = vNum > 0 && t > 0 ? (t / vNum).toFixed(2) : d.sinalUnitario;
+        onUpdate({
+          ...d,
+          sinalTotal: val,
+          sinal: val,
+          sinalUnitario: unit,
+        });
+      };
+
       return (
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <label className="text-xs text-text-muted">
-              Portal
-              <input className={inputCls} value={d.portal ?? ""} onChange={(e) => set("portal", e.target.value)} />
+              <span className="block mb-1 font-medium">Portal</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.portal ?? ""}
+                placeholder="Ex: SAKURA, Discovery"
+                onChange={(e) => set("portal", e.target.value)}
+              />
             </label>
             <label className="text-xs text-text-muted">
-              Localizador
-              <input className={inputCls} value={d.localizador ?? ""} onChange={(e) => set("localizador", e.target.value)} />
+              <span className="block mb-1 font-medium">Localizador</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm uppercase font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.localizador ?? ""}
+                placeholder="Ex: GRP832582"
+                onChange={(e) => set("localizador", e.target.value.toUpperCase())}
+              />
             </label>
             <label className="text-xs text-text-muted">
-              Vagas
-              <input className={inputCls} value={d.vagas ?? ""} onChange={(e) => set("vagas", e.target.value)} />
+              <span className="block mb-1 font-medium">Vagas</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm font-semibold focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.vagas ?? ""}
+                placeholder="Ex: 20"
+                onChange={(e) => handleVagasChange(e.target.value)}
+              />
             </label>
           </div>
 
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                {["Cia", "Voo", "Origem", "Saída", "Chegada", "Destino", "Tipo", "Status", ""].map((h) => (
-                  <th key={h} className={`${thCls} text-left`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(d.flights ?? []).map(
-                (
-                  f: { cia: string; voo: string; origem: string; saida: string; chegada: string; destino: string; tipo: string; status: RowStatus },
-                  i: number
-                ) => (
-                  <tr key={i}>
-                    {(["cia", "voo", "origem", "saida", "chegada", "destino"] as const).map((k) => (
-                      <td key={k} className={tdCls}>
-                        <input className={inputCls} value={f[k]} onChange={(e) => setRow("flights", i, k, e.target.value)} />
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  {["Cia", "Voo", "Origem", "Saída", "Chegada", "Destino", "Tipo", "Status", ""].map((h) => (
+                    <th key={h} className={`${thCls} text-left`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(d.flights ?? []).map(
+                  (
+                    f: { cia: string; voo: string; origem: string; saida: string; chegada: string; destino: string; tipo: string; status: RowStatus },
+                    i: number
+                  ) => (
+                    <tr key={i}>
+                      {(["cia", "voo", "origem", "saida", "chegada", "destino"] as const).map((k) => (
+                        <td key={k} className={tdCls}>
+                          <input className={inputCls} value={f[k]} onChange={(e) => setRow("flights", i, k, e.target.value)} />
+                        </td>
+                      ))}
+                      <td className={tdCls}>
+                        <input className={inputCls} value={f.tipo} onChange={(e) => setRow("flights", i, "tipo", e.target.value)} />
                       </td>
-                    ))}
-                    <td className={tdCls}>
-                      <input className={inputCls} value={f.tipo} onChange={(e) => setRow("flights", i, "tipo", e.target.value)} />
-                    </td>
-                    <td className={`${tdCls} text-center`}>
-                      <StatusSelect value={f.status} onChange={(v) => setRow("flights", i, "status", v)} />
-                    </td>
-                    <td className={`${tdCls} text-center`}>
-                      <DeleteRowBtn onClick={() => removeRow("flights", i)} />
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
+                      <td className={`${tdCls} text-center`}>
+                        <StatusSelect value={f.status} onChange={(v) => setRow("flights", i, "status", v)} />
+                      </td>
+                      <td className={`${tdCls} text-center`}>
+                        <DeleteRowBtn onClick={() => removeRow("flights", i)} />
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
           <button
             onClick={() =>
               addRow("flights", { cia: "AZUL", voo: "", origem: "", saida: "", chegada: "", destino: "", tipo: "Ida", status: "CONFIRMADO" })
             }
-            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
+            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Voo
           </button>
 
-          <div className="grid grid-cols-3 gap-3">
-            <label className="text-xs text-text-muted">
-              Custo Unitário (R$)
-              <input className={numCls} value={d.custoUnitario ?? ""} onChange={(e) => set("custoUnitario", e.target.value)} />
+          {/* Valores das Passagens e Sinal com cálculo por vagas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 rounded-xl border border-border bg-surface-subtle/50">
+            {/* Bloco Passagens */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                <Plane size={14} className="text-primary" />
+                <span>Valor das Passagens</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <label className="text-xs text-text-muted">
+                  <span className="block mb-1 font-medium">Valor Unitário (R$)</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={d.custoUnitario ?? ""}
+                    onChange={(e) => handleUnitPassagemChange(e.target.value)}
+                  />
+                </label>
+                <label className="text-xs text-text-muted">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">Valor Total (R$)</span>
+                    {vagasNum > 0 && (
+                      <span className="text-[10px] text-text-muted">
+                        ({vagasNum} {vagasNum === 1 ? "vaga" : "vagas"})
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={custoTotalDisplay}
+                    onChange={(e) => handleTotalPassagemChange(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Bloco Sinal */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                <DollarSign size={14} className="text-primary" />
+                <span>Sinal / Entrada</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <label className="text-xs text-text-muted">
+                  <span className="block mb-1 font-medium">Sinal Unitário (R$)</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={sinalUnitarioDisplay}
+                    onChange={(e) => handleUnitSinalChange(e.target.value)}
+                  />
+                </label>
+                <label className="text-xs text-text-muted">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">Sinal Total (R$)</span>
+                    {vagasNum > 0 && (
+                      <span className="text-[10px] text-text-muted">
+                        ({vagasNum} {vagasNum === 1 ? "vaga" : "vagas"})
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-text-title focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={sinalTotalDisplay}
+                    onChange={(e) => handleTotalSinalChange(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Prazos / Datas Limite */}
+          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+              <Calendar size={14} className="text-primary" />
+              <span>Prazos e Datas Limite</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <label className="text-xs text-text-muted">
+                <span className="block mb-1 font-medium">Prazo Pagamento do Sinal</span>
+                <input
+                  type="date"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                  value={toInputDate(d.prazoSinal)}
+                  onChange={(e) => set("prazoSinal", e.target.value)}
+                />
+              </label>
+              <label className="text-xs text-text-muted">
+                <span className="block mb-1 font-medium">Prazo Pagamento Total</span>
+                <input
+                  type="date"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                  value={toInputDate(d.prazoPagamentoTotal)}
+                  onChange={(e) => set("prazoPagamentoTotal", e.target.value)}
+                />
+              </label>
+              <label className="text-xs text-text-muted">
+                <span className="block mb-1 font-medium">Prazo Nomeação / Emissão</span>
+                <input
+                  type="date"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                  value={toInputDate(d.prazoEmissao)}
+                  onChange={(e) => set("prazoEmissao", e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Observações */}
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-text-muted flex items-center justify-between">
+              <span>Observações do Aéreo</span>
+              <span className="text-[11px] font-normal text-text-muted">(regras de cancelamento, franquia de bagagem, RAV, etc.)</span>
             </label>
-            <label className="text-xs text-text-muted">
-              Sinal (R$)
-              <input className={numCls} value={d.sinal ?? ""} onChange={(e) => set("sinal", e.target.value)} />
-            </label>
-            <label className="text-xs text-text-muted">
-              Observação
-              <input className={inputCls} value={d.observation ?? ""} onChange={(e) => set("observation", e.target.value)} />
-            </label>
+            <textarea
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-y"
+              placeholder="Ex: * Sem RAV. Franquia de 1 bagagem despachada 23kg por passageiro..."
+              value={d.observation ?? ""}
+              onChange={(e) => set("observation", e.target.value)}
+            />
           </div>
         </div>
       );
+    }
 
     // ---- Hospedagem ----
     case "hospedagem":

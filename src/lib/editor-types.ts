@@ -28,6 +28,24 @@ export interface AereoFlight {
   status: RowStatus;
 }
 
+export interface AereoBlockData {
+  title?: string;
+  portal?: string;
+  localizador?: string;
+  vagas?: string;
+  flights?: AereoFlight[];
+  custoUnitario?: string;
+  custoTotal?: string;
+  sinalUnitario?: string;
+  sinalTotal?: string;
+  sinal?: string;
+  prazoSinal?: string;
+  prazoPagamentoTotal?: string;
+  prazoEmissao?: string;
+  status?: RowStatus;
+  observation?: string;
+}
+
 export interface HospedagemRoom {
   tipo: string;
   diaria: string;
