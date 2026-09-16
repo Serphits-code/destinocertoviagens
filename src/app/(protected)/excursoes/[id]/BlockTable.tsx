@@ -872,7 +872,29 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
     }
 
     // ---- Rodoviário ----
-    case "rodoviario":
+    case "rodoviario": {
+      const handleVagasChange = (newVagas: string) => {
+        const vagasNum = parseNum(newVagas);
+        const vContrato = parseNum(d.valorContrato);
+        const rateio = vagasNum > 0 && vContrato > 0 ? (vContrato / vagasNum).toFixed(2) : d.rateioPorPessoa;
+        onUpdate({
+          ...d,
+          vagas: newVagas,
+          ...(rateio ? { rateioPorPessoa: rateio } : {}),
+        });
+      };
+
+      const handleValorContratoChange = (newVal: string) => {
+        const vNum = parseNum(newVal);
+        const vagasNum = parseNum(d.vagas);
+        const rateio = vagasNum > 0 && vNum > 0 ? (vNum / vagasNum).toFixed(2) : d.rateioPorPessoa;
+        onUpdate({
+          ...d,
+          valorContrato: newVal,
+          ...(rateio ? { rateioPorPessoa: rateio } : {}),
+        });
+      };
+
       return (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -889,31 +911,76 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               ] as const
             ).map(([key, label]) => (
               <label key={key} className="text-xs text-text-muted">
-                {label}
-                <input className={inputCls} value={d[key] ?? ""} onChange={(e) => set(key, e.target.value)} />
+                <span className="block mb-1 font-medium">{label}</span>
+                <input
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  value={d[key] ?? ""}
+                  onChange={(e) => {
+                    if (key === "vagas") {
+                      handleVagasChange(e.target.value);
+                    } else {
+                      set(key, e.target.value);
+                    }
+                  }}
+                />
               </label>
             ))}
           </div>
-          <label className="block text-xs text-text-muted">
-            Itinerário
-            <input className={inputCls} value={d.itinerario ?? ""} onChange={(e) => set("itinerario", e.target.value)} />
-          </label>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <label className="md:col-span-2 block text-xs text-text-muted">
+              <span className="block mb-1 font-medium">Itinerário</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.itinerario ?? ""}
+                placeholder="Ex: Saída de Cachoeirinha até Aeroporto / Destino"
+                onChange={(e) => set("itinerario", e.target.value)}
+              />
+            </label>
+            <label className="block text-xs text-text-muted">
+              <span className="block mb-1 font-medium">Sentido / Trajeto</span>
+              <select
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer transition-all"
+                value={d.trajeto || d.tipoTrajeto || "Ida e Volta"}
+                onChange={(e) => {
+                  set("trajeto", e.target.value);
+                  set("tipoTrajeto", e.target.value);
+                }}
+              >
+                <option value="Ida e Volta">Ida e Volta</option>
+                <option value="Só Ida">Só Ida</option>
+                <option value="Só Volta">Só Volta</option>
+              </select>
+            </label>
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <label className="text-xs text-text-muted">
-              Valor Contrato (R$)
-              <input className={numCls} value={d.valorContrato ?? ""} onChange={(e) => set("valorContrato", e.target.value)} />
+              <span className="block mb-1 font-medium">Valor Contrato (R$)</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.valorContrato ?? ""}
+                placeholder="0.00"
+                onChange={(e) => handleValorContratoChange(e.target.value)}
+              />
             </label>
             <label className="text-xs text-text-muted">
-              Rateio por Pessoa (R$)
-              <input className={numCls} value={d.rateioPorPessoa ?? ""} onChange={(e) => set("rateioPorPessoa", e.target.value)} />
+              <span className="block mb-1 font-medium">Rateio por Pessoa (R$)</span>
+              <input
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={d.rateioPorPessoa ?? ""}
+                placeholder="0.00"
+                onChange={(e) => set("rateioPorPessoa", e.target.value)}
+              />
             </label>
             <label className="text-xs text-text-muted">
-              Status
-              <div className="mt-1">
+              <span className="block mb-1 font-medium">Status</span>
+              <div className="mt-0.5">
                 <StatusSelect value={(d.status as RowStatus) ?? "COTADO"} onChange={(v) => set("status", v)} />
               </div>
             </label>
           </div>
+
           <BlockObservation
             value={d.observation}
             onChange={(v) => set("observation", v)}
@@ -921,6 +988,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           />
         </div>
       );
+    }
 
     // ---- Guias ----
     case "guias":

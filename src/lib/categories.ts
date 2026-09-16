@@ -103,6 +103,7 @@ export const CATEGORY_DEFINITIONS: Record<string, CategoryDefinition> = {
       ar: "SIM",
       agua: "SIM",
       itinerario: "Saída de Cachoeirinha até Aeroporto / Destino",
+      trajeto: "Ida e Volta",
       valorContrato: "2000.00",
       cancelamento: "Sem multa até 15 dias antes",
       rateioPorPessoa: "112.00",
