@@ -117,13 +117,14 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
   const startOfDay = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
   const endOfDay = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
 
-  // 1. Vendas emitidas na data
+  // 1. Vendas emitidas na data (excluindo canceladas)
   const sales = await db.sale.findMany({
     where: {
       saleDate: {
         gte: startOfDay,
         lte: endOfDay,
       },
+      status: { not: "CANCELADA" },
     },
     include: {
       items: true,
@@ -177,21 +178,31 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
   };
 
   for (const s of sales) {
-    for (const item of s.items) {
-      const val = Number(item.totalAmount);
-      const desc = (item.description || "").toUpperCase();
-      const ptype = (item.type || "").toUpperCase();
+    const val = Number(s.finalAmount);
+    const desc = (s.notes || "" + " " + s.items.map((i: any) => i.description).join(" ")).toUpperCase();
+    const isPacote =
+      desc.includes("PACOTE") ||
+      desc.includes("GRAMADO") ||
+      desc.includes("EXCURS") ||
+      desc.includes("CHILE") ||
+      desc.includes("FOZ") ||
+      desc.includes("JATIUCA") ||
+      desc.includes("NORONHA") ||
+      desc.includes("LENÇOIS") ||
+      (desc.includes("HOTEL") && (desc.includes("VOO") || desc.includes("PASSEIO") || desc.includes("TRANSFER") || desc.includes("GUIA")));
 
-      if (ptype.includes("PACOTE") || desc.includes("PACOTE")) operations.pacotes += val;
-      else if (ptype.includes("PASSAGEM") || desc.includes("AEREO") || desc.includes("VOO")) operations.passagens += val;
-      else if (ptype.includes("HOTEL") || desc.includes("HOSPEDAGEM")) operations.hoteis += val;
-      else if (ptype.includes("INGRESSO")) operations.ingressos += val;
-      else if (ptype.includes("ALUGUEL") || desc.includes("CARRO")) operations.aluguelCarros += val;
-      else if (ptype.includes("SEGURO")) operations.seguros += val;
-      else {
-        // Se a venda tem valor mas não especificou categoria exata
-        operations.pacotes += val;
-      }
+    if (isPacote) {
+      operations.pacotes += val;
+    } else if (desc.includes("HOTEL") || desc.includes("POUSADA") || desc.includes("RESORT") || desc.includes("HOSPEDAGEM")) {
+      operations.hoteis += val;
+    } else if (desc.includes("INGRESSO")) {
+      operations.ingressos += val;
+    } else if (desc.includes("CARRO") || desc.includes("ALUGUEL")) {
+      operations.aluguelCarros += val;
+    } else if (desc.includes("SEGURO")) {
+      operations.seguros += val;
+    } else {
+      operations.passagens += val;
     }
   }
   operations.subtotal = sales.reduce((sum: number, s: any) => sum + Number(s.finalAmount), 0);
@@ -270,23 +281,50 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
     }
   }
 
-  // Mapear também as vendas do dia para identificar o que foi Crediário / Cartão Fornecedor
+  // Mapear formas de pagamento das novas vendas do dia
   for (const s of sales) {
-    const totalSale = Number(s.finalAmount);
-    // Verificar se tem entradas liquidadas no dia
-    const saleEntries = s.financialEntries;
-    const paidToday = saleEntries
-      .filter((e: any) => e.paidAt && e.paidAt.toISOString().slice(0, 10) === dateStr)
-      .reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+    const val = Number(s.finalAmount);
 
-    const pendingOrFuture = totalSale - paidToday;
-    if (pendingOrFuture > 0.01) {
-      salesPayments.crediario += pendingOrFuture;
-    }
+    if (s.financialEntries.length === 0) {
+      // Sem títulos na agência -> pago direto no fornecedor (ex: Flytour, CVC)
+      salesPayments.cartaoFornecedor += val;
+    } else {
+      const primaryMethod = (s.primaryPaymentMethod || "").toUpperCase();
+      const firstEntry = s.financialEntries[0];
+      const firstDoc = (firstEntry?.document || "").toUpperCase();
+      const firstMeth = (firstEntry?.paymentMethod || "").toUpperCase();
 
-    // Checar se houve pagamento direto ao fornecedor
-    if (s.primaryPaymentMethod?.includes("FORNECEDOR") || s.financialNotes?.includes("FORNECEDOR")) {
-      salesPayments.cartaoFornecedor += totalSale;
+      const isSaleCard =
+        primaryMethod.includes("CARD") ||
+        primaryMethod.includes("CARTAO") ||
+        firstDoc.includes("STONE") ||
+        firstDoc.includes("SUMUP") ||
+        firstDoc.includes("CARTAO") ||
+        firstMeth.includes("CARD") ||
+        firstMeth.includes("CARTAO");
+
+      if (isSaleCard) {
+        salesPayments.cartao += val;
+      } else {
+        const paidTodayEntries = s.financialEntries.filter(
+          (e: any) => e.paidAt && e.paidAt.toISOString().slice(0, 10) === dateStr
+        );
+        let paidTodayAmount = 0;
+        for (const pe of paidTodayEntries) {
+          const pVal = Number(pe.amount);
+          const pDoc = (pe.document || "").toUpperCase();
+          const pMeth = (pe.paymentMethod || "").toUpperCase();
+          if (pDoc === "DINHEIRO" || pMeth === "DINHEIRO") salesPayments.dinheiro += pVal;
+          else if (pDoc === "PIX" || pMeth === "PIX") salesPayments.pix += pVal;
+          else salesPayments.crediario += pVal;
+          paidTodayAmount += pVal;
+        }
+
+        const futureBalance = val - paidTodayAmount;
+        if (futureBalance > 0.01) {
+          salesPayments.crediario += futureBalance;
+        }
+      }
     }
   }
 
@@ -302,8 +340,8 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
     receipts.descontos;
 
   const plan = {
-    aVista: salesPayments.subtotal - salesPayments.crediario,
-    aPrazo: salesPayments.crediario,
+    aVista: salesPayments.dinheiro + salesPayments.pix + salesPayments.cartao + salesPayments.cartaoFornecedor,
+    aPrazo: salesPayments.crediario + salesPayments.boleto,
     subtotal: salesPayments.subtotal,
   };
 
