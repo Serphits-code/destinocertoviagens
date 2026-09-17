@@ -49,6 +49,7 @@ export function SalesListContent({
   const [data, setData] = useState(initialData);
   const [search, setSearch] = useState(initialSearch);
   const [status, setStatus] = useState(initialStatus);
+  const [paymentMethod, setPaymentMethod] = useState("ALL");
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(initialEndDate);
 
@@ -85,6 +86,7 @@ export function SalesListContent({
       newPage = 1,
       currentSearch = search,
       currentStatus = status,
+      currentMethod = paymentMethod,
       currentStart = startDate,
       currentEnd = endDate
     ) => {
@@ -94,6 +96,7 @@ export function SalesListContent({
             page: newPage,
             search: currentSearch.trim(),
             status: currentStatus,
+            paymentMethod: currentMethod !== "ALL" ? currentMethod : undefined,
             startDate: currentStart || undefined,
             endDate: currentEnd || undefined,
           });
@@ -104,6 +107,7 @@ export function SalesListContent({
           if (newPage > 1) p.set("page", String(newPage));
           if (currentSearch.trim()) p.set("search", currentSearch.trim());
           if (currentStatus !== "ALL") p.set("status", currentStatus);
+          if (currentMethod !== "ALL") p.set("paymentMethod", currentMethod);
           if (currentStart) p.set("startDate", currentStart);
           if (currentEnd) p.set("endDate", currentEnd);
           const q = p.toString();
@@ -113,7 +117,7 @@ export function SalesListContent({
         }
       });
     },
-    [search, status, startDate, endDate]
+    [search, status, paymentMethod, startDate, endDate]
   );
 
   // Debounce de 250ms para pesquisa ao digitar
@@ -123,39 +127,45 @@ export function SalesListContent({
       return;
     }
     const timer = setTimeout(() => {
-      fetchSales(1, search, status, startDate, endDate);
+      fetchSales(1, search, status, paymentMethod, startDate, endDate);
     }, 250);
 
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Disparo imediato na troca de status ou datas
+  // Disparo imediato na troca de filtros
   const handleStatusChange = (newStatus: string) => {
     setStatus(newStatus);
-    fetchSales(1, search, newStatus, startDate, endDate);
+    fetchSales(1, search, newStatus, paymentMethod, startDate, endDate);
+  };
+
+  const handlePaymentMethodChange = (newMethod: string) => {
+    setPaymentMethod(newMethod);
+    fetchSales(1, search, status, newMethod, startDate, endDate);
   };
 
   const handleStartDateChange = (newStart: string) => {
     setStartDate(newStart);
-    fetchSales(1, search, status, newStart, endDate);
+    fetchSales(1, search, status, paymentMethod, newStart, endDate);
   };
 
   const handleEndDateChange = (newEnd: string) => {
     setEndDate(newEnd);
-    fetchSales(1, search, status, startDate, newEnd);
+    fetchSales(1, search, status, paymentMethod, startDate, newEnd);
   };
 
   const handleClearSearch = () => {
     setSearch("");
-    fetchSales(1, "", status, startDate, endDate);
+    fetchSales(1, "", status, paymentMethod, startDate, endDate);
   };
 
   const handleClearAll = () => {
     setSearch("");
     setStatus("ALL");
+    setPaymentMethod("ALL");
     setStartDate("");
     setEndDate("");
-    fetchSales(1, "", "ALL", "", "");
+    fetchSales(1, "", "ALL", "ALL", "", "");
   };
 
   const handleOpenDetail = async (id: string) => {
@@ -184,7 +194,32 @@ export function SalesListContent({
     }
   };
 
-  const hasActiveFilters = Boolean(search.trim() || status !== "ALL" || startDate || endDate);
+  const getPaymentBadge = (method: string | null) => {
+    switch (method) {
+      case "PIX":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 whitespace-nowrap">🟢 PIX</span>;
+      case "CARTAO_CREDITO":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-600 border border-purple-500/20 whitespace-nowrap">🟣 Cartão</span>;
+      case "CARTAO_DEBITO":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-600 border border-sky-500/20 whitespace-nowrap">🔵 Débito</span>;
+      case "BOLETO":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20 whitespace-nowrap">🟠 Boleto</span>;
+      case "DINHEIRO":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/10 text-teal-600 border border-teal-500/20 whitespace-nowrap">💵 Dinheiro</span>;
+      case "BANCO":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20 whitespace-nowrap">🏦 Banco</span>;
+      case "CREDITO":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 whitespace-nowrap">🎫 Crédito</span>;
+      case "FATURADO":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-600 border border-slate-500/20 whitespace-nowrap">📋 Faturado</span>;
+      case "MISTO":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/10 text-violet-600 border border-violet-500/20 whitespace-nowrap">🔀 Misto</span>;
+      default:
+        return <span className="text-[11px] text-(--text-muted)">-</span>;
+    }
+  };
+
+  const hasActiveFilters = Boolean(search.trim() || status !== "ALL" || paymentMethod !== "ALL" || startDate || endDate);
 
   return (
     <div className="space-y-6">
@@ -199,7 +234,7 @@ export function SalesListContent({
               Vendas & Emissões da Agência
             </h1>
             <p className="text-xs text-(--text-muted)">
-              Controle central de vendas, pacotes, trechos aéreos e passageiros
+              Controle central de vendas, pacotes, trechos aéreos, recebimentos e passageiros
             </p>
           </div>
         </div>
@@ -232,13 +267,14 @@ export function SalesListContent({
           <div className="text-2xl font-extrabold text-blue-600 mt-1">
             {data.page} / {data.totalPages || 1}
           </div>
-          <p className="text-[11px] text-(--text-muted) mt-1">Mostrando 25 vendas por página</p>
+          <p className="text-[11px] text-(--text-muted) mt-1">Mostrando {data.sales.length} vendas</p>
         </div>
       </div>
 
       {/* Barra de Filtros com Pesquisa em Tempo Real */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs items-center">
-        <div className="md:col-span-5 relative">
+        {/* Busca por texto */}
+        <div className="md:col-span-3 relative">
           {isPending ? (
             <Loader2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary animate-spin" />
           ) : (
@@ -263,7 +299,8 @@ export function SalesListContent({
           )}
         </div>
 
-        <div className="md:col-span-3">
+        {/* Status */}
+        <div className="md:col-span-2">
           <select
             value={status}
             onChange={(e) => handleStatusChange(e.target.value)}
@@ -276,6 +313,27 @@ export function SalesListContent({
           </select>
         </div>
 
+        {/* Forma de Pagamento */}
+        <div className="md:col-span-3">
+          <select
+            value={paymentMethod}
+            onChange={(e) => handlePaymentMethodChange(e.target.value)}
+            className="w-full py-2 px-3 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer font-medium"
+          >
+            <option value="ALL">Todas Formas de Pagamento</option>
+            <option value="PIX">🟢 PIX / Depósito em Conta</option>
+            <option value="CARTAO_CREDITO">🟣 Cartão de Crédito</option>
+            <option value="CARTAO_DEBITO">🔵 Cartão de Débito</option>
+            <option value="BOLETO">🟠 Boleto Bancário</option>
+            <option value="DINHEIRO">💵 Dinheiro / Espécie</option>
+            <option value="BANCO">🏦 Débito em Conta (Banco)</option>
+            <option value="CREDITO">🎫 Crédito na Agência</option>
+            <option value="FATURADO">📋 Faturado</option>
+            <option value="MISTO">🔀 Pagamento Misto</option>
+          </select>
+        </div>
+
+        {/* Datas e Limpar */}
         <div className="md:col-span-4 flex items-center gap-2">
           <div className="flex items-center gap-1.5 flex-1">
             <input
@@ -320,6 +378,7 @@ export function SalesListContent({
                 <th className="py-3 px-4">Cliente Pagante</th>
                 <th className="py-3 px-3 w-32">CPF</th>
                 <th className="py-3 px-4">Vendedor</th>
+                <th className="py-3 px-3 text-center">Pagamento</th>
                 <th className="py-3 px-3 text-center">Itens</th>
                 <th className="py-3 px-3 text-center">Passag.</th>
                 <th className="py-3 px-4 text-right w-32">Valor Total</th>
@@ -330,7 +389,7 @@ export function SalesListContent({
             <tbody className="divide-y divide-(--border)">
               {data.sales.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-(--text-muted)">
+                  <td colSpan={11} className="py-12 text-center text-(--text-muted)">
                     {isPending ? "Carregando resultados..." : "Nenhuma venda encontrada com os critérios informados."}
                   </td>
                 </tr>
@@ -355,6 +414,9 @@ export function SalesListContent({
                     </td>
                     <td className="py-3 px-4 text-(--text-body)">
                       {sale.sellerName || "-"}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      {getPaymentBadge(sale.primaryPaymentMethod)}
                     </td>
                     <td className="py-3 px-3 text-center font-semibold text-(--text-muted)">
                       {sale.itemsCount}

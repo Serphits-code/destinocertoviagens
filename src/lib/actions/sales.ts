@@ -16,6 +16,8 @@ export interface SaleSummaryItem {
   finalAmount: number;
   itemsCount: number;
   passengersCount: number;
+  primaryPaymentMethod: string | null;
+  paymentMethods: string[];
 }
 
 export async function getSales(params?: {
@@ -23,13 +25,14 @@ export async function getSales(params?: {
   pageSize?: number;
   search?: string;
   status?: string;
+  paymentMethod?: string;
   startDate?: string;
   endDate?: string;
 }) {
   await requireAuth();
 
   const page = Math.max(1, params?.page ?? 1);
-  const pageSize = Math.max(1, Math.min(100, params?.pageSize ?? 20));
+  const pageSize = Math.max(1, Math.min(100, params?.pageSize ?? 25));
   const skip = (page - 1) * pageSize;
 
   const where: any = {};
@@ -48,6 +51,13 @@ export async function getSales(params?: {
     where.status = params.status;
   }
 
+  if (params?.paymentMethod && params.paymentMethod !== "ALL") {
+    where.OR = [
+      { primaryPaymentMethod: params.paymentMethod },
+      { financialEntries: { some: { paymentMethod: params.paymentMethod } } },
+    ];
+  }
+
   if (params?.startDate || params?.endDate) {
     where.saleDate = {};
     if (params.startDate) where.saleDate.gte = new Date(`${params.startDate}T00:00:00.000Z`);
@@ -64,6 +74,7 @@ export async function getSales(params?: {
       include: {
         customer: { select: { name: true, cpf: true } },
         seller: { select: { name: true } },
+        financialEntries: { select: { paymentMethod: true, paymentMethodName: true } },
         _count: { select: { items: true, passengers: true } },
       },
     }),
@@ -73,20 +84,28 @@ export async function getSales(params?: {
     }),
   ]);
 
-  const sales: SaleSummaryItem[] = rows.map((r) => ({
-    id: r.id,
-    saleNumber: r.saleNumber,
-    saleDate: r.saleDate.toISOString().slice(0, 10),
-    departureDate: r.departureDate ? r.departureDate.toISOString().slice(0, 10) : null,
-    returnDate: r.returnDate ? r.returnDate.toISOString().slice(0, 10) : null,
-    customerName: r.customer.name,
-    customerDoc: r.customer.cpf,
-    sellerName: r.seller?.name || null,
-    status: r.status,
-    finalAmount: Number(r.finalAmount),
-    itemsCount: r._count.items,
-    passengersCount: r._count.passengers,
-  }));
+  const sales: SaleSummaryItem[] = rows.map((r) => {
+    const methods = Array.from(
+      new Set(r.financialEntries.map((fe) => fe.paymentMethod).filter(Boolean) as string[])
+    );
+
+    return {
+      id: r.id,
+      saleNumber: r.saleNumber,
+      saleDate: r.saleDate.toISOString().slice(0, 10),
+      departureDate: r.departureDate ? r.departureDate.toISOString().slice(0, 10) : null,
+      returnDate: r.returnDate ? r.returnDate.toISOString().slice(0, 10) : null,
+      customerName: r.customer.name,
+      customerDoc: r.customer.cpf,
+      sellerName: r.seller?.name || null,
+      status: r.status,
+      finalAmount: Number(r.finalAmount),
+      itemsCount: r._count.items,
+      passengersCount: r._count.passengers,
+      primaryPaymentMethod: r.primaryPaymentMethod || methods[0] || null,
+      paymentMethods: methods,
+    };
+  });
 
   return {
     sales,
