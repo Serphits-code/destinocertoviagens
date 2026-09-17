@@ -12,13 +12,19 @@ export interface SellerMetricItem {
   salesCount: number;
   totalVolume: number;
   estimatedCommission: number;
+  active: boolean;
 }
 
-export async function getSellersSummary(): Promise<SellerMetricItem[]> {
+export async function getSellersSummary(params?: { onlyActive?: boolean }): Promise<SellerMetricItem[]> {
   await requireAuth();
 
+  const where: any = {};
+  if (params?.onlyActive) {
+    where.active = true;
+  }
+
   const sellers = await db.seller.findMany({
-    where: { active: true },
+    where,
     orderBy: { name: "asc" },
     include: {
       sales: {
@@ -40,6 +46,7 @@ export async function getSellersSummary(): Promise<SellerMetricItem[]> {
       salesCount: s.sales.length,
       totalVolume,
       estimatedCommission,
+      active: s.active,
     };
   });
 }

@@ -149,21 +149,28 @@ async function main() {
   const vendData = parseLines(vendRaw, 'COPY destinocertoroteiros.vendedor ');
   for (const parts of vendData.rows) {
     const vId = cleanVal(parts[vendData.colIdx['vendedor_id']]);
-    const pId = cleanVal(parts[vendData.colIdx['pessoa_id']]);
-    const pInfo = pId ? pessoaMap.get(pId) : null;
-    const nome = pInfo?.nome || cleanVal(parts[vendData.colIdx['identificacao']]) || `Vendedor ${vId?.slice(0, 6)}`;
+    const ativo = cleanVal(parts[vendData.colIdx['ativo']]) === 't';
+    const pInfo = vId ? pessoaMap.get(vId) : null;
+    const nome = pInfo?.nome || `Vendedor ${vId?.slice(0, 6)}`;
     const comissao = parseFloat(cleanVal(parts[vendData.colIdx['comissao']]) || '0') || 0;
 
     if (vId) {
       await prisma.seller.upsert({
         where: { mondeId: vId },
-        update: { name: nome, commissionRate: comissao, email: pInfo?.email, phone: pInfo?.phone },
+        update: {
+          name: nome,
+          commissionRate: comissao,
+          email: pInfo?.email,
+          phone: pInfo?.phone,
+          active: ativo,
+        },
         create: {
           mondeId: vId,
           name: nome,
           commissionRate: comissao,
           email: pInfo?.email,
           phone: pInfo?.phone,
+          active: ativo,
         },
       });
     }

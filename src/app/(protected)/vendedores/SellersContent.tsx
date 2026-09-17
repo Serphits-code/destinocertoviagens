@@ -20,6 +20,7 @@ interface Props {
 
 export function SellersContent({ sellers }: Props) {
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -31,9 +32,15 @@ export function SellersContent({ sellers }: Props) {
   const totalVolume = sellers.reduce((acc, s) => acc + s.totalVolume, 0);
   const totalSales = sellers.reduce((acc, s) => acc + s.salesCount, 0);
   const totalCommissions = sellers.reduce((acc, s) => acc + s.estimatedCommission, 0);
+  const activeCount = sellers.filter((s) => s.active).length;
 
   const filtered = sellers
-    .filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
+    .filter((s) => {
+      const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) || (s.email && s.email.toLowerCase().includes(search.toLowerCase()));
+      const matchesStatus =
+        statusFilter === "all" ? true : statusFilter === "active" ? s.active : !s.active;
+      return matchesSearch && matchesStatus;
+    })
     .sort((a, b) => b.totalVolume - a.totalVolume);
 
   return (
@@ -58,8 +65,13 @@ export function SellersContent({ sellers }: Props) {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
-          <div className="text-[11px] font-semibold text-(--text-muted) uppercase">Vendedores Ativos</div>
-          <div className="text-2xl font-extrabold text-(--text-title) mt-1">{sellers.length}</div>
+          <div className="text-[11px] font-semibold text-(--text-muted) uppercase">Equipe Comercial</div>
+          <div className="text-2xl font-extrabold text-(--text-title) mt-1">
+            {activeCount}{" "}
+            <span className="text-xs font-normal text-(--text-muted)">
+              ativos de {sellers.length}
+            </span>
+          </div>
           <p className="text-[11px] text-(--text-muted) mt-1">Consultores cadastrados</p>
         </div>
 
@@ -82,20 +94,57 @@ export function SellersContent({ sellers }: Props) {
         </div>
       </div>
 
-      {/* Busca */}
-      <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs flex items-center gap-3">
-        <div className="relative flex-1">
+      {/* Busca e Filtros */}
+      <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
           <input
             type="text"
-            placeholder="Pesquisar vendedor..."
+            placeholder="Pesquisar vendedor por nome ou e-mail..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:ring-2 focus:ring-primary/40"
           />
         </div>
+
+        <div className="flex items-center gap-1.5 p-1 bg-(--surface-subtle) rounded-xl border border-(--border)">
+          <button
+            type="button"
+            onClick={() => setStatusFilter("all")}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              statusFilter === "all"
+                ? "bg-primary text-white shadow-xs"
+                : "text-(--text-muted) hover:text-(--text-title)"
+            }`}
+          >
+            Todos ({sellers.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("active")}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              statusFilter === "active"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "text-(--text-muted) hover:text-(--text-title)"
+            }`}
+          >
+            Ativos ({activeCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("inactive")}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              statusFilter === "inactive"
+                ? "bg-slate-600 text-white shadow-xs"
+                : "text-(--text-muted) hover:text-(--text-title)"
+            }`}
+          >
+            Históricos ({sellers.length - activeCount})
+          </button>
+        </div>
+
         <span className="text-xs text-(--text-muted) whitespace-nowrap">
-          {filtered.length} vendedores listados
+          {filtered.length} vendedores exibidos
         </span>
       </div>
 
@@ -107,21 +156,32 @@ export function SellersContent({ sellers }: Props) {
             className="bg-(--surface) rounded-2xl border border-(--border) p-5 shadow-xs hover:border-primary/40 transition-all flex flex-col justify-between space-y-4"
           >
             <div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
                     {seller.name.charAt(0)}
                   </div>
                   <div>
                     <h3 className="font-bold text-sm text-(--text-title) leading-tight">
                       {seller.name}
                     </h3>
-                    <span className="text-[11px] text-(--text-muted)">
-                      {idx === 0 ? "🏆 Top Vendedor" : `Classificação #${idx + 1}`}
-                    </span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[11px] text-(--text-muted)">
+                        {idx === 0 ? "🏆 Top Vendas" : `#${idx + 1}`}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                          seller.active
+                            ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                            : "bg-slate-500/10 text-slate-500 border border-slate-500/20"
+                        }`}
+                      >
+                        {seller.active ? "Ativo" : "Histórico"}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-(--surface-muted) text-(--text-title) border border-(--border) flex items-center gap-1">
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-(--surface-muted) text-(--text-title) border border-(--border) flex items-center gap-1 shrink-0">
                   <Percent className="w-3 h-3 text-primary" />
                   {seller.commissionRate}%
                 </span>
