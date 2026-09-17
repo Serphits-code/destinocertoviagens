@@ -44,6 +44,7 @@ interface Props {
   initialStartDate: string;
   initialEndDate: string;
   initialDateType?: "PAID" | "DUE";
+  initialOriginType?: "ALL" | "VENDA" | "RECEBIMENTO";
 }
 
 export function ReceivablesContent({
@@ -55,6 +56,7 @@ export function ReceivablesContent({
   initialStartDate,
   initialEndDate,
   initialDateType,
+  initialOriginType,
 }: Props) {
   const [isPending, startTransition] = useTransition();
 
@@ -66,6 +68,9 @@ export function ReceivablesContent({
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(initialEndDate);
   const [dateType, setDateType] = useState<"PAID" | "DUE">(initialDateType || "PAID");
+  const [originType, setOriginType] = useState<"ALL" | "VENDA" | "RECEBIMENTO">(
+    initialOriginType || "ALL"
+  );
 
   const isFirstMount = useRef(true);
 
@@ -100,7 +105,8 @@ export function ReceivablesContent({
       currentStatus = status,
       currentStart = startDate,
       currentEnd = endDate,
-      currentDateType = dateType
+      currentDateType = dateType,
+      currentOrigin = originType
     ) => {
       startTransition(async () => {
         try {
@@ -114,11 +120,13 @@ export function ReceivablesContent({
               startDate: currentStart || undefined,
               endDate: currentEnd || undefined,
               dateType: currentDateType,
+              originType: currentOrigin,
             }),
             getReceivablesKPIs({
               startDate: currentStart || undefined,
               endDate: currentEnd || undefined,
               dateType: currentDateType,
+              paymentMethod: currentMethod !== "ALL" ? currentMethod : undefined,
             }),
           ]);
 
@@ -134,6 +142,7 @@ export function ReceivablesContent({
           if (currentStart) p.set("startDate", currentStart);
           if (currentEnd) p.set("endDate", currentEnd);
           if (currentDateType !== "PAID") p.set("dateType", currentDateType);
+          if (currentOrigin !== "ALL") p.set("origin", currentOrigin);
           const q = p.toString();
           window.history.replaceState(null, "", q ? `/financeiro/recebimentos?${q}` : "/financeiro/recebimentos");
         } catch (err) {
@@ -141,7 +150,7 @@ export function ReceivablesContent({
         }
       });
     },
-    [search, paymentMethod, status, startDate, endDate, dateType]
+    [search, paymentMethod, status, startDate, endDate, dateType, originType]
   );
 
   // Debounce for live search
@@ -151,7 +160,7 @@ export function ReceivablesContent({
       return;
     }
     const timer = setTimeout(() => {
-      fetchReceivables(1, search, paymentMethod, status, startDate, endDate, dateType);
+      fetchReceivables(1, search, paymentMethod, status, startDate, endDate, dateType, originType);
     }, 250);
 
     return () => clearTimeout(timer);
@@ -159,27 +168,32 @@ export function ReceivablesContent({
 
   const handleMethodChange = (newMethod: string) => {
     setPaymentMethod(newMethod);
-    fetchReceivables(1, search, newMethod, status, startDate, endDate, dateType);
+    fetchReceivables(1, search, newMethod, status, startDate, endDate, dateType, originType);
   };
 
   const handleStatusChange = (newStatus: string) => {
     setStatus(newStatus);
-    fetchReceivables(1, search, paymentMethod, newStatus, startDate, endDate, dateType);
+    fetchReceivables(1, search, paymentMethod, newStatus, startDate, endDate, dateType, originType);
   };
 
   const handleStartDateChange = (newStart: string) => {
     setStartDate(newStart);
-    fetchReceivables(1, search, paymentMethod, status, newStart, endDate, dateType);
+    fetchReceivables(1, search, paymentMethod, status, newStart, endDate, dateType, originType);
   };
 
   const handleEndDateChange = (newEnd: string) => {
     setEndDate(newEnd);
-    fetchReceivables(1, search, paymentMethod, status, startDate, newEnd, dateType);
+    fetchReceivables(1, search, paymentMethod, status, startDate, newEnd, dateType, originType);
   };
 
   const handleDateTypeChange = (newType: "PAID" | "DUE") => {
     setDateType(newType);
-    fetchReceivables(1, search, paymentMethod, status, startDate, endDate, newType);
+    fetchReceivables(1, search, paymentMethod, status, startDate, endDate, newType, originType);
+  };
+
+  const handleOriginChange = (newOrigin: "ALL" | "VENDA" | "RECEBIMENTO") => {
+    setOriginType(newOrigin);
+    fetchReceivables(1, search, paymentMethod, status, startDate, endDate, dateType, newOrigin);
   };
 
   const handleClearAll = () => {
@@ -189,7 +203,8 @@ export function ReceivablesContent({
     setStartDate("");
     setEndDate("");
     setDateType("PAID");
-    fetchReceivables(1, "", "ALL", "ALL", "", "", "PAID");
+    setOriginType("ALL");
+    fetchReceivables(1, "", "ALL", "ALL", "", "", "PAID", "ALL");
   };
 
   const getPaymentBadge = (method: string | null) => {
@@ -263,7 +278,8 @@ export function ReceivablesContent({
       status !== "ALL" ||
       startDate ||
       endDate ||
-      dateType !== "PAID"
+      dateType !== "PAID" ||
+      originType !== "ALL"
   );
 
   return (
@@ -324,7 +340,7 @@ export function ReceivablesContent({
           </div>
         </div>
 
-        {/* Liquidado / Pago */}
+        {/* Liquidado / Pago com Separação Vendas do Dia vs Recebimentos */}
         <div className="bg-(--surface) p-5 rounded-2xl border border-(--border) shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
@@ -334,15 +350,25 @@ export function ReceivablesContent({
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-2">
             <div className="text-2xl font-black text-emerald-600">
               {formatCurrency(kpis.paidAmount)}
             </div>
-            <p className="text-xs text-(--text-muted) mt-1">
-              {kpis.totalAmount > 0
-                ? `${((kpis.paidAmount / kpis.totalAmount) * 100).toFixed(1)}% do total recebido`
-                : "0%"}
-            </p>
+            {/* Subtotais Vendas do Dia vs Recebimentos Anteriores */}
+            <div className="mt-2 pt-2 border-t border-(--border)/60 space-y-1 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1">
+                  🛒 Vendas do Dia:
+                </span>
+                <strong className="text-(--text-title)">{formatCurrency(kpis.salesAmount)}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-purple-600 dark:text-purple-400 font-semibold flex items-center gap-1">
+                  📥 Recebimentos:
+                </span>
+                <strong className="text-(--text-title)">{formatCurrency(kpis.receivablesAmount)}</strong>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -447,20 +473,20 @@ export function ReceivablesContent({
       <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
           {/* Live Search Input */}
-          <div className="relative md:col-span-4">
+          <div className="relative md:col-span-3">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-(--text-muted)" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Pesquisar em tempo real por cliente, CPF, descrição ou venda..."
+              placeholder="Pesquisar cliente, CPF, venda..."
               className="w-full pl-10 pr-9 py-2.5 rounded-xl text-sm bg-(--background) border border-(--border) focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-(--text-title) placeholder:text-(--text-muted) transition-all"
             />
             {search && (
               <button
                 onClick={() => {
                   setSearch("");
-                  fetchReceivables(1, "", paymentMethod, status, startDate, endDate, dateType);
+                  fetchReceivables(1, "", paymentMethod, status, startDate, endDate, dateType, originType);
                 }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-title) p-1"
                 title="Limpar pesquisa"
@@ -491,6 +517,20 @@ export function ReceivablesContent({
             </select>
           </div>
 
+          {/* Origem: Vendas do Dia vs Recebimentos Anteriores */}
+          <div className="md:col-span-2">
+            <select
+              value={originType}
+              onChange={(e) => handleOriginChange(e.target.value as any)}
+              className="w-full px-2.5 py-2.5 rounded-xl text-xs font-bold bg-(--background) border border-(--border) focus:outline-none focus:border-primary text-(--text-title) cursor-pointer"
+              title="Filtrar por Vendas do Dia ou Recebimentos de vendas anteriores"
+            >
+              <option value="ALL">Origem: Todas</option>
+              <option value="VENDA">🛒 Vendas do Dia</option>
+              <option value="RECEBIMENTO">📥 Recebimentos (Ant.)</option>
+            </select>
+          </div>
+
           {/* Status Dropdown */}
           <div className="md:col-span-2">
             <select
@@ -505,15 +545,15 @@ export function ReceivablesContent({
           </div>
 
           {/* Date Type Selector (Liquidação vs Vencimento) */}
-          <div className="md:col-span-3 flex items-center gap-1.5">
+          <div className="md:col-span-2 flex items-center gap-1.5">
             <select
               value={dateType}
               onChange={(e) => handleDateTypeChange(e.target.value as "PAID" | "DUE")}
-              className="w-full px-3 py-2.5 rounded-xl text-xs font-bold bg-(--background) border border-(--border) focus:outline-none focus:border-primary text-(--text-title) cursor-pointer"
+              className="w-full px-2 py-2.5 rounded-xl text-xs font-bold bg-(--background) border border-(--border) focus:outline-none focus:border-primary text-(--text-title) cursor-pointer"
               title="Critério de filtragem de data"
             >
-              <option value="PAID">💰 Por Data de Liquidação (Baixa)</option>
-              <option value="DUE">📅 Por Data de Vencimento</option>
+              <option value="PAID">💰 Por Liquidação</option>
+              <option value="DUE">📅 Por Vencimento</option>
             </select>
           </div>
         </div>
@@ -536,6 +576,11 @@ export function ReceivablesContent({
                 ? "Filtrando por Liquidação (Data da Baixa)"
                 : "Filtrando por Data de Vencimento"}
             </span>
+            {originType !== "ALL" && (
+              <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                {originType === "VENDA" ? "Apenas Vendas do Dia" : "Apenas Recebimentos Anteriores"}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -569,7 +614,7 @@ export function ReceivablesContent({
                 onClick={() => {
                   setStartDate("");
                   setEndDate("");
-                  fetchReceivables(1, search, paymentMethod, status, "", "", dateType);
+                  fetchReceivables(1, search, paymentMethod, status, "", "", dateType, originType);
                 }}
                 className="text-rose-500 hover:text-rose-600 p-1 text-xs flex items-center gap-0.5 cursor-pointer font-medium"
                 title="Limpar datas"
@@ -607,8 +652,10 @@ export function ReceivablesContent({
               <tr className="border-b border-(--border) text-[11px] font-bold uppercase tracking-wider text-(--text-muted) bg-(--background)/50">
                 <th className="py-3 px-4">Forma de Pagamento</th>
                 <th className="py-3 px-4">Documento</th>
+                <th className="py-3 px-4">Origem</th>
                 <th className="py-3 px-4">Cliente / Favorecido</th>
                 <th className="py-3 px-4">Venda & Descrição</th>
+                <th className="py-3 px-4">Emissão</th>
                 <th
                   className={`py-3 px-4 ${
                     dateType === "DUE" && (startDate || endDate)
@@ -634,7 +681,7 @@ export function ReceivablesContent({
             <tbody className="divide-y divide-(--border) text-sm">
               {data.items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center">
+                  <td colSpan={10} className="py-12 text-center">
                     <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
                       <div className="w-12 h-12 rounded-2xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-(--text-muted) mb-3">
                         <AlertCircle className="w-6 h-6" />
@@ -678,6 +725,19 @@ export function ReceivablesContent({
                       )}
                     </td>
 
+                    {/* Origem: Venda do Dia vs Recebimento */}
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {item.entryType === "VENDA" ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-500/10 text-blue-600 border border-blue-500/20 whitespace-nowrap inline-flex items-center gap-1">
+                          🛒 Venda do Dia
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/10 text-purple-600 border border-purple-500/20 whitespace-nowrap inline-flex items-center gap-1">
+                          📥 Recebimento
+                        </span>
+                      )}
+                    </td>
+
                     {/* Cliente */}
                     <td className="py-3 px-4">
                       <div className="font-semibold text-(--text-title) leading-tight">
@@ -709,6 +769,11 @@ export function ReceivablesContent({
                       <div className="text-xs text-(--text-muted) truncate" title={item.description}>
                         {item.description || "Sem descrição"}
                       </div>
+                    </td>
+
+                    {/* Emissão */}
+                    <td className="py-3 px-4 text-xs text-(--text-muted) whitespace-nowrap">
+                      {formatDateBR(item.issueDate)}
                     </td>
 
                     {/* Vencimento */}

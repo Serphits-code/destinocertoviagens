@@ -13,9 +13,11 @@ export interface ReceivableItem {
   description: string;
   document: string | null;
   amount: number;
+  issueDate: string | null;
   dueDate: string;
   paidAt: string | null;
   status: string;
+  entryType: "VENDA" | "RECEBIMENTO";
   paymentMethod: string | null;
   paymentMethodName: string | null;
 }
@@ -33,6 +35,10 @@ export interface ReceivablesKPIs {
   totalCount: number;
   paidAmount: number;
   pendingAmount: number;
+  salesAmount: number;
+  salesCount: number;
+  receivablesAmount: number;
+  receivablesCount: number;
   methods: MethodDistribution[];
 }
 
@@ -45,6 +51,7 @@ export async function getReceivables(params?: {
   startDate?: string;
   endDate?: string;
   dateType?: "PAID" | "DUE";
+  originType?: "ALL" | "VENDA" | "RECEBIMENTO";
 }) {
   await requireAuth();
 
@@ -107,6 +114,27 @@ export async function getReceivables(params?: {
     andConditions.push({ status: params.status });
   }
 
+  if (params?.originType && params.originType !== "ALL") {
+    if (params.originType === "VENDA") {
+      if (params.startDate && params.endDate) {
+        andConditions.push({
+          issueDate: {
+            gte: new Date(`${params.startDate}T00:00:00.000Z`),
+            lte: new Date(`${params.endDate}T23:59:59.999Z`),
+          },
+        });
+      }
+    } else if (params.originType === "RECEBIMENTO") {
+      if (params.startDate) {
+        andConditions.push({
+          issueDate: {
+            lt: new Date(`${params.startDate}T00:00:00.000Z`),
+          },
+        });
+      }
+    }
+  }
+
   if (params?.startDate || params?.endDate) {
     if (dateType === "PAID") {
       const dateFilter: any = {};
@@ -146,22 +174,31 @@ export async function getReceivables(params?: {
     }),
   ]);
 
-  const items: ReceivableItem[] = rows.map((r) => ({
-    id: r.id,
-    mondeId: r.mondeId,
-    saleId: r.sale?.id || null,
-    saleNumber: r.sale?.saleNumber || null,
-    customerName: r.customer?.name || "Cliente Não Informado",
-    customerDoc: r.customer?.cpf || null,
-    description: r.description,
-    document: r.document,
-    amount: Number(r.amount),
-    dueDate: r.dueDate.toISOString().slice(0, 10),
-    paidAt: r.paidAt ? r.paidAt.toISOString().slice(0, 10) : null,
-    status: r.status,
-    paymentMethod: r.paymentMethod,
-    paymentMethodName: r.paymentMethodName || "Não Especificado",
-  }));
+  const items: ReceivableItem[] = rows.map((r) => {
+    const isSale =
+      r.issueDate &&
+      r.paidAt &&
+      r.issueDate.toISOString().slice(0, 10) === r.paidAt.toISOString().slice(0, 10);
+
+    return {
+      id: r.id,
+      mondeId: r.mondeId,
+      saleId: r.sale?.id || null,
+      saleNumber: r.sale?.saleNumber || null,
+      customerName: r.customer?.name || "Cliente Não Informado",
+      customerDoc: r.customer?.cpf || null,
+      description: r.description,
+      document: r.document,
+      amount: Number(r.amount),
+      issueDate: r.issueDate ? r.issueDate.toISOString().slice(0, 10) : null,
+      dueDate: r.dueDate.toISOString().slice(0, 10),
+      paidAt: r.paidAt ? r.paidAt.toISOString().slice(0, 10) : null,
+      status: r.status,
+      entryType: isSale ? "VENDA" : "RECEBIMENTO",
+      paymentMethod: r.paymentMethod,
+      paymentMethodName: r.paymentMethodName || "Não Especificado",
+    };
+  });
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -179,6 +216,7 @@ export async function getReceivablesKPIs(params?: {
   startDate?: string;
   endDate?: string;
   dateType?: "PAID" | "DUE";
+  paymentMethod?: string;
 }): Promise<ReceivablesKPIs> {
   await requireAuth();
 
@@ -186,6 +224,33 @@ export async function getReceivablesKPIs(params?: {
   const where: any = {
     kind: "RECEBIMENTO",
   };
+
+  if (params?.paymentMethod && params.paymentMethod !== "ALL") {
+    if (params.paymentMethod === "PIX") {
+      where.OR = [
+        { paymentMethod: "PIX" },
+        { document: { contains: "PIX", mode: "insensitive" } },
+      ];
+    } else if (params.paymentMethod === "DEPOSITO_CONTA") {
+      where.OR = [
+        { paymentMethod: "DEPOSITO_CONTA" },
+        { document: { contains: "DEPOS", mode: "insensitive" } },
+        { document: { contains: "DEPOD", mode: "insensitive" } },
+      ];
+    } else if (params.paymentMethod === "BOLETO") {
+      where.OR = [
+        { paymentMethod: "BOLETO" },
+        { document: { contains: "BOLETO", mode: "insensitive" } },
+      ];
+    } else if (params.paymentMethod === "DINHEIRO") {
+      where.OR = [
+        { paymentMethod: "DINHEIRO" },
+        { document: { contains: "DINHEIRO", mode: "insensitive" } },
+      ];
+    } else {
+      where.paymentMethod = params.paymentMethod;
+    }
+  }
 
   if (params?.startDate || params?.endDate) {
     if (dateType === "PAID") {
@@ -206,12 +271,18 @@ export async function getReceivablesKPIs(params?: {
       status: true,
       paymentMethod: true,
       paymentMethodName: true,
+      issueDate: true,
+      paidAt: true,
     },
   });
 
   let totalAmount = 0;
   let paidAmount = 0;
   let pendingAmount = 0;
+  let salesAmount = 0;
+  let salesCount = 0;
+  let receivablesAmount = 0;
+  let receivablesCount = 0;
 
   const methodBuckets: Record<string, { label: string; count: number; total: number }> = {
     PIX: { label: "PIX", count: 0, total: 0 },
@@ -231,6 +302,19 @@ export async function getReceivablesKPIs(params?: {
     totalAmount += val;
     if (r.status === "PAGO") paidAmount += val;
     else pendingAmount += val;
+
+    const isSale =
+      r.issueDate &&
+      r.paidAt &&
+      r.issueDate.toISOString().slice(0, 10) === r.paidAt.toISOString().slice(0, 10);
+
+    if (isSale) {
+      salesAmount += val;
+      salesCount++;
+    } else {
+      receivablesAmount += val;
+      receivablesCount++;
+    }
 
     const key = r.paymentMethod && methodBuckets[r.paymentMethod] ? r.paymentMethod : "OUTROS";
     methodBuckets[key].count++;
@@ -253,6 +337,10 @@ export async function getReceivablesKPIs(params?: {
     totalCount: allReceipts.length,
     paidAmount,
     pendingAmount,
+    salesAmount,
+    salesCount,
+    receivablesAmount,
+    receivablesCount,
     methods,
   };
 }

@@ -15,6 +15,8 @@ export default async function ReceivablesPage(props: {
     status?: string;
     startDate?: string;
     endDate?: string;
+    dateType?: string;
+    origin?: string;
   }>;
 }) {
   const searchParams = await props.searchParams;
@@ -26,6 +28,7 @@ export default async function ReceivablesPage(props: {
   const startDate = searchParams?.startDate || "";
   const endDate = searchParams?.endDate || "";
   const dateType = (searchParams?.dateType as "PAID" | "DUE") || "PAID";
+  const originType = (searchParams?.origin as "ALL" | "VENDA" | "RECEBIMENTO") || "ALL";
 
   const [receivablesData, kpiData] = await Promise.all([
     getReceivables({
@@ -37,11 +40,13 @@ export default async function ReceivablesPage(props: {
       startDate: startDate || undefined,
       endDate: endDate || undefined,
       dateType,
+      originType,
     }),
     getReceivablesKPIs({
       startDate: startDate || undefined,
       endDate: endDate || undefined,
       dateType,
+      paymentMethod: method !== "ALL" ? method : undefined,
     }),
   ]);
 
@@ -55,6 +60,7 @@ export default async function ReceivablesPage(props: {
       initialStartDate={startDate}
       initialEndDate={endDate}
       initialDateType={dateType}
+      initialOriginType={originType}
     />
   );
 }

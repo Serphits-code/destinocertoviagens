@@ -225,6 +225,7 @@ model FinancialEntry {
   description String
   document    String?
   amount      Decimal   @db.Decimal(12, 2)
+  issueDate   DateTime? // Data de emissão (do título no Monde)
   dueDate     DateTime
   paidAt      DateTime?
   status      String    @default("PENDENTE") // "PAGO" | "PENDENTE"
@@ -248,6 +249,7 @@ model FinancialEntry {
   @@index([customerId])
   @@index([supplierId])
   @@index([saleId])
+  @@index([issueDate])
   @@index([kind, dueDate])
   @@index([status])
   @@index([status, dueDate])
