@@ -25,6 +25,7 @@ export default async function ReceivablesPage(props: {
   const status = searchParams?.status || "ALL";
   const startDate = searchParams?.startDate || "";
   const endDate = searchParams?.endDate || "";
+  const dateType = (searchParams?.dateType as "PAID" | "DUE") || "PAID";
 
   const [receivablesData, kpiData] = await Promise.all([
     getReceivables({
@@ -35,10 +36,12 @@ export default async function ReceivablesPage(props: {
       status: status !== "ALL" ? status : undefined,
       startDate: startDate || undefined,
       endDate: endDate || undefined,
+      dateType,
     }),
     getReceivablesKPIs({
       startDate: startDate || undefined,
       endDate: endDate || undefined,
+      dateType,
     }),
   ]);
 
@@ -51,6 +54,7 @@ export default async function ReceivablesPage(props: {
       initialStatus={status}
       initialStartDate={startDate}
       initialEndDate={endDate}
+      initialDateType={dateType}
     />
   );
 }

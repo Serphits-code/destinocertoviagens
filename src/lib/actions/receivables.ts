@@ -43,12 +43,14 @@ export async function getReceivables(params?: {
   status?: string;
   startDate?: string;
   endDate?: string;
+  dateType?: "PAID" | "DUE";
 }) {
   await requireAuth();
 
   const page = Math.max(1, params?.page ?? 1);
   const pageSize = Math.max(1, Math.min(100, params?.pageSize ?? 25));
   const skip = (page - 1) * pageSize;
+  const dateType = params?.dateType ?? "PAID";
 
   const where: any = {
     kind: "RECEBIMENTO",
@@ -73,10 +75,21 @@ export async function getReceivables(params?: {
   }
 
   if (params?.startDate || params?.endDate) {
-    where.dueDate = {};
-    if (params.startDate) where.dueDate.gte = new Date(`${params.startDate}T00:00:00.000Z`);
-    if (params.endDate) where.dueDate.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+    if (dateType === "PAID") {
+      where.paidAt = {};
+      if (params.startDate) where.paidAt.gte = new Date(`${params.startDate}T00:00:00.000Z`);
+      if (params.endDate) where.paidAt.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+    } else {
+      where.dueDate = {};
+      if (params.startDate) where.dueDate.gte = new Date(`${params.startDate}T00:00:00.000Z`);
+      if (params.endDate) where.dueDate.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+    }
   }
+
+  const orderBy =
+    dateType === "PAID" && (params?.startDate || params?.endDate)
+      ? [{ paidAt: "desc" as const }, { dueDate: "desc" as const }]
+      : [{ dueDate: "desc" as const }];
 
   const [total, rows, aggregations] = await Promise.all([
     db.financialEntry.count({ where }),
@@ -84,7 +97,7 @@ export async function getReceivables(params?: {
       where,
       skip,
       take: pageSize,
-      orderBy: { dueDate: "desc" },
+      orderBy,
       include: {
         customer: { select: { name: true, cpf: true } },
         sale: { select: { id: true, saleNumber: true } },
@@ -127,17 +140,25 @@ export async function getReceivables(params?: {
 export async function getReceivablesKPIs(params?: {
   startDate?: string;
   endDate?: string;
+  dateType?: "PAID" | "DUE";
 }): Promise<ReceivablesKPIs> {
   await requireAuth();
 
+  const dateType = params?.dateType ?? "PAID";
   const where: any = {
     kind: "RECEBIMENTO",
   };
 
   if (params?.startDate || params?.endDate) {
-    where.dueDate = {};
-    if (params.startDate) where.dueDate.gte = new Date(`${params.startDate}T00:00:00.000Z`);
-    if (params.endDate) where.dueDate.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+    if (dateType === "PAID") {
+      where.paidAt = {};
+      if (params.startDate) where.paidAt.gte = new Date(`${params.startDate}T00:00:00.000Z`);
+      if (params.endDate) where.paidAt.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+    } else {
+      where.dueDate = {};
+      if (params.startDate) where.dueDate.gte = new Date(`${params.startDate}T00:00:00.000Z`);
+      if (params.endDate) where.dueDate.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+    }
   }
 
   const allReceipts = await db.financialEntry.findMany({

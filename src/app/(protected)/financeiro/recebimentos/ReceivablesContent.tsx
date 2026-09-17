@@ -43,6 +43,7 @@ interface Props {
   initialStatus: string;
   initialStartDate: string;
   initialEndDate: string;
+  initialDateType?: "PAID" | "DUE";
 }
 
 export function ReceivablesContent({
@@ -53,6 +54,7 @@ export function ReceivablesContent({
   initialStatus,
   initialStartDate,
   initialEndDate,
+  initialDateType,
 }: Props) {
   const [isPending, startTransition] = useTransition();
 
@@ -63,6 +65,7 @@ export function ReceivablesContent({
   const [status, setStatus] = useState(initialStatus);
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(initialEndDate);
+  const [dateType, setDateType] = useState<"PAID" | "DUE">(initialDateType || "PAID");
 
   const isFirstMount = useRef(true);
 
@@ -96,7 +99,8 @@ export function ReceivablesContent({
       currentMethod = paymentMethod,
       currentStatus = status,
       currentStart = startDate,
-      currentEnd = endDate
+      currentEnd = endDate,
+      currentDateType = dateType
     ) => {
       startTransition(async () => {
         try {
@@ -109,10 +113,12 @@ export function ReceivablesContent({
               status: currentStatus !== "ALL" ? currentStatus : undefined,
               startDate: currentStart || undefined,
               endDate: currentEnd || undefined,
+              dateType: currentDateType,
             }),
             getReceivablesKPIs({
               startDate: currentStart || undefined,
               endDate: currentEnd || undefined,
+              dateType: currentDateType,
             }),
           ]);
 
@@ -127,6 +133,7 @@ export function ReceivablesContent({
           if (currentStatus !== "ALL") p.set("status", currentStatus);
           if (currentStart) p.set("startDate", currentStart);
           if (currentEnd) p.set("endDate", currentEnd);
+          if (currentDateType !== "PAID") p.set("dateType", currentDateType);
           const q = p.toString();
           window.history.replaceState(null, "", q ? `/financeiro/recebimentos?${q}` : "/financeiro/recebimentos");
         } catch (err) {
@@ -134,7 +141,7 @@ export function ReceivablesContent({
         }
       });
     },
-    [search, paymentMethod, status, startDate, endDate]
+    [search, paymentMethod, status, startDate, endDate, dateType]
   );
 
   // Debounce for live search
@@ -144,7 +151,7 @@ export function ReceivablesContent({
       return;
     }
     const timer = setTimeout(() => {
-      fetchReceivables(1, search, paymentMethod, status, startDate, endDate);
+      fetchReceivables(1, search, paymentMethod, status, startDate, endDate, dateType);
     }, 250);
 
     return () => clearTimeout(timer);
@@ -152,22 +159,27 @@ export function ReceivablesContent({
 
   const handleMethodChange = (newMethod: string) => {
     setPaymentMethod(newMethod);
-    fetchReceivables(1, search, newMethod, status, startDate, endDate);
+    fetchReceivables(1, search, newMethod, status, startDate, endDate, dateType);
   };
 
   const handleStatusChange = (newStatus: string) => {
     setStatus(newStatus);
-    fetchReceivables(1, search, paymentMethod, newStatus, startDate, endDate);
+    fetchReceivables(1, search, paymentMethod, newStatus, startDate, endDate, dateType);
   };
 
   const handleStartDateChange = (newStart: string) => {
     setStartDate(newStart);
-    fetchReceivables(1, search, paymentMethod, status, newStart, endDate);
+    fetchReceivables(1, search, paymentMethod, status, newStart, endDate, dateType);
   };
 
   const handleEndDateChange = (newEnd: string) => {
     setEndDate(newEnd);
-    fetchReceivables(1, search, paymentMethod, status, startDate, newEnd);
+    fetchReceivables(1, search, paymentMethod, status, startDate, newEnd, dateType);
+  };
+
+  const handleDateTypeChange = (newType: "PAID" | "DUE") => {
+    setDateType(newType);
+    fetchReceivables(1, search, paymentMethod, status, startDate, endDate, newType);
   };
 
   const handleClearAll = () => {
@@ -176,7 +188,8 @@ export function ReceivablesContent({
     setStatus("ALL");
     setStartDate("");
     setEndDate("");
-    fetchReceivables(1, "", "ALL", "ALL", "", "");
+    setDateType("PAID");
+    fetchReceivables(1, "", "ALL", "ALL", "", "", "PAID");
   };
 
   const getPaymentBadge = (method: string | null) => {
@@ -239,7 +252,12 @@ export function ReceivablesContent({
   };
 
   const hasActiveFilters = Boolean(
-    search.trim() || paymentMethod !== "ALL" || status !== "ALL" || startDate || endDate
+    search.trim() ||
+      paymentMethod !== "ALL" ||
+      status !== "ALL" ||
+      startDate ||
+      endDate ||
+      dateType !== "PAID"
   );
 
   return (
@@ -423,7 +441,7 @@ export function ReceivablesContent({
       <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
           {/* Live Search Input */}
-          <div className="relative md:col-span-5">
+          <div className="relative md:col-span-4">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-(--text-muted)" />
             <input
               type="text"
@@ -436,7 +454,7 @@ export function ReceivablesContent({
               <button
                 onClick={() => {
                   setSearch("");
-                  fetchReceivables(1, "", paymentMethod, status, startDate, endDate);
+                  fetchReceivables(1, "", paymentMethod, status, startDate, endDate, dateType);
                 }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-title) p-1"
                 title="Limpar pesquisa"
@@ -479,23 +497,80 @@ export function ReceivablesContent({
             </select>
           </div>
 
-          {/* Date Range Start & End */}
-          <div className="md:col-span-2 flex items-center gap-1.5">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => handleStartDateChange(e.target.value)}
-              className="w-1/2 px-2 py-2 text-xs rounded-xl bg-(--background) border border-(--border) text-(--text-title)"
-              title="Vencimento inicial"
-            />
-            <span className="text-(--text-muted) text-xs">-</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => handleEndDateChange(e.target.value)}
-              className="w-1/2 px-2 py-2 text-xs rounded-xl bg-(--background) border border-(--border) text-(--text-title)"
-              title="Vencimento final"
-            />
+          {/* Date Type Selector (Liquidação vs Vencimento) */}
+          <div className="md:col-span-3 flex items-center gap-1.5">
+            <select
+              value={dateType}
+              onChange={(e) => handleDateTypeChange(e.target.value as "PAID" | "DUE")}
+              className="w-full px-3 py-2.5 rounded-xl text-xs font-bold bg-(--background) border border-(--border) focus:outline-none focus:border-primary text-(--text-title) cursor-pointer"
+              title="Critério de filtragem de data"
+            >
+              <option value="PAID">💰 Por Data de Liquidação (Baixa)</option>
+              <option value="DUE">📅 Por Data de Vencimento</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Date Inputs Sub-bar with Clear Tag */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-(--border)/60 text-xs">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-3.5 h-3.5 text-primary" />
+            <span className="font-semibold text-(--text-muted)">
+              Intervalo de Datas:
+            </span>
+            <span
+              className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${
+                dateType === "PAID"
+                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/25"
+                  : "bg-primary/10 text-primary border-primary/25"
+              }`}
+            >
+              {dateType === "PAID"
+                ? "Filtrando por Liquidação (Data da Baixa)"
+                : "Filtrando por Data de Vencimento"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                className="px-2.5 py-1.5 text-xs rounded-xl bg-(--background) border border-(--border) text-(--text-title) focus:outline-none focus:border-primary"
+                title={
+                  dateType === "PAID"
+                    ? "Data inicial de liquidação (baixa)"
+                    : "Data inicial de vencimento"
+                }
+              />
+              <span className="text-(--text-muted) text-xs">até</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => handleEndDateChange(e.target.value)}
+                className="px-2.5 py-1.5 text-xs rounded-xl bg-(--background) border border-(--border) text-(--text-title) focus:outline-none focus:border-primary"
+                title={
+                  dateType === "PAID"
+                    ? "Data final de liquidação (baixa)"
+                    : "Data final de vencimento"
+                }
+              />
+            </div>
+            {(startDate || endDate) && (
+              <button
+                onClick={() => {
+                  setStartDate("");
+                  setEndDate("");
+                  fetchReceivables(1, search, paymentMethod, status, "", "", dateType);
+                }}
+                className="text-rose-500 hover:text-rose-600 p-1 text-xs flex items-center gap-0.5 cursor-pointer font-medium"
+                title="Limpar datas"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Limpar</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -526,8 +601,24 @@ export function ReceivablesContent({
                 <th className="py-3 px-4">Forma de Pagamento</th>
                 <th className="py-3 px-4">Cliente / Favorecido</th>
                 <th className="py-3 px-4">Venda & Descrição</th>
-                <th className="py-3 px-4">Vencimento</th>
-                <th className="py-3 px-4">Baixa / Pgto</th>
+                <th
+                  className={`py-3 px-4 ${
+                    dateType === "DUE" && (startDate || endDate)
+                      ? "bg-primary/10 text-primary font-black"
+                      : ""
+                  }`}
+                >
+                  Vencimento
+                </th>
+                <th
+                  className={`py-3 px-4 ${
+                    dateType === "PAID"
+                      ? "bg-emerald-500/10 text-emerald-600 font-black"
+                      : ""
+                  }`}
+                >
+                  Baixa / Liquidação {dateType === "PAID" && (startDate || endDate) ? "✓" : ""}
+                </th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Valor (R$)</th>
               </tr>
@@ -607,8 +698,20 @@ export function ReceivablesContent({
                     </td>
 
                     {/* Baixa / Data Pagamento */}
-                    <td className="py-3 px-4 text-xs text-(--text-muted) whitespace-nowrap">
-                      {item.paidAt ? formatDateBR(item.paidAt) : "-"}
+                    <td className="py-3 px-4 text-xs whitespace-nowrap">
+                      {item.paidAt ? (
+                        <span
+                          className={
+                            dateType === "PAID" && (startDate || endDate)
+                              ? "font-bold text-emerald-600 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-md"
+                              : "text-(--text-muted)"
+                          }
+                        >
+                          {formatDateBR(item.paidAt)}
+                        </span>
+                      ) : (
+                        <span className="text-(--text-muted)">-</span>
+                      )}
                     </td>
 
                     {/* Status */}
