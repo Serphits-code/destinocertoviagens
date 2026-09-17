@@ -18,6 +18,10 @@ import {
   Share2,
   StickyNote,
   Cake,
+  Landmark,
+  Receipt,
+  CheckSquare,
+  Target,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -36,6 +40,8 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: "Cockpit", href: "/cockpit" },
+  { icon: Landmark, label: "Extrato Bancário", href: "/financeiro/extrato" },
+  { icon: Receipt, label: "Vendas & Emissões", href: "/vendas" },
   { icon: Map, label: "Excursões", href: "/excursoes" },
   {
     icon: Users,
@@ -45,6 +51,8 @@ const menuItems: MenuItem[] = [
       { icon: Cake, label: "Aniversariantes", href: "/clientes/aniversariantes" },
     ],
   },
+  { icon: CheckSquare, label: "Tarefas & CRM", href: "/tarefas" },
+  { icon: Target, label: "Vendedores & Metas", href: "/vendedores" },
   { icon: StickyNote, label: "Quadro de Notas", href: "/notas" },
   { icon: Share2, label: "Rede Social", href: "/rede-social" },
   { icon: Building2, label: "Fornecedores & Parceiros", href: "/fornecedores" },
