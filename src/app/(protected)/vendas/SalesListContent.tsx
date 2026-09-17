@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Receipt,
@@ -16,8 +16,10 @@ import {
   CreditCard,
   Tag,
   ShieldCheck,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
-import { SaleSummaryItem, getSaleDetail } from "@/lib/actions/sales";
+import { SaleSummaryItem, getSaleDetail, getSales } from "@/lib/actions/sales";
 
 interface Props {
   initialData: {
@@ -44,10 +46,18 @@ export function SalesListContent({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
+  const [data, setData] = useState(initialData);
   const [search, setSearch] = useState(initialSearch);
   const [status, setStatus] = useState(initialStatus);
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(initialEndDate);
+
+  const isFirstMount = useRef(true);
+
+  // Sincroniza se o servidor reenviar initialData
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
 
   // Modal / Drawer de Detalhes
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
@@ -69,16 +79,83 @@ export function SalesListContent({
     return iso;
   };
 
-  const handleFilter = (newPage = 1) => {
-    startTransition(() => {
-      const p = new URLSearchParams();
-      p.set("page", String(newPage));
-      if (search.trim()) p.set("search", search.trim());
-      if (status !== "ALL") p.set("status", status);
-      if (startDate) p.set("startDate", startDate);
-      if (endDate) p.set("endDate", endDate);
-      router.push(`/vendas?${p.toString()}`);
-    });
+  // Busca de dados em tempo real
+  const fetchSales = useCallback(
+    (
+      newPage = 1,
+      currentSearch = search,
+      currentStatus = status,
+      currentStart = startDate,
+      currentEnd = endDate
+    ) => {
+      startTransition(async () => {
+        try {
+          const res = await getSales({
+            page: newPage,
+            search: currentSearch.trim(),
+            status: currentStatus,
+            startDate: currentStart || undefined,
+            endDate: currentEnd || undefined,
+          });
+          setData(res);
+
+          // Atualiza URL no navegador sem reload
+          const p = new URLSearchParams();
+          if (newPage > 1) p.set("page", String(newPage));
+          if (currentSearch.trim()) p.set("search", currentSearch.trim());
+          if (currentStatus !== "ALL") p.set("status", currentStatus);
+          if (currentStart) p.set("startDate", currentStart);
+          if (currentEnd) p.set("endDate", currentEnd);
+          const q = p.toString();
+          window.history.replaceState(null, "", q ? `/vendas?${q}` : "/vendas");
+        } catch (err) {
+          console.error("Erro ao buscar vendas:", err);
+        }
+      });
+    },
+    [search, status, startDate, endDate]
+  );
+
+  // Debounce de 250ms para pesquisa ao digitar
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchSales(1, search, status, startDate, endDate);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Disparo imediato na troca de status ou datas
+  const handleStatusChange = (newStatus: string) => {
+    setStatus(newStatus);
+    fetchSales(1, search, newStatus, startDate, endDate);
+  };
+
+  const handleStartDateChange = (newStart: string) => {
+    setStartDate(newStart);
+    fetchSales(1, search, status, newStart, endDate);
+  };
+
+  const handleEndDateChange = (newEnd: string) => {
+    setEndDate(newEnd);
+    fetchSales(1, search, status, startDate, newEnd);
+  };
+
+  const handleClearSearch = () => {
+    setSearch("");
+    fetchSales(1, "", status, startDate, endDate);
+  };
+
+  const handleClearAll = () => {
+    setSearch("");
+    setStatus("ALL");
+    setStartDate("");
+    setEndDate("");
+    fetchSales(1, "", "ALL", "", "");
   };
 
   const handleOpenDetail = async (id: string) => {
@@ -107,6 +184,8 @@ export function SalesListContent({
     }
   };
 
+  const hasActiveFilters = Boolean(search.trim() || status !== "ALL" || startDate || endDate);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -130,20 +209,20 @@ export function SalesListContent({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
           <div className="text-[11px] font-semibold text-(--text-muted) uppercase">Total de Vendas</div>
-          <div className="text-2xl font-extrabold text-(--text-title) mt-1">{initialData.total.toLocaleString("pt-BR")}</div>
+          <div className="text-2xl font-extrabold text-(--text-title) mt-1">{data.total.toLocaleString("pt-BR")}</div>
           <p className="text-[11px] text-(--text-muted) mt-1">Registradas no histórico</p>
         </div>
 
         <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
           <div className="text-[11px] font-semibold text-emerald-600 uppercase">Faturamento Total</div>
-          <div className="text-2xl font-extrabold text-emerald-600 mt-1">{formatCurrency(initialData.totalFaturado)}</div>
+          <div className="text-2xl font-extrabold text-emerald-600 mt-1">{formatCurrency(data.totalFaturado)}</div>
           <p className="text-[11px] text-(--text-muted) mt-1">Volume acumulado de vendas</p>
         </div>
 
         <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
           <div className="text-[11px] font-semibold text-primary uppercase">Ticket Médio</div>
           <div className="text-2xl font-extrabold text-primary mt-1">
-            {initialData.total > 0 ? formatCurrency(initialData.totalFaturado / initialData.total) : "R$ 0,00"}
+            {data.total > 0 ? formatCurrency(data.totalFaturado / data.total) : "R$ 0,00"}
           </div>
           <p className="text-[11px] text-(--text-muted) mt-1">Média por contrato de viagem</p>
         </div>
@@ -151,31 +230,44 @@ export function SalesListContent({
         <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
           <div className="text-[11px] font-semibold text-blue-600 uppercase">Página Atual</div>
           <div className="text-2xl font-extrabold text-blue-600 mt-1">
-            {initialData.page} / {initialData.totalPages || 1}
+            {data.page} / {data.totalPages || 1}
           </div>
           <p className="text-[11px] text-(--text-muted) mt-1">Mostrando 25 vendas por página</p>
         </div>
       </div>
 
-      {/* Barra de Filtros */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
-        <div className="md:col-span-4 relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
+      {/* Barra de Filtros com Pesquisa em Tempo Real */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs items-center">
+        <div className="md:col-span-5 relative">
+          {isPending ? (
+            <Loader2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary animate-spin" />
+          ) : (
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
+          )}
           <input
             type="text"
             placeholder="Nº Venda, Cliente, CPF, Vendedor..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleFilter(1)}
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:ring-2 focus:ring-primary/40"
+            className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-title) p-0.5 rounded-full cursor-pointer transition-colors"
+              title="Limpar busca"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="md:col-span-3">
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:ring-2 focus:ring-primary/40"
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className="w-full py-2 px-3 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
           >
             <option value="ALL">Todos os Status</option>
             <option value="CONFIRMADA">Confirmadas</option>
@@ -184,32 +276,36 @@ export function SalesListContent({
           </select>
         </div>
 
-        <div className="md:col-span-3 flex items-center gap-1.5">
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body)"
-            title="Data Inicial"
-          />
-          <span className="text-xs text-(--text-muted)">a</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body)"
-            title="Data Final"
-          />
-        </div>
+        <div className="md:col-span-4 flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-1">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => handleStartDateChange(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40"
+              title="Data Inicial"
+            />
+            <span className="text-xs text-(--text-muted)">a</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => handleEndDateChange(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40"
+              title="Data Final"
+            />
+          </div>
 
-        <div className="md:col-span-2 flex items-center justify-end">
-          <button
-            onClick={() => handleFilter(1)}
-            disabled={isPending}
-            className="w-full px-4 py-2 text-xs font-semibold rounded-xl bg-primary text-white hover:bg-primary-strong transition-colors"
-          >
-            {isPending ? "Buscando..." : "Filtrar"}
-          </button>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="px-2.5 py-1.5 text-[11px] font-medium rounded-xl border border-(--border) text-(--text-muted) hover:text-rose-500 hover:border-rose-500/30 hover:bg-rose-500/5 transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+              title="Limpar todos os filtros"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Limpar
+            </button>
+          )}
         </div>
       </div>
 
@@ -232,14 +328,14 @@ export function SalesListContent({
               </tr>
             </thead>
             <tbody className="divide-y divide-(--border)">
-              {initialData.sales.length === 0 ? (
+              {data.sales.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-(--text-muted)">
-                    Nenhuma venda encontrada com os critérios informados.
+                    {isPending ? "Carregando resultados..." : "Nenhuma venda encontrada com os critérios informados."}
                   </td>
                 </tr>
               ) : (
-                initialData.sales.map((sale) => (
+                data.sales.map((sale) => (
                   <tr
                     key={sale.id}
                     onClick={() => handleOpenDetail(sale.id)}
@@ -283,26 +379,26 @@ export function SalesListContent({
         </div>
 
         {/* Paginação */}
-        {initialData.totalPages > 1 && (
+        {data.totalPages > 1 && (
           <div className="p-4 border-t border-(--border) flex items-center justify-between bg-(--surface-subtle) text-xs">
             <span className="text-(--text-muted)">
-              Total: {initialData.total} vendas
+              Total: {data.total} vendas
             </span>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleFilter(initialData.page - 1)}
-                disabled={initialData.page <= 1 || isPending}
-                className="px-3 py-1.5 rounded-lg border border-(--border) bg-(--surface) text-(--text-body) disabled:opacity-40"
+                onClick={() => fetchSales(data.page - 1)}
+                disabled={data.page <= 1 || isPending}
+                className="px-3 py-1.5 rounded-lg border border-(--border) bg-(--surface) text-(--text-body) disabled:opacity-40 cursor-pointer"
               >
                 Anterior
               </button>
               <span className="font-semibold text-(--text-title)">
-                {initialData.page} de {initialData.totalPages}
+                {data.page} de {data.totalPages}
               </span>
               <button
-                onClick={() => handleFilter(initialData.page + 1)}
-                disabled={initialData.page >= initialData.totalPages || isPending}
-                className="px-3 py-1.5 rounded-lg border border-(--border) bg-(--surface) text-(--text-body) disabled:opacity-40"
+                onClick={() => fetchSales(data.page + 1)}
+                disabled={data.page >= data.totalPages || isPending}
+                className="px-3 py-1.5 rounded-lg border border-(--border) bg-(--surface) text-(--text-body) disabled:opacity-40 cursor-pointer"
               >
                 Próxima
               </button>

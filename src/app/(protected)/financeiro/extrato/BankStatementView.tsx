@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   Printer,
   X,
+  Loader2,
 } from "lucide-react";
 import {
   BankAccountItem,
@@ -253,8 +254,8 @@ export function BankStatementView({
         })}
       </div>
 
-      {/* Barra de Filtros de Período & Busca */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
+      {/* Barra de Filtros de Período & Busca em Tempo Real */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs items-center">
         <div className="md:col-span-4 flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
@@ -263,8 +264,18 @@ export function BankStatementView({
               placeholder="Pesquisar por pessoa, doc, descrição..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
+            {searchFilter && (
+              <button
+                type="button"
+                onClick={() => setSearchFilter("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-title) p-0.5 rounded-full cursor-pointer transition-colors"
+                title="Limpar busca"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -276,27 +287,41 @@ export function BankStatementView({
             <input
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:ring-2 focus:ring-primary/40"
+              onChange={(e) => {
+                const val = e.target.value;
+                setStartDate(val);
+                if (val && val.length === 10 && endDate && endDate.length === 10) {
+                  handleApplyFilters(currentAccountId, val, endDate);
+                }
+              }}
+              className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
             <span className="text-xs text-(--text-muted) shrink-0">Até:</span>
             <input
               type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:ring-2 focus:ring-primary/40"
+              onChange={(e) => {
+                const val = e.target.value;
+                setEndDate(val);
+                if (val && val.length === 10 && startDate && startDate.length === 10) {
+                  handleApplyFilters(currentAccountId, startDate, val);
+                }
+              }}
+              className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
           </div>
         </div>
 
         <div className="md:col-span-3 flex items-center gap-2 justify-end">
-          <button
-            onClick={() => handleApplyFilters()}
-            disabled={isPending}
-            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold rounded-xl bg-primary text-white hover:bg-primary-strong transition-colors"
-          >
-            {isPending ? "Filtrando..." : "Filtrar Período"}
-          </button>
+          {isPending ? (
+            <span className="text-xs text-primary font-medium flex items-center gap-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Atualizando...
+            </span>
+          ) : (
+            <span className="text-[11px] text-(--text-muted) hidden sm:inline">
+              {filteredTransactions.length} lançamentos
+            </span>
+          )}
           
           <button
             onClick={() => {
@@ -304,7 +329,7 @@ export function BankStatementView({
               setEndDate("2026-09-17");
               handleApplyFilters(undefined, "2026-09-15", "2026-09-17");
             }}
-            className="px-2.5 py-2 text-[11px] font-medium rounded-xl border border-(--border) text-(--text-muted) hover:text-(--text-body) hover:bg-(--surface-muted) transition-colors whitespace-nowrap"
+            className="px-2.5 py-2 text-[11px] font-medium rounded-xl border border-(--border) text-(--text-muted) hover:text-(--text-body) hover:bg-(--surface-muted) transition-colors whitespace-nowrap cursor-pointer"
             title="Ver período 15 a 17/09 do print da Monde"
           >
             15 a 17/09

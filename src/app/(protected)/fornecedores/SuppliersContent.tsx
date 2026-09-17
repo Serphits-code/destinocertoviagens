@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Building2,
@@ -21,6 +21,7 @@ import {
   Car,
   Landmark,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import { searchSuppliers } from "./actions";
 
@@ -108,6 +109,8 @@ export function SuppliersContent({
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [isPending, startTransition] = useTransition();
 
+  const isInitialMount = useRef(true);
+
   const handleSearch = (newQuery: string, newCat: string, newPage: number) => {
     startTransition(async () => {
       const res = await searchSuppliers({
@@ -123,9 +126,19 @@ export function SuppliersContent({
     });
   };
 
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      handleSearch(searchQuery, selectedCategory, 1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const onSearchChange = (val: string) => {
     setSearchQuery(val);
-    handleSearch(val, selectedCategory, 1);
   };
 
   const onCategoryChange = (cat: string) => {
@@ -228,10 +241,17 @@ export function SuppliersContent({
       {/* Barra de Pesquisa e Filtros */}
       <div className="p-4 rounded-2xl bg-(--surface) border border-(--border) shadow-sm flex flex-col md:flex-row items-center gap-3">
         <div className="relative flex-1 w-full">
-          <Search
-            size={18}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-(--text-muted)"
-          />
+          {isPending ? (
+            <Loader2
+              size={18}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-primary animate-spin"
+            />
+          ) : (
+            <Search
+              size={18}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-(--text-muted)"
+            />
+          )}
           <input
             type="text"
             placeholder="Pesquisar por nome, razão social, CNPJ, cidade ou categoria..."

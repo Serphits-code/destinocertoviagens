@@ -1,29 +1,36 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckSquare,
-  Search,
   Plus,
+  Search,
+  Filter,
+  Calendar,
   Clock,
+  User,
   AlertCircle,
   CheckCircle2,
-  Calendar,
-  User,
+  Circle,
   X,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
-import { TaskItem, updateTaskStatus, createTask } from "@/lib/actions/crm-tasks";
+import {
+  TaskItem,
+  updateTaskStatus,
+  createTask,
+  getTasks,
+} from "@/lib/actions/crm-tasks";
 
 interface Props {
   initialData: {
     tasks: TaskItem[];
-    counts: {
-      total: number;
-      pending: number;
-      inProgress: number;
-      done: number;
-    };
+    total: number;
+    pendentes: number;
+    emAndamento: number;
+    concluidas: number;
   };
   initialStatus: string;
   initialPriority: string;
@@ -39,9 +46,17 @@ export function TasksContent({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
+  const [data, setData] = useState(initialData);
   const [status, setStatus] = useState(initialStatus);
   const [priority, setPriority] = useState(initialPriority);
   const [search, setSearch] = useState(initialSearch);
+
+  const isFirstMount = useRef(true);
+
+  // Sincroniza se servidor reenviar
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
 
   // Modal Nova Tarefa
   const [modalOpen, setModalOpen] = useState(false);
@@ -52,23 +67,83 @@ export function TasksContent({
   const [newDueDate, setNewDueDate] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const handleFilter = () => {
-    startTransition(() => {
-      const p = new URLSearchParams();
-      if (status !== "ALL") p.set("status", status);
-      if (priority !== "ALL") p.set("priority", priority);
-      if (search.trim()) p.set("search", search.trim());
-      router.push(`/tarefas?${p.toString()}`);
-    });
+  // Busca em tempo real
+  const fetchTasks = useCallback(
+    (currentSearch = search, currentStatus = status, currentPriority = priority) => {
+      startTransition(async () => {
+        try {
+          const res = await getTasks({
+            search: currentSearch.trim(),
+            status: currentStatus,
+            priority: currentPriority,
+          });
+          setData(res);
+
+          const p = new URLSearchParams();
+          if (currentStatus !== "ALL") p.set("status", currentStatus);
+          if (currentPriority !== "ALL") p.set("priority", currentPriority);
+          if (currentSearch.trim()) p.set("search", currentSearch.trim());
+          const q = p.toString();
+          window.history.replaceState(null, "", q ? `/tarefas?${q}` : "/tarefas");
+        } catch (err) {
+          console.error("Erro ao buscar tarefas:", err);
+        }
+      });
+    },
+    [search, status, priority]
+  );
+
+  // Debounce de 250ms ao digitar na pesquisa
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchTasks(search, status, priority);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const handleStatusChange = (newStatus: string) => {
+    setStatus(newStatus);
+    fetchTasks(search, newStatus, priority);
+  };
+
+  const handlePriorityChange = (newPriority: string) => {
+    setPriority(newPriority);
+    fetchTasks(search, status, newPriority);
+  };
+
+  const handleClearSearch = () => {
+    setSearch("");
+    fetchTasks("", status, priority);
+  };
+
+  const handleClearAll = () => {
+    setSearch("");
+    setStatus("ALL");
+    setPriority("ALL");
+    fetchTasks("", "ALL", "ALL");
   };
 
   const handleToggleStatus = async (taskId: string, currentStatus: string) => {
     const nextStatus = currentStatus === "CONCLUIDA" ? "PENDENTE" : "CONCLUIDA";
+    // Atualização otimista imediata na interface
+    setData((prev) => ({
+      ...prev,
+      tasks: prev.tasks.map((t) =>
+        t.id === taskId ? { ...t, status: nextStatus } : t
+      ),
+      concluidas: nextStatus === "CONCLUIDA" ? prev.concluidas + 1 : Math.max(0, prev.concluidas - 1),
+      pendentes: nextStatus === "PENDENTE" ? prev.pendentes + 1 : Math.max(0, prev.pendentes - 1),
+    }));
+
     try {
       await updateTaskStatus(taskId, nextStatus);
-      router.refresh();
     } catch (err: any) {
       alert("Erro ao alterar tarefa: " + err.message);
+      fetchTasks(search, status, priority);
     }
   };
 
@@ -86,7 +161,7 @@ export function TasksContent({
       setModalOpen(false);
       setNewTitle("");
       setNewDesc("");
-      router.refresh();
+      fetchTasks(search, status, priority);
     } catch (err: any) {
       alert("Erro ao criar tarefa: " + err.message);
     } finally {
@@ -112,6 +187,8 @@ export function TasksContent({
     }
   };
 
+  const hasActiveFilters = Boolean(search.trim() || status !== "ALL" || priority !== "ALL");
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -122,17 +199,17 @@ export function TasksContent({
           </div>
           <div>
             <h1 className="text-xl font-bold text-(--text-title)">
-              Tarefas & Atendimentos (CRM)
+              Tarefas, CRM & Pendências
             </h1>
             <p className="text-xs text-(--text-muted)">
-              Acompanhamento de chamados, follow-up de clientes e prazos da agência
+              Acompanhamento operacional, contatos com passageiros e tarefas internas
             </p>
           </div>
         </div>
 
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl bg-primary text-white hover:bg-primary-strong transition-colors shadow-sm self-start md:self-auto"
+          className="px-4 py-2.5 text-xs font-semibold rounded-xl bg-primary text-white hover:bg-primary-strong transition-all flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           Nova Tarefa
@@ -140,51 +217,64 @@ export function TasksContent({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
-          <div className="text-[11px] font-semibold text-(--text-muted) uppercase">Total</div>
-          <div className="text-2xl font-extrabold text-(--text-title) mt-1">{initialData.counts.total}</div>
-          <p className="text-[11px] text-(--text-muted) mt-1">Chamados cadastrados</p>
+          <div className="text-[11px] font-semibold text-(--text-muted) uppercase">Total de Tarefas</div>
+          <div className="text-2xl font-extrabold text-(--text-title) mt-1">{data.total}</div>
+          <p className="text-[11px] text-(--text-muted) mt-1">Registradas no sistema</p>
         </div>
 
-        <div className="bg-(--surface) p-4 rounded-2xl border border-amber-500/20 shadow-xs">
+        <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
           <div className="text-[11px] font-semibold text-amber-600 uppercase">Pendentes</div>
-          <div className="text-2xl font-extrabold text-amber-600 mt-1">{initialData.counts.pending}</div>
+          <div className="text-2xl font-extrabold text-amber-600 mt-1">{data.pendentes}</div>
           <p className="text-[11px] text-(--text-muted) mt-1">Aguardando atendimento</p>
         </div>
 
-        <div className="bg-(--surface) p-4 rounded-2xl border border-blue-500/20 shadow-xs">
+        <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
           <div className="text-[11px] font-semibold text-blue-600 uppercase">Em Andamento</div>
-          <div className="text-2xl font-extrabold text-blue-600 mt-1">{initialData.counts.inProgress}</div>
-          <p className="text-[11px] text-(--text-muted) mt-1">Em tratativa com cliente</p>
+          <div className="text-2xl font-extrabold text-blue-600 mt-1">{data.emAndamento}</div>
+          <p className="text-[11px] text-(--text-muted) mt-1">Em execução agora</p>
         </div>
 
-        <div className="bg-(--surface) p-4 rounded-2xl border border-emerald-500/20 shadow-xs">
+        <div className="bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
           <div className="text-[11px] font-semibold text-emerald-600 uppercase">Concluídas</div>
-          <div className="text-2xl font-extrabold text-emerald-600 mt-1">{initialData.counts.done}</div>
+          <div className="text-2xl font-extrabold text-emerald-600 mt-1">{data.concluidas}</div>
           <p className="text-[11px] text-(--text-muted) mt-1">Finalizadas com sucesso</p>
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs">
+      {/* Filtros em Tempo Real */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-(--surface) p-4 rounded-2xl border border-(--border) shadow-xs items-center">
         <div className="md:col-span-5 relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
+          {isPending ? (
+            <Loader2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary animate-spin" />
+          ) : (
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
+          )}
           <input
             type="text"
             placeholder="Pesquisar por título, cliente, descrição..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleFilter()}
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:ring-2 focus:ring-primary/40"
+            className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-title) p-0.5 rounded-full cursor-pointer transition-colors"
+              title="Limpar busca"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="md:col-span-3">
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body)"
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className="w-full py-2 px-3 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
           >
             <option value="ALL">Todos os Status</option>
             <option value="PENDENTE">Pendentes</option>
@@ -196,8 +286,8 @@ export function TasksContent({
         <div className="md:col-span-2">
           <select
             value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body)"
+            onChange={(e) => handlePriorityChange(e.target.value)}
+            className="w-full py-2 px-3 text-xs rounded-xl border border-(--border) bg-(--background) text-(--text-body) focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
           >
             <option value="ALL">Todas Prioridades</option>
             <option value="ALTA">Alta</option>
@@ -207,24 +297,28 @@ export function TasksContent({
         </div>
 
         <div className="md:col-span-2 flex items-center justify-end">
-          <button
-            onClick={handleFilter}
-            disabled={isPending}
-            className="w-full px-4 py-2 text-xs font-semibold rounded-xl bg-primary text-white hover:bg-primary-strong transition-colors"
-          >
-            {isPending ? "Filtrando..." : "Filtrar"}
-          </button>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="px-3 py-2 text-xs font-semibold rounded-xl border border-(--border) text-(--text-muted) hover:text-rose-500 hover:border-rose-500/30 hover:bg-rose-500/5 transition-colors flex items-center gap-1.5 cursor-pointer w-full justify-center"
+              title="Limpar todos os filtros"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Limpar Filtros
+            </button>
+          )}
         </div>
       </div>
 
       {/* Lista de Tarefas */}
       <div className="space-y-3">
-        {initialData.tasks.length === 0 ? (
+        {data.tasks.length === 0 ? (
           <div className="p-12 text-center text-xs text-(--text-muted) bg-(--surface) rounded-2xl border border-(--border)">
-            Nenhuma tarefa encontrada.
+            {isPending ? "Pesquisando tarefas..." : "Nenhuma tarefa encontrada com os filtros atuais."}
           </div>
         ) : (
-          initialData.tasks.map((task) => {
+          data.tasks.map((task) => {
             const isDone = task.status === "CONCLUIDA";
             return (
               <div
