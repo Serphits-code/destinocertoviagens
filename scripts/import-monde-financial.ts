@@ -1,8 +1,28 @@
 import { execSync } from 'child_process';
 import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
 
 const prisma = new PrismaClient();
-const dumpPath = 'c:/geo/data/database_20260902155615.dump';
+
+function getDumpPath(): string {
+  if (process.argv[2] && fs.existsSync(process.argv[2])) {
+    return process.argv[2];
+  }
+  const dataDir = 'c:/geo/data';
+  if (fs.existsSync(dataDir)) {
+    const files = fs.readdirSync(dataDir)
+      .filter((f) => f.endsWith('.dump'))
+      .sort()
+      .reverse();
+    if (files.length > 0) {
+      return path.join(dataDir, files[0]).replace(/\\/g, '/');
+    }
+  }
+  return 'c:/geo/data/database_20260917103253.dump';
+}
+
+const dumpPath = getDumpPath();
 const pgRestore = 'C:\\Program Files\\PostgreSQL\\17\\bin\\pg_restore.exe';
 
 function parseDate(str: string | null): Date | null {
@@ -19,6 +39,7 @@ function cleanVal(str: string | undefined): string | null {
 
 async function main() {
   console.log('💳 Iniciando importação dos dados financeiros do dump...');
+  console.log('📁 Arquivo de dump utilizado:', dumpPath);
 
   // Carregar mapas de Clientes e Fornecedores por mondeId
   console.log('🔍 Mapeando Clientes e Fornecedores cadastrados...');
@@ -87,22 +108,62 @@ async function main() {
     }
   }
 
-  console.log(`💰 Total de lançamentos mapeados e prontos: ${entries.length}`);
+  console.log(`💰 Total de lançamentos extraídos no dump: ${entries.length}`);
 
-  // Inserção em lotes de 1.000
-  console.log('💾 Inserindo lançamentos financeiros no PostgreSQL...');
+  // Verificar quais já existem no banco
+  const existingEntries = await prisma.financialEntry.findMany({
+    select: { id: true, mondeId: true, status: true, paidAt: true },
+  });
+  const existingMap = new Map(existingEntries.map((e) => [e.mondeId, e]));
+
+  const newEntries = entries.filter((e) => !existingMap.has(e.mondeId));
+  const entriesToUpdate = entries.filter((e) => {
+    const dbE = existingMap.get(e.mondeId);
+    if (!dbE) return false;
+    // Se estava PENDENTE e agora foi liquidado/pago no dump
+    return dbE.status === 'PENDENTE' && e.status === 'PAGO';
+  });
+
+  // 1. Inserção de novos lançamentos em lotes de 1.000
   const batchSize = 1000;
-  for (let i = 0; i < entries.length; i += batchSize) {
-    const chunk = entries.slice(i, i + batchSize);
-    await prisma.financialEntry.createMany({
-      data: chunk,
-      skipDuplicates: true,
-    });
-    process.stdout.write(`   Inseridos ${Math.min(i + batchSize, entries.length)} de ${entries.length} lançamentos\r`);
+  if (newEntries.length > 0) {
+    console.log(`💾 Inserindo ${newEntries.length} novos lançamentos financeiros no PostgreSQL...`);
+    for (let i = 0; i < newEntries.length; i += batchSize) {
+      const chunk = newEntries.slice(i, i + batchSize);
+      await prisma.financialEntry.createMany({
+        data: chunk,
+        skipDuplicates: true,
+      });
+      process.stdout.write(`   Inseridos ${Math.min(i + batchSize, newEntries.length)} de ${newEntries.length} lançamentos\r`);
+    }
+    console.log(`\n✅ ${newEntries.length} novos lançamentos inseridos com sucesso!`);
+  } else {
+    console.log(`ℹ️ Nenhum novo lançamento para inserir.`);
+  }
+
+  // 2. Atualização de lançamentos que foram quitados (liquidados)
+  if (entriesToUpdate.length > 0) {
+    console.log(`🔄 Atualizando ${entriesToUpdate.length} lançamentos que foram quitados (PENDENTE ➔ PAGO)...`);
+    for (const item of entriesToUpdate) {
+      await prisma.financialEntry.update({
+        where: { mondeId: item.mondeId },
+        data: {
+          paidAt: item.paidAt,
+          status: 'PAGO',
+        },
+      });
+    }
+    console.log(`✅ ${entriesToUpdate.length} lançamentos atualizados para PAGO!`);
   }
 
   const totalFin = await prisma.financialEntry.count();
-  console.log(`\n✅ Sucesso! Total de lançamentos no banco: ${totalFin}`);
+  const totalPaid = await prisma.financialEntry.count({ where: { status: 'PAGO' } });
+  const totalPending = await prisma.financialEntry.count({ where: { status: 'PENDENTE' } });
+
+  console.log(`\n🎉 Finalizado com sucesso! Total no banco:`);
+  console.log(`   - Total de lançamentos: ${totalFin}`);
+  console.log(`   - Pagos/Recebidos: ${totalPaid}`);
+  console.log(`   - Pendentes: ${totalPending}`);
 }
 
 main()

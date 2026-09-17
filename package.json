@@ -9,7 +9,11 @@
     "lint": "eslint",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:import-data": "tsx scripts/import-monde-data.ts",
+    "db:import-fin": "tsx scripts/import-monde-financial.ts",
+    "db:import-trips": "tsx scripts/import-monde-trips.ts",
+    "db:import-all": "tsx scripts/import-monde-data.ts && tsx scripts/import-monde-financial.ts && tsx scripts/import-monde-trips.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

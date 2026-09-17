@@ -1,8 +1,28 @@
 import { execSync } from 'child_process';
 import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
 
 const prisma = new PrismaClient();
-const dumpPath = 'c:/geo/data/database_20260902155615.dump';
+
+function getDumpPath(): string {
+  if (process.argv[2] && fs.existsSync(process.argv[2])) {
+    return process.argv[2];
+  }
+  const dataDir = 'c:/geo/data';
+  if (fs.existsSync(dataDir)) {
+    const files = fs.readdirSync(dataDir)
+      .filter((f) => f.endsWith('.dump'))
+      .sort()
+      .reverse();
+    if (files.length > 0) {
+      return path.join(dataDir, files[0]).replace(/\\/g, '/');
+    }
+  }
+  return 'c:/geo/data/database_20260917103253.dump';
+}
+
+const dumpPath = getDumpPath();
 const pgRestore = 'C:\\Program Files\\PostgreSQL\\17\\bin\\pg_restore.exe';
 
 function extractTableData(tableName: string): string {
@@ -26,6 +46,7 @@ function cleanVal(str: string | undefined): string | null {
 
 async function main() {
   console.log('🚀 Iniciando extração do dump do Monde...');
+  console.log('📁 Arquivo de dump utilizado:', dumpPath);
 
   // 1. Estados
   console.log('📍 Extraindo estados...');
@@ -199,39 +220,123 @@ async function main() {
     }
   }
 
-  console.log(`📦 Preparados para inserção:`);
+  console.log(`📦 Dados extraídos do dump:`);
   console.log(`   - Clientes (PF): ${customers.length}`);
   console.log(`   - Fornecedores (PJ): ${suppliers.length}`);
 
-  // Inserção em lotes de 500
-  console.log('💾 Inserindo Clientes no PostgreSQL...');
-  const batchSize = 500;
-  for (let i = 0; i < customers.length; i += batchSize) {
-    const chunk = customers.slice(i, i + batchSize);
-    await prisma.customer.createMany({
-      data: chunk,
-      skipDuplicates: true,
-    });
-    process.stdout.write(`   Inseridos ${Math.min(i + batchSize, customers.length)} de ${customers.length} clientes\r`);
-  }
-  console.log(`\n✅ ${customers.length} Clientes inseridos com sucesso!`);
+  // Mapear registros atuais no PostgreSQL
+  const [existingCustomers, existingSuppliers] = await Promise.all([
+    prisma.customer.findMany({
+      select: { id: true, mondeId: true, lastSaleDate: true, firstSaleDate: true, phone: true, mobile: true, email: true },
+    }),
+    prisma.supplier.findMany({
+      select: { id: true, mondeId: true, phone: true, mobile: true, email: true },
+    }),
+  ]);
 
-  console.log('💾 Inserindo Fornecedores no PostgreSQL...');
-  for (let i = 0; i < suppliers.length; i += batchSize) {
-    const chunk = suppliers.slice(i, i + batchSize);
-    await prisma.supplier.createMany({
-      data: chunk,
-      skipDuplicates: true,
-    });
-    process.stdout.write(`   Inseridos ${Math.min(i + batchSize, suppliers.length)} de ${suppliers.length} fornecedores\r`);
+  const existingCustMap = new Map(existingCustomers.map((c) => [c.mondeId, c]));
+  const existingSuppMap = new Map(existingSuppliers.map((s) => [s.mondeId, s]));
+
+  const newCustomers = customers.filter((c) => !existingCustMap.has(c.mondeId));
+  const customersToUpdate = customers.filter((c) => {
+    const dbC = existingCustMap.get(c.mondeId);
+    if (!dbC) return false;
+    const lastSaleChanged = c.lastSaleDate && (!dbC.lastSaleDate || dbC.lastSaleDate.getTime() !== c.lastSaleDate.getTime());
+    const phoneChanged = c.phone !== dbC.phone;
+    const mobileChanged = c.mobile !== dbC.mobile;
+    const emailChanged = c.email !== dbC.email;
+    return lastSaleChanged || phoneChanged || mobileChanged || emailChanged;
+  });
+
+  const newSuppliers = suppliers.filter((s) => !existingSuppMap.has(s.mondeId));
+  const suppliersToUpdate = suppliers.filter((s) => {
+    const dbS = existingSuppMap.get(s.mondeId);
+    if (!dbS) return false;
+    return s.phone !== dbS.phone || s.mobile !== dbS.mobile || s.email !== dbS.email;
+  });
+
+  // 1. Inserção de Novos Clientes em lotes de 500
+  const batchSize = 500;
+  if (newCustomers.length > 0) {
+    console.log(`💾 Inserindo ${newCustomers.length} novos Clientes no PostgreSQL...`);
+    for (let i = 0; i < newCustomers.length; i += batchSize) {
+      const chunk = newCustomers.slice(i, i + batchSize);
+      await prisma.customer.createMany({
+        data: chunk,
+        skipDuplicates: true,
+      });
+      process.stdout.write(`   Inseridos ${Math.min(i + batchSize, newCustomers.length)} de ${newCustomers.length} novos clientes\r`);
+    }
+    console.log(`\n✅ Novos Clientes inseridos com sucesso!`);
+  } else {
+    console.log(`ℹ️ Nenhum novo cliente a inserir.`);
   }
-  console.log(`\n✅ ${suppliers.length} Fornecedores inseridos com sucesso!`);
+
+  // 2. Atualização de Clientes existentes que sofreram alterações
+  if (customersToUpdate.length > 0) {
+    console.log(`🔄 Atualizando dados de ${customersToUpdate.length} clientes existentes...`);
+    for (const c of customersToUpdate) {
+      await prisma.customer.update({
+        where: { mondeId: c.mondeId },
+        data: {
+          lastSaleDate: c.lastSaleDate,
+          firstSaleDate: c.firstSaleDate,
+          phone: c.phone,
+          mobile: c.mobile,
+          email: c.email,
+          address: c.address,
+          number: c.number,
+          complement: c.complement,
+          neighborhood: c.neighborhood,
+          city: c.city,
+          state: c.state,
+          zipCode: c.zipCode,
+          notes: c.notes,
+        },
+      });
+    }
+    console.log(`✅ ${customersToUpdate.length} Clientes atualizados com sucesso!`);
+  }
+
+  // 3. Inserção de Novos Fornecedores em lotes de 500
+  if (newSuppliers.length > 0) {
+    console.log(`💾 Inserindo ${newSuppliers.length} novos Fornecedores no PostgreSQL...`);
+    for (let i = 0; i < newSuppliers.length; i += batchSize) {
+      const chunk = newSuppliers.slice(i, i + batchSize);
+      await prisma.supplier.createMany({
+        data: chunk,
+        skipDuplicates: true,
+      });
+      process.stdout.write(`   Inseridos ${Math.min(i + batchSize, newSuppliers.length)} de ${newSuppliers.length} novos fornecedores\r`);
+    }
+    console.log(`\n✅ Novos Fornecedores inseridos com sucesso!`);
+  } else {
+    console.log(`ℹ️ Nenhum novo fornecedor a inserir.`);
+  }
+
+  // 4. Atualização de Fornecedores existentes
+  if (suppliersToUpdate.length > 0) {
+    console.log(`🔄 Atualizando dados de ${suppliersToUpdate.length} fornecedores existentes...`);
+    for (const s of suppliersToUpdate) {
+      await prisma.supplier.update({
+        where: { mondeId: s.mondeId },
+        data: {
+          phone: s.phone,
+          mobile: s.mobile,
+          email: s.email,
+          website: s.website,
+          notes: s.notes,
+        },
+      });
+    }
+    console.log(`✅ ${suppliersToUpdate.length} Fornecedores atualizados com sucesso!`);
+  }
 
   const totalC = await prisma.customer.count();
   const totalS = await prisma.supplier.count();
-  console.log(`\n🎉 Finalizado! Total no banco:`);
-  console.log(`   - Clientes: ${totalC}`);
-  console.log(`   - Fornecedores: ${totalS}`);
+  console.log(`\n🎉 Finalizado com sucesso! Total no banco:`);
+  console.log(`   - Clientes cadastrados: ${totalC}`);
+  console.log(`   - Fornecedores cadastrados: ${totalS}`);
 }
 
 main()
