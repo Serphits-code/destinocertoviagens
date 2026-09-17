@@ -159,6 +159,11 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
     include: {
       customer: { select: { name: true } },
       sale: { select: { saleNumber: true } },
+      bankTransactions: {
+        include: {
+          account: { select: { type: true, name: true } },
+        },
+      },
     },
   });
 
@@ -193,27 +198,56 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
 
   for (const s of sales) {
     const val = Number(s.finalAmount);
-    const desc = (s.notes || "" + " " + s.items.map((i: any) => i.description).join(" ")).toUpperCase();
-    const isPacote =
-      desc.includes("PACOTE") ||
-      desc.includes("GRAMADO") ||
-      desc.includes("EXCURS") ||
-      desc.includes("CHILE") ||
-      desc.includes("FOZ") ||
-      desc.includes("JATIUCA") ||
-      desc.includes("NORONHA") ||
-      desc.includes("LENÇOIS") ||
-      (desc.includes("HOTEL") && (desc.includes("VOO") || desc.includes("PASSEIO") || desc.includes("TRANSFER") || desc.includes("GUIA")));
+    const fullText = (
+      (s.notes || "") +
+      " " +
+      s.items.map((i: any) => `${i.type || ""} ${i.description || ""} ${i.locCode || ""}`).join(" ")
+    ).toUpperCase();
 
-    if (isPacote) {
+    const hasPacote =
+      s.items.some((i: any) => i.type === "PACOTE") ||
+      fullText.includes("PACOTE") ||
+      fullText.includes("GRAMADO") ||
+      fullText.includes("EXCURS") ||
+      fullText.includes("CHILE") ||
+      fullText.includes("FOZ") ||
+      fullText.includes("JATIUCA") ||
+      fullText.includes("NORONHA") ||
+      fullText.includes("LENÇOIS") ||
+      fullText.includes("ESPIRITUAL") ||
+      (fullText.includes("HOSPEDAGEM") && (fullText.includes("GUIA") || fullText.includes("TRANSPORTE") || fullText.includes("PASSEIO"))) ||
+      (fullText.includes("HOTEL") && (fullText.includes("VOO") || fullText.includes("PASSEIO") || fullText.includes("TRANSFER") || fullText.includes("GUIA")));
+
+    const hasHotel =
+      s.items.some((i: any) => i.type === "HOSPEDAGEM") ||
+      fullText.includes("HOTEL") ||
+      fullText.includes("POUSADA") ||
+      fullText.includes("RESORT") ||
+      fullText.includes("HOSPEDAGEM");
+
+    const hasCarro =
+      s.items.some((i: any) => i.type === "CARRO") ||
+      fullText.includes("CARRO") ||
+      fullText.includes("ALUGUEL") ||
+      fullText.includes("RENT");
+
+    const hasIngresso =
+      s.items.some((i: any) => i.type === "INGRESSO") ||
+      fullText.includes("INGRESSO");
+
+    const hasSeguro =
+      s.items.some((i: any) => i.type === "SEGURO") ||
+      fullText.includes("SEGURO");
+
+    if (hasPacote) {
       operations.pacotes += val;
-    } else if (desc.includes("HOTEL") || desc.includes("POUSADA") || desc.includes("RESORT") || desc.includes("HOSPEDAGEM")) {
-      operations.hoteis += val;
-    } else if (desc.includes("INGRESSO")) {
-      operations.ingressos += val;
-    } else if (desc.includes("CARRO") || desc.includes("ALUGUEL")) {
+    } else if (hasCarro) {
       operations.aluguelCarros += val;
-    } else if (desc.includes("SEGURO")) {
+    } else if (hasHotel) {
+      operations.hoteis += val;
+    } else if (hasIngresso) {
+      operations.ingressos += val;
+    } else if (hasSeguro) {
       operations.seguros += val;
     } else {
       operations.passagens += val;
@@ -286,7 +320,14 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
     });
 
     if (!isVendaDoDia) {
-      if (doc === "DINHEIRO" || meth === "DINHEIRO") receipts.dinheiro += val;
+      const isPhysicalCash =
+        doc === "DINHEIRO" ||
+        meth === "DINHEIRO" ||
+        (r as any).bankTransactions?.some(
+          (bt: any) => bt.account?.type === "CAIXA" || (bt.account?.name || "").toUpperCase().includes("DINHEIRO")
+        );
+
+      if (isPhysicalCash) receipts.dinheiro += val;
       else if (doc === "BOLETO" || meth === "BOLETO") receipts.boleto += val;
       else if (doc === "CARTAO" || meth === "CARTAO") receipts.cartao += val;
       else {
