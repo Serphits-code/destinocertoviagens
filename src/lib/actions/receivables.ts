@@ -11,6 +11,7 @@ export interface ReceivableItem {
   customerName: string;
   customerDoc: string | null;
   description: string;
+  document: string | null;
   amount: number;
   dueDate: string;
   paidAt: string | null;
@@ -52,39 +53,75 @@ export async function getReceivables(params?: {
   const skip = (page - 1) * pageSize;
   const dateType = params?.dateType ?? "PAID";
 
-  const where: any = {
-    kind: "RECEBIMENTO",
-  };
+  const andConditions: any[] = [{ kind: "RECEBIMENTO" }];
 
   if (params?.search && params.search.trim()) {
     const q = params.search.trim();
-    where.OR = [
-      { description: { contains: q, mode: "insensitive" } },
-      { customer: { name: { contains: q, mode: "insensitive" } } },
-      { customer: { cpf: { contains: q } } },
-      { sale: { saleNumber: { contains: q, mode: "insensitive" } } },
-    ];
+    andConditions.push({
+      OR: [
+        { description: { contains: q, mode: "insensitive" } },
+        { customer: { name: { contains: q, mode: "insensitive" } } },
+        { customer: { cpf: { contains: q } } },
+        { sale: { saleNumber: { contains: q, mode: "insensitive" } } },
+        { document: { contains: q, mode: "insensitive" } },
+      ],
+    });
   }
 
   if (params?.paymentMethod && params.paymentMethod !== "ALL") {
-    where.paymentMethod = params.paymentMethod;
+    if (params.paymentMethod === "PIX") {
+      andConditions.push({
+        OR: [
+          { paymentMethod: "PIX" },
+          { document: { contains: "PIX", mode: "insensitive" } },
+        ],
+      });
+    } else if (params.paymentMethod === "DEPOSITO_CONTA") {
+      andConditions.push({
+        OR: [
+          { paymentMethod: "DEPOSITO_CONTA" },
+          { document: { contains: "DEPOS", mode: "insensitive" } },
+          { document: { contains: "DEPOD", mode: "insensitive" } },
+        ],
+      });
+    } else if (params.paymentMethod === "BOLETO") {
+      andConditions.push({
+        OR: [
+          { paymentMethod: "BOLETO" },
+          { document: { contains: "BOLETO", mode: "insensitive" } },
+        ],
+      });
+    } else if (params.paymentMethod === "DINHEIRO") {
+      andConditions.push({
+        OR: [
+          { paymentMethod: "DINHEIRO" },
+          { document: { contains: "DINHEIRO", mode: "insensitive" } },
+        ],
+      });
+    } else {
+      andConditions.push({ paymentMethod: params.paymentMethod });
+    }
   }
 
   if (params?.status && params.status !== "ALL") {
-    where.status = params.status;
+    andConditions.push({ status: params.status });
   }
 
   if (params?.startDate || params?.endDate) {
     if (dateType === "PAID") {
-      where.paidAt = {};
-      if (params.startDate) where.paidAt.gte = new Date(`${params.startDate}T00:00:00.000Z`);
-      if (params.endDate) where.paidAt.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+      const dateFilter: any = {};
+      if (params.startDate) dateFilter.gte = new Date(`${params.startDate}T00:00:00.000Z`);
+      if (params.endDate) dateFilter.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+      andConditions.push({ paidAt: dateFilter });
     } else {
-      where.dueDate = {};
-      if (params.startDate) where.dueDate.gte = new Date(`${params.startDate}T00:00:00.000Z`);
-      if (params.endDate) where.dueDate.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+      const dateFilter: any = {};
+      if (params.startDate) dateFilter.gte = new Date(`${params.startDate}T00:00:00.000Z`);
+      if (params.endDate) dateFilter.lte = new Date(`${params.endDate}T23:59:59.999Z`);
+      andConditions.push({ dueDate: dateFilter });
     }
   }
+
+  const where = { AND: andConditions };
 
   const orderBy =
     dateType === "PAID" && (params?.startDate || params?.endDate)
@@ -117,6 +154,7 @@ export async function getReceivables(params?: {
     customerName: r.customer?.name || "Cliente Não Informado",
     customerDoc: r.customer?.cpf || null,
     description: r.description,
+    document: r.document,
     amount: Number(r.amount),
     dueDate: r.dueDate.toISOString().slice(0, 10),
     paidAt: r.paidAt ? r.paidAt.toISOString().slice(0, 10) : null,
@@ -176,10 +214,11 @@ export async function getReceivablesKPIs(params?: {
   let pendingAmount = 0;
 
   const methodBuckets: Record<string, { label: string; count: number; total: number }> = {
-    PIX: { label: "PIX / Depósito", count: 0, total: 0 },
-    CARTAO_CREDITO: { label: "Cartão de Crédito", count: 0, total: 0 },
+    PIX: { label: "PIX", count: 0, total: 0 },
+    DEPOSITO_CONTA: { label: "Depósito em Conta", count: 0, total: 0 },
     BOLETO: { label: "Boleto", count: 0, total: 0 },
     DINHEIRO: { label: "Dinheiro", count: 0, total: 0 },
+    CARTAO_CREDITO: { label: "Cartão de Crédito", count: 0, total: 0 },
     CARTAO_DEBITO: { label: "Cartão de Débito", count: 0, total: 0 },
     BANCO: { label: "Débito em Conta", count: 0, total: 0 },
     CREDITO: { label: "Crédito Agência", count: 0, total: 0 },

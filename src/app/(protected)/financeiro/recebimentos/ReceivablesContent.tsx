@@ -200,6 +200,12 @@ export function ReceivablesContent({
             🟢 PIX
           </span>
         );
+      case "DEPOSITO_CONTA":
+        return (
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/10 text-sky-600 border border-sky-500/20 whitespace-nowrap">
+            🏦 Depósito em Conta
+          </span>
+        );
       case "CARTAO_CREDITO":
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/10 text-purple-600 border border-purple-500/20 whitespace-nowrap">
@@ -472,11 +478,12 @@ export function ReceivablesContent({
               className="w-full px-3 py-2.5 rounded-xl text-sm bg-(--background) border border-(--border) focus:outline-none focus:border-primary text-(--text-title) cursor-pointer"
             >
               <option value="ALL">Todas as Formas de Pagamento</option>
-              <option value="PIX">🟢 PIX / Depósito</option>
-              <option value="CARTAO_CREDITO">🟣 Cartão de Crédito</option>
-              <option value="CARTAO_DEBITO">🔵 Cartão de Débito</option>
+              <option value="PIX">🟢 PIX</option>
+              <option value="DEPOSITO_CONTA">🏦 Depósito em Conta</option>
               <option value="BOLETO">🟠 Boleto Bancário</option>
               <option value="DINHEIRO">💵 Dinheiro</option>
+              <option value="CARTAO_CREDITO">🟣 Cartão de Crédito</option>
+              <option value="CARTAO_DEBITO">🔵 Cartão de Débito</option>
               <option value="BANCO">🏦 Débito em Conta (Banco)</option>
               <option value="CREDITO">🎫 Crédito Agência</option>
               <option value="FATURADO">📋 Faturado</option>
@@ -599,6 +606,7 @@ export function ReceivablesContent({
             <thead>
               <tr className="border-b border-(--border) text-[11px] font-bold uppercase tracking-wider text-(--text-muted) bg-(--background)/50">
                 <th className="py-3 px-4">Forma de Pagamento</th>
+                <th className="py-3 px-4">Documento</th>
                 <th className="py-3 px-4">Cliente / Favorecido</th>
                 <th className="py-3 px-4">Venda & Descrição</th>
                 <th
@@ -626,7 +634,7 @@ export function ReceivablesContent({
             <tbody className="divide-y divide-(--border) text-sm">
               {data.items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center">
+                  <td colSpan={8} className="py-12 text-center">
                     <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
                       <div className="w-12 h-12 rounded-2xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-(--text-muted) mb-3">
                         <AlertCircle className="w-6 h-6" />
@@ -657,6 +665,17 @@ export function ReceivablesContent({
                     {/* Forma de Pagamento */}
                     <td className="py-3 px-4">
                       {getPaymentBadge(item.paymentMethod)}
+                    </td>
+
+                    {/* Documento */}
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {item.document ? (
+                        <span className="px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-black/5 dark:bg-white/10 text-(--text-title) border border-(--border)">
+                          {item.document}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-(--text-muted)">-</span>
+                      )}
                     </td>
 
                     {/* Cliente */}
