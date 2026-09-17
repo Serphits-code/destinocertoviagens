@@ -361,16 +361,52 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
   };
 
   // Mapear Saídas / Pagamentos do dia
-  // Apenas pagamentos em DINHEIRO saem da gaveta física (caixa físico).
+  // Buscar movimentos reais de saída da gaveta (conta CAIXA / Dinheiro)
+  const cashTransactions = await db.bankTransaction.findMany({
+    where: {
+      account: { type: "CAIXA" },
+      date: {
+        gte: startOfDay,
+        lte: endOfDay,
+      },
+    },
+  });
+
   let saidasPagamentosGaveta = 0;
+  if (cashTransactions.length > 0) {
+    for (const t of cashTransactions) {
+      const val = Number(t.amount);
+      if (val < 0) {
+        saidasPagamentosGaveta += Math.abs(val);
+      }
+    }
+  } else {
+    // Fallback se não houver BankTransaction na conta CAIXA
+    for (const p of payables) {
+      const val = Number(p.amount);
+      const doc = (p.document || "").toUpperCase().trim();
+      const meth = (p.paymentMethod || "").toUpperCase().trim();
+      if (doc === "DINHEIRO" || meth === "DINHEIRO") {
+        saidasPagamentosGaveta += val;
+      }
+    }
+  }
+
   for (const p of payables) {
     const val = Number(p.amount);
     const doc = (p.document || "").toUpperCase().trim();
     const meth = (p.paymentMethod || "").toUpperCase().trim();
     const isDinheiro = doc === "DINHEIRO" || meth === "DINHEIRO";
 
-    if (isDinheiro) {
-      saidasPagamentosGaveta += val;
+    // Se o pagamento for em dinheiro e houver lançamento bancário parcial específico na data
+    let displayAmount = val;
+    if (isDinheiro && cashTransactions.length > 0) {
+      const matchingCashTrans = cashTransactions.find(
+        (ct) => Number(ct.amount) < 0 && (ct.description === p.description || ct.financialEntryId === p.id)
+      );
+      if (matchingCashTrans) {
+        displayAmount = Math.abs(Number(matchingCashTrans.amount));
+      }
     }
 
     itemsList.push({
@@ -381,7 +417,7 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
       clientOrSupplier: p.supplier?.name || "Fornecedor / Despesa Diversa",
       saleNumber: p.sale?.saleNumber || null,
       description: p.description,
-      amount: val,
+      amount: displayAmount,
       issueDate: p.issueDate ? p.issueDate.toISOString().slice(0, 10) : null,
       dueDate: p.dueDate.toISOString().slice(0, 10),
       paidAt: p.paidAt ? p.paidAt.toISOString().slice(0, 10) : null,
@@ -403,25 +439,18 @@ export async function getDailyCash(dateStr: string): Promise<CashDaySummary> {
     const prevStart = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
     const prevEnd = new Date(Date.UTC(y, m - 1, d - 1, 23, 59, 59, 999));
 
-    const [prevRecs, prevPays] = await Promise.all([
-      db.financialEntry.findMany({
-        where: {
-          paidAt: { gte: prevStart, lte: prevEnd },
-          kind: "RECEBIMENTO",
-          OR: [{ document: "DINHEIRO" }, { paymentMethod: "DINHEIRO" }],
-        },
-      }),
-      db.financialEntry.findMany({
-        where: {
-          paidAt: { gte: prevStart, lte: prevEnd },
-          kind: "PAGAMENTO",
-          OR: [{ document: "DINHEIRO" }, { paymentMethod: "DINHEIRO" }],
-        },
-      }),
-    ]);
+    const prevTrans = await db.bankTransaction.findMany({
+      where: {
+        account: { type: "CAIXA" },
+        date: { gte: prevStart, lte: prevEnd },
+      },
+    });
 
-    accumulatedCashIn = prevRecs.reduce((sum, r) => sum + Number(r.amount), 0);
-    accumulatedCashOut = prevPays.reduce((sum, p) => sum + Number(p.amount), 0);
+    for (const pt of prevTrans) {
+      const v = Number(pt.amount);
+      if (v > 0) accumulatedCashIn += v;
+      else accumulatedCashOut += Math.abs(v);
+    }
   }
 
   const saldoAnterior = baseBalance + accumulatedCashIn - accumulatedCashOut;
