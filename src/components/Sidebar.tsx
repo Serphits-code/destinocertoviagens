@@ -21,6 +21,7 @@ import {
   Landmark,
   Receipt,
   CreditCard,
+  Coins,
   CheckSquare,
   Target,
 } from "lucide-react";
@@ -42,6 +43,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: "Cockpit", href: "/cockpit" },
   { icon: Landmark, label: "Extrato Bancário", href: "/financeiro/extrato" },
+  { icon: Coins, label: "Livro Caixa", href: "/financeiro/caixa" },
   { icon: CreditCard, label: "Recebimentos por Tipo", href: "/financeiro/recebimentos" },
   { icon: Receipt, label: "Vendas & Emissões", href: "/vendas" },
   { icon: Map, label: "Excursões", href: "/excursoes" },
