@@ -69,6 +69,9 @@ model Excursion {
   itineraryJson    Json?
   addonsJson       Json?
   profitMargin     Float?          @default(0)
+  shareCode        String?         @unique
+  sharePassword    String?
+  isShareActive    Boolean         @default(true)
   createdById      String?
   createdBy        User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdAt        DateTime        @default(now())

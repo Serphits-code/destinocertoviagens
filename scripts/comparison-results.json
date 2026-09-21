@@ -1,0 +1,350 @@
+[
+  {
+    "date": "01/07/2026",
+    "row": 3,
+    "checks": [
+      {
+        "section": "Operações",
+        "field": "Pacotes",
+        "excel": 4310,
+        "sys": 4310
+      },
+      {
+        "section": "Operações",
+        "field": "Passagens",
+        "excel": 2040.72,
+        "sys": 2040.72
+      },
+      {
+        "section": "Operações",
+        "field": "Hotéis",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Operações",
+        "field": "Aluguel Carros",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Operações",
+        "field": "Subtotal Operações",
+        "excel": 6350.72,
+        "sys": 6350.72
+      },
+      {
+        "section": "Vendas",
+        "field": "Atendimentos",
+        "excel": 2,
+        "sys": 2
+      },
+      {
+        "section": "Vendas",
+        "field": "Dinheiro",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Vendas",
+        "field": "Crediário",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Vendas",
+        "field": "Cartão",
+        "excel": 4310,
+        "sys": 4310
+      },
+      {
+        "section": "Vendas",
+        "field": "Cartão Fornecedor",
+        "excel": 2040.72,
+        "sys": 2040.72
+      },
+      {
+        "section": "Vendas",
+        "field": "PIX",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Vendas",
+        "field": "Subtotal Vendas",
+        "excel": 6350.72,
+        "sys": 6350.72
+      },
+      {
+        "section": "Recebimentos",
+        "field": "Dinheiro",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Recebimentos",
+        "field": "PIX",
+        "excel": 12926.09,
+        "sys": 12926.09
+      },
+      {
+        "section": "Recebimentos",
+        "field": "Boleto",
+        "excel": 2041.43,
+        "sys": 2041.4299999999998
+      },
+      {
+        "section": "Recebimentos",
+        "field": "Subtotal Recebimentos",
+        "excel": 14967.52,
+        "sys": 14967.52
+      },
+      {
+        "section": "Gaveta/Caixa",
+        "field": "Saídas Gaveta",
+        "excel": 384,
+        "sys": 384
+      },
+      {
+        "section": "Gaveta/Caixa",
+        "field": "Saldo Final Caixa",
+        "excel": 21000.15,
+        "sys": 21000.15
+      }
+    ],
+    "dayMatches": 18,
+    "dayDiffs": 0
+  },
+  {
+    "date": "02/07/2026",
+    "row": 4,
+    "checks": [
+      {
+        "section": "Operações",
+        "field": "Pacotes",
+        "excel": 6816,
+        "sys": 6816
+      },
+      {
+        "section": "Operações",
+        "field": "Passagens",
+        "excel": 536.13,
+        "sys": 536.13
+      },
+      {
+        "section": "Operações",
+        "field": "Hotéis",
+        "excel": 829.37,
+        "sys": 829.37
+      },
+      {
+        "section": "Operações",
+        "field": "Aluguel Carros",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Operações",
+        "field": "Subtotal Operações",
+        "excel": 8181.5,
+        "sys": 8181.5
+      },
+      {
+        "section": "Vendas",
+        "field": "Atendimentos",
+        "excel": 20,
+        "sys": 20
+      },
+      {
+        "section": "Vendas",
+        "field": "Dinheiro",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Vendas",
+        "field": "Crediário",
+        "excel": 4166,
+        "sys": 3061
+      },
+      {
+        "section": "Vendas",
+        "field": "Cartão",
+        "excel": 0,
+        "sys": 1105
+      },
+      {
+        "section": "Vendas",
+        "field": "Cartão Fornecedor",
+        "excel": 536.13,
+        "sys": 536.13
+      },
+      {
+        "section": "Vendas",
+        "field": "PIX",
+        "excel": 3479.37,
+        "sys": 3479.37
+      },
+      {
+        "section": "Vendas",
+        "field": "Subtotal Vendas",
+        "excel": 8181.5,
+        "sys": 8181.5
+      },
+      {
+        "section": "Recebimentos",
+        "field": "Dinheiro",
+        "excel": 300,
+        "sys": 300
+      },
+      {
+        "section": "Recebimentos",
+        "field": "PIX",
+        "excel": 1300,
+        "sys": 1300
+      },
+      {
+        "section": "Recebimentos",
+        "field": "Boleto",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Recebimentos",
+        "field": "Subtotal Recebimentos",
+        "excel": 1600,
+        "sys": 1600
+      },
+      {
+        "section": "Gaveta/Caixa",
+        "field": "Saídas Gaveta",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Gaveta/Caixa",
+        "field": "Saldo Final Caixa",
+        "excel": 21300.15,
+        "sys": 21300.15
+      }
+    ],
+    "dayMatches": 16,
+    "dayDiffs": 2
+  },
+  {
+    "date": "03/07/2026",
+    "row": 5,
+    "checks": [
+      {
+        "section": "Operações",
+        "field": "Pacotes",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Operações",
+        "field": "Passagens",
+        "excel": 1102.96,
+        "sys": 1102.96
+      },
+      {
+        "section": "Operações",
+        "field": "Hotéis",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Operações",
+        "field": "Aluguel Carros",
+        "excel": 902.97,
+        "sys": 902.97
+      },
+      {
+        "section": "Operações",
+        "field": "Subtotal Operações",
+        "excel": 2005.93,
+        "sys": 2005.93
+      },
+      {
+        "section": "Vendas",
+        "field": "Atendimentos",
+        "excel": 2,
+        "sys": 2
+      },
+      {
+        "section": "Vendas",
+        "field": "Dinheiro",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Vendas",
+        "field": "Crediário",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Vendas",
+        "field": "Cartão",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Vendas",
+        "field": "Cartão Fornecedor",
+        "excel": 2005.93,
+        "sys": 2005.93
+      },
+      {
+        "section": "Vendas",
+        "field": "PIX",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Vendas",
+        "field": "Subtotal Vendas",
+        "excel": 2005.93,
+        "sys": 2005.93
+      },
+      {
+        "section": "Recebimentos",
+        "field": "Dinheiro",
+        "excel": 1664,
+        "sys": 1664
+      },
+      {
+        "section": "Recebimentos",
+        "field": "PIX",
+        "excel": 1116,
+        "sys": 1116
+      },
+      {
+        "section": "Recebimentos",
+        "field": "Boleto",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Recebimentos",
+        "field": "Subtotal Recebimentos",
+        "excel": 2780,
+        "sys": 2780
+      },
+      {
+        "section": "Gaveta/Caixa",
+        "field": "Saídas Gaveta",
+        "excel": 0,
+        "sys": 0
+      },
+      {
+        "section": "Gaveta/Caixa",
+        "field": "Saldo Final Caixa",
+        "excel": 22964.15,
+        "sys": 22964.15
+      }
+    ],
+    "dayMatches": 18,
+    "dayDiffs": 0
+  }
+]

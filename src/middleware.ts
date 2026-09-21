@@ -6,7 +6,11 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth;
 
   // Rotas públicas
-  const isPublicRoute = pathname === "/login" || pathname === "/teste" || pathname.startsWith("/api/auth");
+  const isPublicRoute =
+    pathname === "/login" ||
+    pathname === "/teste" ||
+    pathname.startsWith("/viagem") ||
+    pathname.startsWith("/api/auth");
 
   // Se não está logado e tenta acessar rota protegida → redireciona para login
   if (!isLoggedIn && !isPublicRoute) {

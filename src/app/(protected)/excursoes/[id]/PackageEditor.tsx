@@ -34,6 +34,7 @@ import {
   GripVertical,
   Sparkles,
   Receipt,
+  Settings,
 } from "lucide-react";
 import type { EditorBlock, BlockCategoryId, BlockData } from "@/lib/editor-types";
 import type { ItineraryItem } from "@/lib/actions/itinerary";
@@ -62,6 +63,8 @@ import { AdicionaisView } from "./AdicionaisView";
 import { CheckoutView } from "./CheckoutView";
 import { updateExcursionItinerary } from "@/lib/actions/itinerary";
 import { WeatherClimateBadge } from "@/components/WeatherClimateBadge";
+import { calculatePackageFinancialSummary } from "@/lib/package-calc";
+import { SharePackageModal } from "./SharePackageModal";
 
 interface PackageEditorProps {
   excursionId: string;
@@ -106,6 +109,7 @@ export function PackageEditor({
   const [activeDestIdx, setActiveDestIdx] = useState(0);
   const [saved, setSaved] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [insertIndex, setInsertIndex] = useState<number | undefined>(undefined);
   const [mounted, setMounted] = useState(false);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
@@ -299,77 +303,14 @@ export function PackageEditor({
     return list;
   }, [rooms]);
 
-  // Custo base por pessoa estimado a partir dos custos totais dos cards do pacote
-  const totalBaseCostPerPerson = useMemo(() => {
-    let totalGroup = 0;
-    const defaultVagas = slots > 0 ? slots : 20;
+  // Simulação de passageiros compartilhada entre o Resumo Financeiro e o Checkout
+  const [simulatedPeople, setSimulatedPeople] = useState<string>("");
 
-    for (const block of blocks) {
-      const d = block.data;
-
-      if (block.categoryId === "aereo") {
-        const netTotal = parseFloat(String(d.valorNetTotal || d.valorNet || 0).replace(",", ".")) || 0;
-        const netUnit = parseFloat(String(d.valorNetUnitario || 0).replace(",", ".")) || 0;
-        const vagas = parseFloat(String(d.vagas || 0).replace(",", ".")) || defaultVagas;
-        const custoTotal = parseFloat(String(d.custoTotal || 0).replace(",", ".")) || 0;
-        if (netTotal > 0) totalGroup += netTotal;
-        else if (netUnit > 0) totalGroup += netUnit * vagas;
-        else if (custoTotal > 0) totalGroup += custoTotal;
-        else totalGroup += (parseFloat(String(d.custoUnitario || 0).replace(",", ".")) || 0) * defaultVagas;
-      } else if (block.categoryId === "hospedagem") {
-        const totalRes = parseFloat(String(d.totalReserva || 0).replace(",", ".")) || 0;
-        if (totalRes > 0) {
-          totalGroup += totalRes;
-        } else if (Array.isArray(d.rooms)) {
-          for (const r of d.rooms) {
-            const totPer = parseFloat(String(r.totalPeriodo || 0).replace(",", ".")) || 0;
-            const totQ = parseFloat(String(r.totalQuarto || 0).replace(",", ".")) || 0;
-            const qtd = parseFloat(String(r.qtd || 1).replace(",", ".")) || 1;
-            if (totPer > 0) totalGroup += totPer;
-            else if (totQ > 0) totalGroup += totQ * qtd;
-            else totalGroup += (parseFloat(String(r.porPessoa || 0).replace(",", ".")) || 0) * defaultVagas;
-          }
-        }
-      } else if (block.categoryId === "rodoviario") {
-        const vContrato = parseFloat(String(d.valorContrato || 0).replace(",", ".")) || 0;
-        if (vContrato > 0) totalGroup += vContrato;
-        else totalGroup += (parseFloat(String(d.rateioPorPessoa || 0).replace(",", ".")) || 0) * defaultVagas;
-      } else if (block.categoryId === "guias") {
-        const totalDesp = parseFloat(String(d.totalDespesas || 0).replace(",", ".")) || 0;
-        if (totalDesp > 0) {
-          totalGroup += totalDesp;
-        } else {
-          let gTot = 0;
-          for (const g of d.guias ?? []) gTot += parseFloat(String(g.valorTotal || 0).replace(",", ".")) || 0;
-          for (const desp of d.despesas ?? []) gTot += parseFloat(String(desp.valor || 0).replace(",", ".")) || 0;
-          if (gTot > 0) totalGroup += gTot;
-          else totalGroup += (parseFloat(String(d.rateioPorPessoa || 0).replace(",", ".")) || 0) * defaultVagas;
-        }
-      } else if (block.categoryId === "personalizados") {
-        const totalDesp = parseFloat(String(d.totalDespesas || 0).replace(",", ".")) || 0;
-        if (totalDesp > 0) {
-          totalGroup += totalDesp;
-        } else if (Array.isArray(d.rows)) {
-          let rTot = 0;
-          const vNum = parseFloat(String(d.vagas || 0).replace(",", ".")) || defaultVagas;
-          for (const r of d.rows) {
-            const rowUnit = parseFloat(String(r.valor ?? r.custo ?? 0).replace(",", ".")) || 0;
-            const rowTot = r.total !== undefined && r.total !== ""
-              ? parseFloat(String(r.total).replace(",", ".")) || 0
-              : rowUnit * vNum;
-            rTot += rowTot;
-          }
-          totalGroup += rTot;
-        }
-      } else if (block.categoryId === "itens_inclusos" && Array.isArray(d.rows)) {
-        for (const r of d.rows) totalGroup += (parseFloat(String(r.custo || 0).replace(",", ".")) || 0) * defaultVagas;
-      } else if (block.categoryId === "personalizada" && Array.isArray(d.rows)) {
-        for (const r of d.rows) totalGroup += (parseFloat(String(r.valor ?? r.custo ?? 0).replace(",", ".")) || 0) * defaultVagas;
-      }
-    }
-
-    return defaultVagas > 0 ? totalGroup / defaultVagas : totalGroup;
-  }, [blocks, slots]);
+  // Resumo financeiro consolidado (custo base, margem, preço base por passageiro e simulação)
+  const financialSummary = useMemo(
+    () => calculatePackageFinancialSummary(blocks, slots, profitMargin, simulatedPeople),
+    [blocks, slots, profitMargin, simulatedPeople]
+  );
 
   // ---- Blocos ----
 
@@ -627,6 +568,16 @@ export function PackageEditor({
             >
               <Receipt size={15} className="text-status-success" /> Checkout
             </button>
+
+            {/* Ícone de Configuração do Pacote (Geração de Link com Senha) */}
+            <button
+              type="button"
+              onClick={() => setShareModalOpen(true)}
+              className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-surface transition-all cursor-pointer border border-transparent hover:border-border"
+              title="Configurar Link de Visualização do Pacote (Portal do Cliente) e Senha"
+            >
+              <Settings size={16} />
+            </button>
           </div>
         </div>
       </div>
@@ -772,10 +723,14 @@ export function PackageEditor({
               guests={guests}
               rooms={rooms}
               addons={addons}
-              totalBaseCostPerPerson={totalBaseCostPerPerson}
+              totalBaseCostPerPerson={financialSummary.costPerPerson}
               profitMargin={profitMargin}
               onUpdateProfitMargin={handleUpdateProfitMargin}
-              slots={slots}
+              slots={financialSummary.activePeople}
+              basePackagePrice={financialSummary.pricePerPerson}
+              profitPerPerson={financialSummary.agencyProfitPerPerson}
+              totalAgencyProfit={financialSummary.totalAgencyProfit}
+              isSimulationActive={financialSummary.isSimulationActive}
             />
           ) : blocks.length === 0 ? (
             <div className="bg-surface rounded-2xl border border-border p-12 text-center">
@@ -928,6 +883,8 @@ export function PackageEditor({
             slots={slots}
             profitMargin={profitMargin}
             onUpdateProfitMargin={handleUpdateProfitMargin}
+            testPeople={simulatedPeople}
+            onTestPeopleChange={setSimulatedPeople}
           />
           <div className="bg-surface rounded-2xl border border-border shadow-shadow-card p-4 space-y-2">
             <h4 className="text-sm font-semibold text-text-title">⚡ Ações Rápidas</h4>
@@ -958,6 +915,14 @@ export function PackageEditor({
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSelect={handleAddBlock}
+      />
+
+      {/* Modal de Compartilhamento do Pacote com o Cliente */}
+      <SharePackageModal
+        isOpen={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        excursionId={excursionId}
+        excursionName={name}
       />
     </div>
   );

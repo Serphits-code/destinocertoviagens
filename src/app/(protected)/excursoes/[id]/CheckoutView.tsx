@@ -30,6 +30,10 @@ interface CheckoutViewProps {
   profitMargin: number;
   onUpdateProfitMargin: (margin: number) => void;
   slots: number;
+  basePackagePrice?: number;
+  profitPerPerson?: number;
+  totalAgencyProfit?: number;
+  isSimulationActive?: boolean;
 }
 
 function fmt(v: number) {
@@ -48,6 +52,10 @@ export function CheckoutView({
   profitMargin,
   onUpdateProfitMargin,
   slots,
+  basePackagePrice: propBasePackagePrice,
+  profitPerPerson: propProfitPerPerson,
+  totalAgencyProfit: propTotalAgencyProfit,
+  isSimulationActive = false,
 }: CheckoutViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isEditingMargin, setIsEditingMargin] = useState(false);
@@ -55,9 +63,10 @@ export function CheckoutView({
 
   // Cálculos de Lucro da Agência
   const marginPercent = Number(profitMargin) || 0;
-  const profitPerPerson = totalBaseCostPerPerson * (marginPercent / 100);
-  const basePackagePrice = totalBaseCostPerPerson + profitPerPerson;
-  const totalAgencyProfit = profitPerPerson * slots;
+  const calculatedProfitPerPerson = totalBaseCostPerPerson * (marginPercent / 100);
+  const profitPerPerson = propProfitPerPerson ?? calculatedProfitPerPerson;
+  const basePackagePrice = propBasePackagePrice ?? (totalBaseCostPerPerson + profitPerPerson);
+  const totalAgencyProfit = propTotalAgencyProfit ?? (profitPerPerson * slots);
 
   // Mapa de quarto por hóspede
   const guestRoomMap: Record<string, { roomNumber: string; roomType: string }> = {};
@@ -101,11 +110,16 @@ export function CheckoutView({
       <div className="bg-surface rounded-2xl border border-border shadow-shadow-card p-6 space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2.5 text-primary mb-1">
+            <div className="flex flex-wrap items-center gap-2.5 text-primary mb-1">
               <Receipt size={20} />
               <h2 className="text-xl font-bold text-text-title">
-                Checkout & Precificação por Passageiro
+                Checkout &amp; Precificação por Passageiro
               </h2>
+              {isSimulationActive && (
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-status-success/15 text-status-success flex items-center gap-1 border border-status-success/30">
+                  ⚡ Simulação ativa ({slots} vagas)
+                </span>
+              )}
             </div>
             <p className="text-sm text-text-muted max-w-2xl leading-relaxed">
               Configure a porcentagem de lucro da agência para calcular o valor base de venda.
@@ -214,7 +228,7 @@ export function CheckoutView({
 
           <div className="bg-surface-subtle p-3.5 rounded-xl border border-border/70">
             <span className="text-[11px] font-semibold text-text-muted uppercase block">
-              Lucro Total ({slots} Vagas)
+              Lucro Total ({slots} Vagas{isSimulationActive ? " simuladas" : ""})
             </span>
             <span className="text-base font-bold text-status-success">
               {fmt(totalAgencyProfit)}
