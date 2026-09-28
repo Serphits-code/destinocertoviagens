@@ -35,13 +35,15 @@ import {
   Sparkles,
   Receipt,
   Settings,
+  ClipboardList,
 } from "lucide-react";
 import type { EditorBlock, BlockCategoryId, BlockData } from "@/lib/editor-types";
 import type { ItineraryItem } from "@/lib/actions/itinerary";
-import type { ExcursionAddon, AddonGuestPayment } from "@/lib/actions/addons";
+import type { ExcursionAddon, AddonGuestPayment, InterestedLead } from "@/lib/actions/addons";
 import {
   updateExcursionAddons,
   updateExcursionProfitMargin,
+  updateExcursionLeads,
 } from "@/lib/actions/addons";
 import {
   updateExcursionHeader,
@@ -61,6 +63,7 @@ import { RoomListView, type RoomGuest, type RoomEntry } from "./RoomListView";
 import { ItineraryView, DEFAULT_SAO_PAULO_ITINERARY } from "./ItineraryView";
 import { AdicionaisView } from "./AdicionaisView";
 import { CheckoutView } from "./CheckoutView";
+import { InterestedLeadsView } from "./InterestedLeadsView";
 import { updateExcursionItinerary } from "@/lib/actions/itinerary";
 import { WeatherClimateBadge } from "@/components/WeatherClimateBadge";
 import { calculatePackageFinancialSummary } from "@/lib/package-calc";
@@ -85,6 +88,7 @@ interface PackageEditorProps {
   initialItinerary?: ItineraryItem[];
   initialAddons?: ExcursionAddon[];
   initialGuestPayments?: Record<string, AddonGuestPayment>;
+  initialInterestedLeads?: InterestedLead[];
   initialProfitMargin?: number;
   currentUser?: {
     id: string;
@@ -111,6 +115,7 @@ export function PackageEditor({
   initialItinerary,
   initialAddons = [],
   initialGuestPayments = {},
+  initialInterestedLeads = [],
   initialProfitMargin = 0,
   currentUser,
 }: PackageEditorProps) {
@@ -128,10 +133,13 @@ export function PackageEditor({
   const [insertIndex, setInsertIndex] = useState<number | undefined>(undefined);
   const [mounted, setMounted] = useState(false);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
-  const [view, setView] = useState<"pacote" | "roomlist" | "roteiro" | "adicionais" | "checkout">("pacote");
+  const [view, setView] = useState<"pacote" | "roomlist" | "roteiro" | "adicionais" | "checkout" | "interessados">("pacote");
   const [addons, setAddons] = useState<ExcursionAddon[]>(initialAddons || []);
   const [guestPayments, setGuestPayments] = useState<Record<string, AddonGuestPayment>>(
     initialGuestPayments || {}
+  );
+  const [interestedLeads, setInterestedLeads] = useState<InterestedLead[]>(
+    initialInterestedLeads || []
   );
   const [profitMargin, setProfitMargin] = useState<number>(initialProfitMargin || 0);
 
@@ -220,6 +228,9 @@ export function PackageEditor({
       } else if (mutation.type === "itinerary") {
         setItinerary(mutation.itinerary);
         flashSaved();
+      } else if (mutation.type === "interested_leads") {
+        setInterestedLeads(mutation.leads);
+        flashSaved();
       } else if (mutation.type === "reload_blocks") {
         window.location.reload();
       }
@@ -233,6 +244,20 @@ export function PackageEditor({
     containerRef: editorContainerRef,
     onRemoteMutation: handleRemoteMutation,
   });
+
+  const leadsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistLeads = useCallback(
+    (newLeads: InterestedLead[]) => {
+      setInterestedLeads(newLeads);
+      broadcastMutation({ type: "interested_leads", leads: newLeads });
+      if (leadsTimer.current) clearTimeout(leadsTimer.current);
+      leadsTimer.current = setTimeout(async () => {
+        await updateExcursionLeads(excursionId, newLeads);
+        flashSaved();
+      }, 500);
+    },
+    [broadcastMutation, excursionId, flashSaved]
+  );
 
   const persistItinerary = useCallback(
     (newItems: ItineraryItem[]) => {
@@ -705,6 +730,25 @@ export function PackageEditor({
             >
               <Settings size={16} />
             </button>
+
+            {/* Botão Minimalista com Ícone de Lista: Lista de Interessados */}
+            <button
+              type="button"
+              onClick={() => setView(view === "interessados" ? "pacote" : "interessados")}
+              className={`p-1.5 rounded-md transition-all cursor-pointer border relative ${
+                view === "interessados"
+                  ? "bg-surface text-primary shadow-xs border-border"
+                  : "text-text-muted hover:text-primary hover:bg-surface border-transparent hover:border-border"
+              }`}
+              title="Lista de Interessados"
+            >
+              <ClipboardList size={16} />
+              {interestedLeads.length > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-primary text-white text-[9px] font-black flex items-center justify-center">
+                  {interestedLeads.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -862,6 +906,12 @@ export function PackageEditor({
               profitPerPerson={financialSummary.agencyProfitPerPerson}
               totalAgencyProfit={financialSummary.totalAgencyProfit}
               isSimulationActive={financialSummary.isSimulationActive}
+            />
+          ) : view === "interessados" ? (
+            <InterestedLeadsView
+              excursionId={excursionId}
+              leads={interestedLeads}
+              onUpdateLeads={persistLeads}
             />
           ) : blocks.length === 0 ? (
             <div className="bg-surface rounded-2xl border border-border p-12 text-center">

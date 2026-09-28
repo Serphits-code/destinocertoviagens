@@ -13,11 +13,21 @@ import {
   Save,
   Plus,
   MoreVertical,
+  Store,
+  MessageCircle,
 } from "lucide-react";
 import type { EditorBlock, BlockData } from "@/lib/editor-types";
 import { CATEGORY_DEFINITIONS } from "@/lib/categories";
 import { saveBlockPreset } from "@/lib/actions/blocks";
 import { BlockTable } from "./BlockTable";
+
+function getWhatsAppLink(contact?: string): string | null {
+  if (!contact) return null;
+  const digits = contact.replace(/\D/g, "");
+  if (digits.length < 10) return null;
+  const full = digits.startsWith("55") ? digits : `55${digits}`;
+  return `https://wa.me/${full}`;
+}
 
 interface BlockCardProps {
   block: EditorBlock;
@@ -189,10 +199,65 @@ export function BlockCard({
                   <Plus size={16} className="animate-spin" /> Criando bloco...
                 </div>
               ) : (
-                <BlockTable
-                  block={block}
-                  onUpdate={(data) => onUpdate(block.id, data)}
-                />
+                <div className="space-y-4">
+                  <BlockTable
+                    block={block}
+                    onUpdate={(data) => onUpdate(block.id, data)}
+                  />
+
+                  {/* Canal de Venda (Nome ao lado de Número/E-mail) */}
+                  <div className="pt-3.5 border-t border-border/60">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-text-title uppercase tracking-wide flex items-center gap-1.5">
+                        <Store size={13} className="text-primary" /> Canal de Venda
+                      </span>
+                      {getWhatsAppLink(block.data?.canalVendaContato) && (
+                        <a
+                          href={getWhatsAppLink(block.data?.canalVendaContato)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-bold"
+                          title="Abrir conversa no WhatsApp deste canal"
+                        >
+                          <MessageCircle size={12} /> WhatsApp
+                        </a>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="text-xs text-text-muted">
+                        <span className="block mb-1 font-medium">Nome</span>
+                        <input
+                          type="text"
+                          value={block.data?.canalVendaNome ?? ""}
+                          onChange={(e) =>
+                            onUpdate(block.id, {
+                              ...block.data,
+                              canalVendaNome: e.target.value,
+                            })
+                          }
+                          placeholder="Ex: CVC, Sakura, Agência Parceira..."
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-text-muted/60"
+                        />
+                      </label>
+
+                      <label className="text-xs text-text-muted">
+                        <span className="block mb-1 font-medium">Número / E-mail</span>
+                        <input
+                          type="text"
+                          value={block.data?.canalVendaContato ?? ""}
+                          onChange={(e) =>
+                            onUpdate(block.id, {
+                              ...block.data,
+                              canalVendaContato: e.target.value,
+                            })
+                          }
+                          placeholder="Ex: (11) 98765-4321 ou contato@canal.com"
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-text-muted/60"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </motion.div>

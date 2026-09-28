@@ -39,6 +39,11 @@ export default async function ExcursionEditorPage({
   const initialGuestPayments = Array.isArray(rawAddons)
     ? {}
     : rawAddons?.guestPayments || {};
+  const initialInterestedLeads = Array.isArray(rawAddons)
+    ? []
+    : Array.isArray(rawAddons?.interestedLeads)
+    ? rawAddons.interestedLeads
+    : [];
 
   return (
     <PackageEditor
@@ -55,6 +60,7 @@ export default async function ExcursionEditorPage({
       initialItinerary={(excursion.itineraryJson as any) ?? []}
       initialAddons={initialAddons}
       initialGuestPayments={initialGuestPayments}
+      initialInterestedLeads={initialInterestedLeads}
       initialProfitMargin={excursion.profitMargin ?? 0}
       currentUser={{
         id: session.user.id,

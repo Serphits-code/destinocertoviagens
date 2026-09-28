@@ -95,6 +95,10 @@ export type EditorMutationAction =
       itinerary: any[];
     }
   | {
+      type: "interested_leads";
+      leads: any[];
+    }
+  | {
       type: "reload_blocks";
     };
 

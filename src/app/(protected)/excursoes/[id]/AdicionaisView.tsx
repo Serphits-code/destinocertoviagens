@@ -23,6 +23,9 @@ import {
   Ticket,
   Send,
   FileCheck,
+  Store,
+  Phone,
+  MessageCircle,
 } from "lucide-react";
 import type {
   ExcursionAddon,
@@ -53,6 +56,14 @@ function fmt(v: number) {
     currency: "BRL",
     minimumFractionDigits: 2,
   });
+}
+
+function getWhatsAppLink(contact?: string): string | null {
+  if (!contact) return null;
+  const digits = contact.replace(/\D/g, "");
+  if (digits.length < 10) return null;
+  const full = digits.startsWith("55") ? digits : `55${digits}`;
+  return `https://wa.me/${full}`;
 }
 
 function parseNum(val: unknown): number {
@@ -1489,6 +1500,58 @@ export function AdicionaisView({
                             }
                             placeholder="Ex: Saída às 14h do saguão. Não inclui almoço."
                             className="w-full px-3 py-2 rounded-xl border border-border bg-surface-subtle text-xs text-text-body placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:bg-surface"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Canal de Venda (Nome ao lado de Número/E-mail) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                            <Store size={13} className="text-primary" />
+                            <span>Canal de Venda (Nome)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={addon.canalVendaNome || ""}
+                            onChange={(e) =>
+                              handleUpdateAddon(addon.id, {
+                                canalVendaNome: e.target.value,
+                              })
+                            }
+                            placeholder="Ex: CVC, Agência Parceira, Fornecedor..."
+                            className="w-full px-3 py-2 rounded-xl border border-border bg-surface-subtle text-xs text-text-title placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:bg-surface font-medium"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Phone size={13} className="text-primary" />
+                              <span>Número / E-mail</span>
+                            </span>
+                            {getWhatsAppLink(addon.canalVendaContato) && (
+                              <a
+                                href={getWhatsAppLink(addon.canalVendaContato)!}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-bold"
+                                title="Abrir conversa no WhatsApp deste canal"
+                              >
+                                <MessageCircle size={12} /> WhatsApp
+                              </a>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            value={addon.canalVendaContato || ""}
+                            onChange={(e) =>
+                              handleUpdateAddon(addon.id, {
+                                canalVendaContato: e.target.value,
+                              })
+                            }
+                            placeholder="Ex: (11) 98765-4321 ou contato@fornecedor.com"
+                            className="w-full px-3 py-2 rounded-xl border border-border bg-surface-subtle text-xs text-text-title placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:bg-surface font-medium"
                           />
                         </div>
                       </div>

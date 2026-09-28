@@ -29,6 +29,15 @@ export interface AddonGuestVoucher {
   notes?: string;
 }
 
+export interface InterestedLead {
+  id: string;
+  name: string;
+  phone: string;
+  lastContactDate?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface ExcursionAddon {
   id: string;
   title: string;
@@ -38,6 +47,8 @@ export interface ExcursionAddon {
   observation?: string;
   emiteVoucher?: boolean;
   vouchers?: Record<string, AddonGuestVoucher>;
+  canalVendaNome?: string;
+  canalVendaContato?: string;
   price: number;
   cost?: number;
   profit?: number;
@@ -50,6 +61,7 @@ export type ExcursionAddonsPayload =
   | {
       addons: ExcursionAddon[];
       guestPayments?: Record<string, AddonGuestPayment>;
+      interestedLeads?: InterestedLead[];
     };
 
 export async function updateExcursionAddons(
@@ -57,6 +69,50 @@ export async function updateExcursionAddons(
   payload: ExcursionAddonsPayload
 ) {
   await requireWritePermission();
+
+  const current = await db.excursion.findUnique({
+    where: { id: excursionId },
+    select: { addonsJson: true },
+  });
+
+  const raw = (current?.addonsJson as any) || {};
+  const existingLeads = Array.isArray(raw) ? [] : raw.interestedLeads || [];
+
+  const finalPayload = Array.isArray(payload)
+    ? { addons: payload, interestedLeads: existingLeads }
+    : { ...payload, interestedLeads: payload.interestedLeads ?? existingLeads };
+
+  await db.excursion.update({
+    where: { id: excursionId },
+    data: {
+      addonsJson: finalPayload as any,
+    },
+  });
+
+  revalidatePath(`/excursoes/${excursionId}`);
+  return { success: true };
+}
+
+export async function updateExcursionLeads(
+  excursionId: string,
+  leads: InterestedLead[]
+) {
+  await requireWritePermission();
+
+  const current = await db.excursion.findUnique({
+    where: { id: excursionId },
+    select: { addonsJson: true },
+  });
+
+  const raw = (current?.addonsJson as any) || {};
+  const currentAddons = Array.isArray(raw) ? raw : raw.addons || [];
+  const currentPayments = Array.isArray(raw) ? {} : raw.guestPayments || {};
+
+  const payload = {
+    addons: currentAddons,
+    guestPayments: currentPayments,
+    interestedLeads: leads,
+  };
 
   await db.excursion.update({
     where: { id: excursionId },
