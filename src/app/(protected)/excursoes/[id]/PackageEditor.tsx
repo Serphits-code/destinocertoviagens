@@ -65,6 +65,11 @@ import { updateExcursionItinerary } from "@/lib/actions/itinerary";
 import { WeatherClimateBadge } from "@/components/WeatherClimateBadge";
 import { calculatePackageFinancialSummary } from "@/lib/package-calc";
 import { SharePackageModal } from "./SharePackageModal";
+import { useMultiplayerPresence } from "@/lib/multiplayer/useMultiplayerPresence";
+import { MultiplayerCursorsOverlay } from "@/components/multiplayer/MultiplayerCursorsOverlay";
+import { PresenceAvatarStack } from "@/components/multiplayer/PresenceAvatarStack";
+import { LiveFocusIndicator } from "@/components/multiplayer/LiveFocusIndicator";
+import type { EditorMutationAction } from "@/lib/multiplayer/types";
 
 interface PackageEditorProps {
   excursionId: string;
@@ -80,6 +85,11 @@ interface PackageEditorProps {
   initialItinerary?: ItineraryItem[];
   initialAddons?: ExcursionAddon[];
   initialProfitMargin?: number;
+  currentUser?: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  } | null;
 }
 
 function generateTempId() {
@@ -100,7 +110,10 @@ export function PackageEditor({
   initialItinerary,
   initialAddons = [],
   initialProfitMargin = 0,
+  currentUser,
 }: PackageEditorProps) {
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+
   const [blocks, setBlocks] = useState<EditorBlock[]>(initialBlocks);
   const [name, setName] = useState(initialName);
   const [periodStart, setPeriodStart] = useState(initialPeriodStart ?? "");
@@ -117,6 +130,20 @@ export function PackageEditor({
   const [addons, setAddons] = useState<ExcursionAddon[]>(initialAddons || []);
   const [profitMargin, setProfitMargin] = useState<number>(initialProfitMargin || 0);
 
+  // Timer e flash de status Salvo
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashSaved = useCallback(() => {
+    setSaved(true);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 2000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    };
+  }, []);
+
   // ---- Roteiro ----
   const [itinerary, setItinerary] = useState<ItineraryItem[]>(
     initialItinerary && initialItinerary.length > 0
@@ -126,8 +153,85 @@ export function PackageEditor({
   const [itinerarySaved, setItinerarySaved] = useState(false);
   const itineraryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Sincronização em Tempo Real de Mutações Multiplayer (Figma / Miro / Notion)
+  const handleRemoteMutation = useCallback(
+    (mutation: EditorMutationAction) => {
+      if (mutation.type === "header") {
+        if (mutation.patch.name !== undefined) setName(mutation.patch.name);
+        if (mutation.patch.slots !== undefined) setSlots(mutation.patch.slots);
+        if (mutation.patch.periodStart !== undefined)
+          setPeriodStart(mutation.patch.periodStart ?? "");
+        if (mutation.patch.periodEnd !== undefined)
+          setPeriodEnd(mutation.patch.periodEnd ?? "");
+        flashSaved();
+      } else if (mutation.type === "block_update") {
+        setBlocks((prev) =>
+          prev.map((b) =>
+            b.id === mutation.blockId
+              ? {
+                  ...b,
+                  data: mutation.data,
+                  ...(mutation.title !== undefined && { title: mutation.title }),
+                }
+              : b
+          )
+        );
+        flashSaved();
+      } else if (mutation.type === "block_delete") {
+        setBlocks((prev) =>
+          prev
+            .filter((b) => b.id !== mutation.blockId)
+            .map((b, i) => ({ ...b, order: i }))
+        );
+        flashSaved();
+      } else if (mutation.type === "block_reorder") {
+        setBlocks((prev) => {
+          const idMap = new Map(prev.map((b) => [b.id, b]));
+          const reordered: EditorBlock[] = [];
+          for (let i = 0; i < mutation.orderedIds.length; i++) {
+            const b = idMap.get(mutation.orderedIds[i]);
+            if (b) reordered.push({ ...b, order: i });
+          }
+          for (const b of prev) {
+            if (!mutation.orderedIds.includes(b.id)) {
+              reordered.push({ ...b, order: reordered.length });
+            }
+          }
+          return reordered;
+        });
+        flashSaved();
+      } else if (mutation.type === "block_toggle_collapse") {
+        setBlocks((prev) =>
+          prev.map((b) =>
+            b.id === mutation.blockId ? { ...b, collapsed: mutation.collapsed } : b
+          )
+        );
+      } else if (mutation.type === "profit_margin") {
+        setProfitMargin(mutation.profitMargin);
+        flashSaved();
+      } else if (mutation.type === "addons") {
+        setAddons(mutation.addons);
+        flashSaved();
+      } else if (mutation.type === "itinerary") {
+        setItinerary(mutation.itinerary);
+        flashSaved();
+      } else if (mutation.type === "reload_blocks") {
+        window.location.reload();
+      }
+    },
+    [flashSaved]
+  );
+
+  const { peers, broadcastMutation } = useMultiplayerPresence({
+    excursionId,
+    currentUser,
+    containerRef: editorContainerRef,
+    onRemoteMutation: handleRemoteMutation,
+  });
+
   const persistItinerary = useCallback(
     (newItems: ItineraryItem[]) => {
+      broadcastMutation({ type: "itinerary", itinerary: newItems });
       if (itineraryTimer.current) clearTimeout(itineraryTimer.current);
       itineraryTimer.current = setTimeout(async () => {
         await updateExcursionItinerary(excursionId, newItems);
@@ -135,7 +239,7 @@ export function PackageEditor({
         setTimeout(() => setItinerarySaved(false), 2000);
       }, 500);
     },
-    [excursionId]
+    [broadcastMutation, excursionId]
   );
 
   const handleAddItineraryItem = useCallback((targetDay?: number) => {
@@ -211,25 +315,12 @@ export function PackageEditor({
     ? blocks.find((b) => b.id === activeBlockId)
     : null;
 
-  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flashSaved = useCallback(() => {
-    setSaved(true);
-    if (savedTimer.current) clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(() => setSaved(false), 2000);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (savedTimer.current) clearTimeout(savedTimer.current);
-    };
-  }, []);
-
   // ---- Header (nome, período, vagas) com auto-save debounced ----
   const headerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persistHeader = useCallback(
     (patch: Partial<{ name: string; periodStart: string | null; periodEnd: string | null; slots: number }>) => {
+      broadcastMutation({ type: "header", patch });
       if (headerTimer.current) clearTimeout(headerTimer.current);
       headerTimer.current = setTimeout(() => {
         startTransition(async () => {
@@ -238,20 +329,21 @@ export function PackageEditor({
         });
       }, 800);
     },
-    [excursionId, flashSaved]
+    [broadcastMutation, excursionId, flashSaved]
   );
 
   // ---- Adicionais & Lucro da Agência ----
   const addonsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistAddons = useCallback(
     (newAddons: ExcursionAddon[]) => {
+      broadcastMutation({ type: "addons", addons: newAddons });
       if (addonsTimer.current) clearTimeout(addonsTimer.current);
       addonsTimer.current = setTimeout(async () => {
         await updateExcursionAddons(excursionId, newAddons);
         flashSaved();
       }, 500);
     },
-    [excursionId, flashSaved]
+    [broadcastMutation, excursionId, flashSaved]
   );
 
   const handleUpdateAddons = useCallback(
@@ -266,13 +358,14 @@ export function PackageEditor({
   const handleUpdateProfitMargin = useCallback(
     (newMargin: number) => {
       setProfitMargin(newMargin);
+      broadcastMutation({ type: "profit_margin", profitMargin: newMargin });
       if (marginTimer.current) clearTimeout(marginTimer.current);
       marginTimer.current = setTimeout(async () => {
         await updateExcursionProfitMargin(excursionId, newMargin);
         flashSaved();
       }, 400);
     },
-    [excursionId, flashSaved]
+    [broadcastMutation, excursionId, flashSaved]
   );
 
   // Extrai quartos e passageiros de todas as hospedagens para vincular em Adicionais e Checkout
@@ -332,9 +425,10 @@ export function PackageEditor({
           b.id === blockId ? { ...b, data, ...(title !== undefined && { title }) } : b
         )
       );
+      broadcastMutation({ type: "block_update", blockId, data, title });
       persistBlockData(blockId, data, title);
     },
-    [persistBlockData]
+    [broadcastMutation, persistBlockData]
   );
 
   const handleAddBlock = useCallback(
@@ -364,13 +458,14 @@ export function PackageEditor({
           : await addBlock(excursionId, categoryId, index);
 
         if (result.blockId) {
-          // Recarrega para obter o bloco com dados completos do servidor
+          // Avisa os outros clientes para recarregarem os blocos com os IDs gerados no servidor
+          broadcastMutation({ type: "reload_blocks" });
           window.location.reload();
         }
         flashSaved();
       });
     },
-    [blocks.length, excursionId, insertIndex, flashSaved]
+    [blocks.length, broadcastMutation, excursionId, insertIndex, flashSaved]
   );
 
   const handleDeleteBlock = useCallback(
@@ -379,6 +474,7 @@ export function PackageEditor({
       setBlocks((prev) =>
         prev.filter((b) => b.id !== blockId).map((b, i) => ({ ...b, order: i }))
       );
+      broadcastMutation({ type: "block_delete", blockId });
       if (!blockId.startsWith("temp_")) {
         startTransition(async () => {
           await deleteBlock(blockId);
@@ -386,7 +482,7 @@ export function PackageEditor({
         });
       }
     },
-    [flashSaved]
+    [broadcastMutation, flashSaved]
   );
 
   const handleDuplicateBlock = useCallback(
@@ -409,28 +505,35 @@ export function PackageEditor({
         startTransition(async () => {
           const result = await duplicateBlock(blockId);
           if (result.blockId) {
+            broadcastMutation({ type: "reload_blocks" });
             window.location.reload();
           }
           flashSaved();
         });
       }
     },
-    [blocks, flashSaved]
+    [blocks, broadcastMutation, flashSaved]
   );
 
   const handleToggleCollapse = useCallback(
     (blockId: string) => {
+      const block = blocks.find((b) => b.id === blockId);
+      const nextCollapsed = !block?.collapsed;
       setBlocks((prev) =>
-        prev.map((b) => (b.id === blockId ? { ...b, collapsed: !b.collapsed } : b))
+        prev.map((b) => (b.id === blockId ? { ...b, collapsed: nextCollapsed } : b))
       );
+      broadcastMutation({
+        type: "block_toggle_collapse",
+        blockId,
+        collapsed: nextCollapsed,
+      });
       if (!blockId.startsWith("temp_")) {
-        const block = blocks.find((b) => b.id === blockId);
         startTransition(async () => {
-          await toggleBlockCollapsed(blockId, !block?.collapsed);
+          await toggleBlockCollapsed(blockId, nextCollapsed);
         });
       }
     },
-    [blocks]
+    [blocks, broadcastMutation]
   );
 
   const expandAll = () =>
@@ -480,14 +583,25 @@ export function PackageEditor({
       }));
 
       setBlocks(reordered);
+      broadcastMutation({
+        type: "block_reorder",
+        orderedIds: reordered.map((b) => b.id),
+      });
       persistBlockOrder(reordered.map((b) => b.id));
     },
-    [blocks, persistBlockOrder]
+    [blocks, broadcastMutation, persistBlockOrder]
   );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4">
-      {/* Indicador de salvamento */}
+    <div
+      ref={editorContainerRef}
+      className="max-w-6xl mx-auto space-y-4 relative"
+    >
+      {/* Camada de Cursores Multiplayer e Foco em Tempo Real */}
+      <MultiplayerCursorsOverlay peers={peers} />
+      <LiveFocusIndicator peers={peers} />
+
+      {/* Indicador de salvamento e presença colaborativa */}
       <div className="flex items-center justify-between">
         <a
           href="/excursoes"
@@ -496,6 +610,9 @@ export function PackageEditor({
           ← Voltar para Excursões
         </a>
         <div className="flex items-center gap-3">
+          {/* Avatar stack de colaboradores ativos */}
+          <PresenceAvatarStack peers={peers} currentUser={currentUser} />
+
           <AnimatePresence>
             {saved && (
               <motion.span

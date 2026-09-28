@@ -4,7 +4,7 @@ export interface AuthenticatedUser {
   id: string;
   name?: string | null;
   email?: string | null;
-  role: "ADMIN" | "ATENDENTE" | "VISUALIZADOR" | string;
+  role: "ADMIN" | "FINANCEIRO" | "OPERADOR" | "ATENDENTE" | "VISUALIZADOR" | string;
 }
 
 /**

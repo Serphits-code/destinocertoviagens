@@ -45,6 +45,11 @@ export default async function ExcursionEditorPage({
       initialItinerary={(excursion.itineraryJson as any) ?? []}
       initialAddons={(excursion.addonsJson as any) ?? []}
       initialProfitMargin={excursion.profitMargin ?? 0}
+      currentUser={{
+        id: session.user.id,
+        name: session.user.name || session.user.email?.split("@")[0] || "Usuário",
+        email: session.user.email || null,
+      }}
     />
   );
 }

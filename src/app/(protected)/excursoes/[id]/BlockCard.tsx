@@ -66,6 +66,9 @@ export function BlockCard({
   return (
     <motion.div
       ref={setNodeRef}
+      id={`block-${block.id}`}
+      data-block-id={block.id}
+      data-block-title={block.title}
       style={style}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
