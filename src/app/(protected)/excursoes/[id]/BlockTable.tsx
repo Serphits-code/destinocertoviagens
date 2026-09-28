@@ -550,16 +550,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       return (
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <label className="text-xs text-text-muted">
-              <span className="block mb-1 font-medium">Portal</span>
-              <input
-                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                value={d.portal ?? ""}
-                placeholder="Ex: SAKURA, Discovery"
-                onChange={(e) => set("portal", e.target.value)}
-              />
-            </label>
+          <div className="grid grid-cols-2 gap-3">
             <label className="text-xs text-text-muted">
               <span className="block mb-1 font-medium">Localizador</span>
               <input

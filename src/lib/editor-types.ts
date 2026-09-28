@@ -30,6 +30,8 @@ export interface AereoFlight {
 
 export interface AereoBlockData {
   title?: string;
+  canalVendaNome?: string;
+  canalVendaContato?: string;
   portal?: string;
   localizador?: string;
   vagas?: string;

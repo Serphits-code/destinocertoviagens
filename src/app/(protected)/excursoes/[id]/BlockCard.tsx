@@ -15,6 +15,7 @@ import {
   MoreVertical,
   Store,
   MessageCircle,
+  Phone,
 } from "lucide-react";
 import type { EditorBlock, BlockData } from "@/lib/editor-types";
 import { CATEGORY_DEFINITIONS } from "@/lib/categories";
@@ -200,48 +201,55 @@ export function BlockCard({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <BlockTable
-                    block={block}
-                    onUpdate={(data) => onUpdate(block.id, data)}
-                  />
-
-                  {/* Canal de Venda (Nome ao lado de Número/E-mail) */}
-                  <div className="pt-3.5 border-t border-border/60">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-text-title uppercase tracking-wide flex items-center gap-1.5">
-                        <Store size={13} className="text-primary" /> Canal de Venda
+                  {/* Canal de Venda (Nome ao lado de Número/E-mail) - Destaque no topo de todos os cards do pacote */}
+                  <div className="p-3.5 bg-surface-subtle/80 rounded-xl border border-border/80 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-text-title uppercase tracking-wide flex items-center gap-1.5">
+                        <Store size={14} className="text-primary" /> Canal de Venda
                       </span>
                       {getWhatsAppLink(block.data?.canalVendaContato) && (
                         <a
                           href={getWhatsAppLink(block.data?.canalVendaContato)!}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-bold"
+                          className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-bold"
                           title="Abrir conversa no WhatsApp deste canal"
                         >
-                          <MessageCircle size={12} /> WhatsApp
+                          <MessageCircle size={13} /> WhatsApp
                         </a>
                       )}
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <label className="text-xs text-text-muted">
-                        <span className="block mb-1 font-medium">Nome</span>
+                        <span className="block mb-1 font-medium text-text-title">Nome</span>
                         <input
                           type="text"
-                          value={block.data?.canalVendaNome ?? ""}
-                          onChange={(e) =>
+                          value={block.data?.canalVendaNome ?? (block.categoryId === "aereo" ? block.data?.portal : "") ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
                             onUpdate(block.id, {
                               ...block.data,
-                              canalVendaNome: e.target.value,
-                            })
+                              canalVendaNome: val,
+                              ...(block.categoryId === "aereo" ? { portal: val } : {}),
+                            });
+                          }}
+                          placeholder={
+                            block.categoryId === "aereo"
+                              ? "Ex: SAKURA, CVC, LATAM, Azul..."
+                              : block.categoryId === "hospedagem"
+                              ? "Ex: Booking, Bancorbrás, Hotel Direto..."
+                              : block.categoryId === "rodoviario"
+                              ? "Ex: Empresa de Ônibus, Agência Parceira..."
+                              : "Ex: CVC, Agência Parceira, Fornecedor..."
                           }
-                          placeholder="Ex: CVC, Sakura, Agência Parceira..."
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-text-muted/60"
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-text-muted/60 font-medium"
                         />
                       </label>
 
                       <label className="text-xs text-text-muted">
-                        <span className="block mb-1 font-medium">Número / E-mail</span>
+                        <span className="block mb-1 font-medium text-text-title flex items-center gap-1">
+                          <Phone size={11} className="text-text-muted" /> Número / E-mail
+                        </span>
                         <input
                           type="text"
                           value={block.data?.canalVendaContato ?? ""}
@@ -252,11 +260,16 @@ export function BlockCard({
                             })
                           }
                           placeholder="Ex: (11) 98765-4321 ou contato@canal.com"
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-text-muted/60"
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-text-muted/60 font-medium"
                         />
                       </label>
                     </div>
                   </div>
+
+                  <BlockTable
+                    block={block}
+                    onUpdate={(data) => onUpdate(block.id, data)}
+                  />
                 </div>
               )}
             </div>
