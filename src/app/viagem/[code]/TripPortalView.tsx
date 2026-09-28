@@ -429,7 +429,17 @@ export function TripPortalView({ trip, shareCode }: TripPortalViewProps) {
                   {flight.status && (
                     <div className="text-[11px] text-slate-400 flex items-center justify-between">
                       <span>Status do Voo:</span>
-                      <span className="font-bold text-emerald-400">{flight.status}</span>
+                      <span
+                        className={`font-bold ${
+                          flight.status === "CONFIRMADO"
+                            ? "text-emerald-400"
+                            : flight.status === "CANCELADO"
+                            ? "text-rose-400 line-through"
+                            : "text-amber-400"
+                        }`}
+                      >
+                        {flight.status}
+                      </span>
                     </div>
                   )}
                 </div>

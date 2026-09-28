@@ -1,6 +1,6 @@
 // Tipos do Editor de Pacote — paridade com o sistema legado (legacy/js/blocks.js)
 
-export type RowStatus = "PENDENTE" | "COTADO" | "CONFIRMADO";
+export type RowStatus = "PENDENTE" | "COTADO" | "CONFIRMADO" | "CANCELADO";
 
 export interface ItensInclusosRow {
   type: string;

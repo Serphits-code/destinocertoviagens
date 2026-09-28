@@ -25,17 +25,19 @@ function StatusSelect({
     PENDENTE: "bg-status-danger-bg text-status-danger",
     COTADO: "bg-status-info-bg text-status-info",
     CONFIRMADO: "bg-status-success-bg text-status-success",
+    CANCELADO: "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200",
   };
 
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as RowStatus)}
-      className={`px-2 py-1 rounded-full text-xs font-semibold border-none outline-none cursor-pointer ${styles[value]}`}
+      className={`px-2 py-1 rounded-full text-xs font-semibold border-none outline-none cursor-pointer transition-all ${styles[value] || styles.COTADO}`}
     >
-      <option value="PENDENTE">PENDENTE</option>
-      <option value="COTADO">COTADO</option>
-      <option value="CONFIRMADO">CONFIRMADO</option>
+      <option value="PENDENTE" className="bg-surface text-text-title py-1">PENDENTE</option>
+      <option value="COTADO" className="bg-surface text-text-title py-1">COTADO</option>
+      <option value="CONFIRMADO" className="bg-surface text-text-title py-1">CONFIRMADO</option>
+      <option value="CANCELADO" className="bg-surface text-text-title py-1">CANCELADO</option>
     </select>
   );
 }
@@ -593,7 +595,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     f: { cia: string; voo: string; origem: string; saida: string; chegada: string; destino: string; tipo: string; status: RowStatus },
                     i: number
                   ) => (
-                    <tr key={i}>
+                    <tr key={i} className={f.status === "CANCELADO" ? "opacity-60 bg-surface-subtle/30 transition-opacity" : "transition-opacity"}>
                       {(["cia", "voo", "origem", "saida", "chegada", "destino"] as const).map((k) => (
                         <td key={k} className={tdCls}>
                           <input className={inputCls} value={f[k]} onChange={(e) => setRow("flights", i, k, e.target.value)} />
