@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* ==========================================================================
    DESTINO CERTO — DESIGN TOKENS (Temas claro/escuro)
    Paleta: Primary #F66B0E · Secondary #112B3C · Tertiary #205375 · Neutral #EFEFEF

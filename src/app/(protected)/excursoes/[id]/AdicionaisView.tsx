@@ -604,19 +604,19 @@ export function AdicionaisView({
             </div>
 
             <div className="bg-surface rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 space-y-1">
-              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">
+              <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase flex items-center gap-1">
                 <CheckCircle2 size={13} /> Já Pago
               </span>
-              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+              <span className="text-lg font-extrabold text-emerald-700 dark:text-emerald-400 tabular-nums">
                 {fmt(stats.totalPaid)}
               </span>
             </div>
 
             <div className="bg-surface rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 space-y-1">
-              <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase flex items-center gap-1">
+              <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase flex items-center gap-1">
                 <Clock size={13} /> Pendente
               </span>
-              <span className="text-lg font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+              <span className="text-lg font-extrabold text-amber-700 dark:text-amber-400 tabular-nums">
                 {fmt(stats.totalPending)}
               </span>
             </div>
@@ -738,24 +738,18 @@ export function AdicionaisView({
                           key={guest.id}
                           className={`transition-colors ${
                             isPaid
-                              ? "bg-emerald-500/10 dark:bg-emerald-950/25 border-l-4 border-l-emerald-500 text-emerald-950 dark:text-emerald-100"
+                              ? "bg-emerald-500/[0.08] dark:bg-emerald-950/25 border-l-4 border-l-emerald-600 dark:border-l-emerald-400"
                               : "hover:bg-surface-subtle"
                           }`}
                         >
                           {/* Nome e documento do Passageiro */}
                           <td className="py-2.5 px-4 font-medium">
                             <div className="truncate">
-                              <span
-                                className={`text-xs font-semibold ${
-                                  isPaid
-                                    ? "text-emerald-900 dark:text-emerald-200"
-                                    : "text-text-title"
-                                }`}
-                              >
+                              <span className="text-xs font-bold text-text-title block">
                                 {guest.nome || "Hóspede sem nome"}
                               </span>
                               {guest.documento && (
-                                <span className="block text-[10px] text-text-muted/70">
+                                <span className="block text-[11px] text-text-muted">
                                   Doc: {guest.documento}
                                 </span>
                               )}
@@ -766,16 +760,16 @@ export function AdicionaisView({
                           <td className="py-2.5 px-3 text-center">
                             {age !== null ? (
                               <span
-                                className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
                                   isPaid
-                                    ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                                    ? "bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-200 dark:border-emerald-700/50"
                                     : "bg-surface-subtle border border-border text-text-title"
                                 }`}
                               >
                                 {age} {age === 1 ? "ano" : "anos"}
                               </span>
                             ) : (
-                              <span className="text-[10px] text-text-muted font-normal">
+                              <span className="text-[11px] text-text-muted font-normal">
                                 {guest.tipo || "Adulto"}
                               </span>
                             )}
@@ -807,10 +801,10 @@ export function AdicionaisView({
                                   />
                                   {isChecked && (
                                     <span
-                                      className={`text-[10px] font-bold mt-0.5 tabular-nums ${
+                                      className={`text-[11px] font-extrabold mt-0.5 tabular-nums ${
                                         isPaid
-                                          ? "text-emerald-700 dark:text-emerald-300"
-                                          : "text-primary"
+                                          ? "text-emerald-800 dark:text-emerald-300"
+                                          : "text-primary font-bold"
                                       }`}
                                       title={tierLabel ? `Faixa: ${tierLabel}` : ""}
                                     >
@@ -827,9 +821,9 @@ export function AdicionaisView({
                             <span
                               className={
                                 isPaid
-                                  ? "text-emerald-700 dark:text-emerald-300 font-extrabold"
+                                  ? "text-emerald-900 dark:text-emerald-300 font-black text-xs"
                                   : guestSubtotal > 0
-                                  ? "text-primary"
+                                  ? "text-primary font-bold"
                                   : "text-text-muted"
                               }
                             >
@@ -847,14 +841,18 @@ export function AdicionaisView({
                                   e.target.value
                                 )
                               }
-                              className={`w-full px-2.5 py-1 rounded-lg border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer transition-all ${
+                              className={`w-full px-2.5 py-1.5 rounded-lg border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 cursor-pointer transition-all ${
                                 isPaid
-                                  ? "bg-emerald-50/50 dark:bg-emerald-950/40 border-emerald-500/40 text-emerald-900 dark:text-emerald-200"
-                                  : "bg-surface border-border text-text-body"
+                                  ? "bg-white dark:bg-surface border-emerald-600/50 dark:border-emerald-500/40 text-text-title shadow-2xs"
+                                  : "bg-surface border-border text-text-title"
                               }`}
                             >
                               {PAYMENT_METHODS.map((method) => (
-                                <option key={method} value={method}>
+                                <option
+                                  key={method}
+                                  value={method}
+                                  className="bg-surface text-text-title font-medium py-1"
+                                >
                                   {method}
                                 </option>
                               ))}
@@ -866,9 +864,9 @@ export function AdicionaisView({
                             <button
                               type="button"
                               onClick={() => handleTogglePaid(guest.id)}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                                 isPaid
-                                  ? "bg-emerald-500 text-white shadow-xs hover:bg-emerald-600"
+                                  ? "bg-emerald-600 text-white shadow-xs hover:bg-emerald-700"
                                   : "bg-surface-subtle hover:bg-surface border border-border text-text-muted hover:text-text-title"
                               }`}
                               title={
@@ -880,7 +878,7 @@ export function AdicionaisView({
                               <div
                                 className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border ${
                                   isPaid
-                                    ? "bg-white text-emerald-600 border-white"
+                                    ? "bg-white text-emerald-700 border-white"
                                     : "border-text-muted/60"
                                 }`}
                               >
@@ -930,11 +928,11 @@ export function AdicionaisView({
                       </td>
                       <td className="py-3 px-4" colSpan={2}>
                         <div className="flex items-center justify-end gap-3 text-[11px]">
-                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                          <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">
                             Pago: {fmt(stats.totalPaid)}
                           </span>
                           <span className="text-border">|</span>
-                          <span className="text-amber-600 dark:text-amber-400 font-bold">
+                          <span className="text-amber-700 dark:text-amber-400 font-extrabold">
                             Pendente: {fmt(stats.totalPending)}
                           </span>
                         </div>
@@ -1014,11 +1012,11 @@ export function AdicionaisView({
                 </div>
 
                 <div className="bg-surface rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 space-y-1">
-                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase flex items-center gap-1.5">
                     <FileCheck size={13} /> Emitidos
                   </span>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    <span className="text-xl font-extrabold text-emerald-700 dark:text-emerald-400 tabular-nums">
                       {voucherStats.totalEmitted}
                     </span>
                     <span className="text-xs text-text-muted">
@@ -1034,11 +1032,11 @@ export function AdicionaisView({
                 </div>
 
                 <div className="bg-surface rounded-xl border border-blue-500/20 bg-blue-500/5 p-3.5 space-y-1">
-                  <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 uppercase flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-blue-700 dark:text-blue-400 uppercase flex items-center gap-1.5">
                     <Send size={13} /> Enviados ao Cliente
                   </span>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xl font-extrabold text-blue-600 dark:text-blue-400 tabular-nums">
+                    <span className="text-xl font-extrabold text-blue-700 dark:text-blue-400 tabular-nums">
                       {voucherStats.totalSent}
                     </span>
                     <span className="text-xs text-text-muted">
@@ -1054,11 +1052,11 @@ export function AdicionaisView({
                 </div>
 
                 <div className="bg-surface rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 space-y-1">
-                  <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase flex items-center gap-1.5">
                     <Clock size={13} /> Pendentes de Envio
                   </span>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xl font-extrabold text-amber-600 dark:text-amber-400 tabular-nums">
+                    <span className="text-xl font-extrabold text-amber-700 dark:text-amber-400 tabular-nums">
                       {voucherStats.totalAssigned - voucherStats.totalSent}
                     </span>
                     <span className="text-xs text-text-muted">restantes</span>
@@ -1223,8 +1221,8 @@ export function AdicionaisView({
                                 <span
                                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                                     isPaid
-                                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
-                                      : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-600/40"
+                                      : "bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-600/40"
                                   }`}
                                 >
                                   {isPaid ? <CheckCircle2 size={11} /> : <Clock size={11} />}
@@ -1243,7 +1241,7 @@ export function AdicionaisView({
                                     })
                                   }
                                   placeholder="Ex: #VOUCH-001"
-                                  className="w-full px-2.5 py-1 rounded-lg border border-border bg-surface text-xs font-mono font-medium text-text-body placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                  className="w-full px-2.5 py-1 rounded-lg border border-border bg-surface text-xs font-mono font-semibold text-text-title placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                 />
                               </td>
 
