@@ -20,11 +20,15 @@ import {
   Clock,
   Layers,
   Info,
+  Ticket,
+  Send,
+  FileCheck,
 } from "lucide-react";
 import type {
   ExcursionAddon,
   AddonAgeTier,
   AddonGuestPayment,
+  AddonGuestVoucher,
 } from "@/lib/actions/addons";
 import type { RoomGuest } from "./RoomListView";
 import { AddonMapDrawer } from "./AddonMapDrawer";
@@ -119,6 +123,13 @@ export function AdicionaisView({
   const [selectedAddonForMap, setSelectedAddonForMap] = useState<ExcursionAddon | null>(null);
   const [guestSearchFilter, setGuestSearchFilter] = useState("");
   const [birthdaysMap, setBirthdaysMap] = useState<Record<string, string>>({});
+
+  // Estados e filtros para a Segunda Tabela de Vouchers
+  const [voucherFilterAddonId, setVoucherFilterAddonId] = useState<string>("all");
+  const [voucherSearchQuery, setVoucherSearchQuery] = useState("");
+  const [voucherStatusFilter, setVoucherStatusFilter] = useState<
+    "all" | "pending_emit" | "pending_send" | "completed"
+  >("all");
 
   // Carrega aniversários dos clientes da Room List caso não estejam no objeto do hóspede
   useEffect(() => {
@@ -284,6 +295,174 @@ export function AdicionaisView({
       onUpdateAddons(addons, next);
     }
   };
+
+  // ---- Handlers e Lógica de Vouchers (Segunda Tabela) ----
+  const voucherAddons = useMemo(() => {
+    return addons.filter((a) => a.emiteVoucher);
+  }, [addons]);
+
+  const handleUpdateVoucher = (
+    addonId: string,
+    guestId: string,
+    patch: Partial<AddonGuestVoucher>
+  ) => {
+    const addon = addons.find((a) => a.id === addonId);
+    if (!addon) return;
+
+    const currentVouchers = addon.vouchers || {};
+    const currentGuestVoucher = currentVouchers[guestId] || {};
+    const updatedGuestVoucher: AddonGuestVoucher = {
+      ...currentGuestVoucher,
+      ...patch,
+    };
+
+    const nextVouchers = {
+      ...currentVouchers,
+      [guestId]: updatedGuestVoucher,
+    };
+
+    handleUpdateAddon(addonId, { vouchers: nextVouchers });
+  };
+
+  const handleToggleVoucherEmitted = (addonId: string, guestId: string) => {
+    const addon = addons.find((a) => a.id === addonId);
+    if (!addon) return;
+    const current = addon.vouchers?.[guestId]?.emitted || false;
+    handleUpdateVoucher(addonId, guestId, {
+      emitted: !current,
+      emittedAt: !current ? new Date().toLocaleDateString("pt-BR") : undefined,
+    });
+  };
+
+  const handleToggleVoucherSent = (addonId: string, guestId: string) => {
+    const addon = addons.find((a) => a.id === addonId);
+    if (!addon) return;
+    const current = addon.vouchers?.[guestId]?.sent || false;
+    handleUpdateVoucher(addonId, guestId, {
+      sent: !current,
+      sentAt: !current ? new Date().toLocaleDateString("pt-BR") : undefined,
+    });
+  };
+
+  const handleBatchVoucher = (addonId: string, type: "emit_all" | "send_all") => {
+    const addon = addons.find((a) => a.id === addonId);
+    if (!addon || !addon.assignedGuestIds?.length) return;
+
+    const currentVouchers = { ...(addon.vouchers || {}) };
+    const todayStr = new Date().toLocaleDateString("pt-BR");
+
+    addon.assignedGuestIds.forEach((gid) => {
+      const v = currentVouchers[gid] || {};
+      if (type === "emit_all") {
+        currentVouchers[gid] = {
+          ...v,
+          emitted: true,
+          emittedAt: v.emittedAt || todayStr,
+        };
+      } else {
+        currentVouchers[gid] = {
+          ...v,
+          sent: true,
+          sentAt: v.sentAt || todayStr,
+        };
+      }
+    });
+
+    handleUpdateAddon(addonId, { vouchers: currentVouchers });
+  };
+
+  const voucherStats = useMemo(() => {
+    let totalAssigned = 0;
+    let totalEmitted = 0;
+    let totalSent = 0;
+
+    voucherAddons.forEach((addon) => {
+      const guestIds = addon.assignedGuestIds || [];
+      totalAssigned += guestIds.length;
+      guestIds.forEach((gid) => {
+        const v = addon.vouchers?.[gid];
+        if (v?.emitted) totalEmitted++;
+        if (v?.sent) totalSent++;
+      });
+    });
+
+    const pendingEmit = Math.max(0, totalAssigned - totalEmitted);
+    const pendingSend = Math.max(0, totalEmitted - totalSent);
+
+    return {
+      totalAssigned,
+      totalEmitted,
+      totalSent,
+      pendingEmit,
+      pendingSend,
+    };
+  }, [voucherAddons]);
+
+  const voucherRows = useMemo(() => {
+    const rows: {
+      addon: ExcursionAddon;
+      guest: RoomGuest;
+      payment: AddonGuestPayment;
+      voucher: AddonGuestVoucher;
+      age: number | null;
+      tierLabel?: string;
+    }[] = [];
+
+    const activeAddons =
+      voucherFilterAddonId === "all"
+        ? voucherAddons
+        : voucherAddons.filter((a) => a.id === voucherFilterAddonId);
+
+    activeAddons.forEach((addon) => {
+      const guestIds = addon.assignedGuestIds || [];
+      guestIds.forEach((gid) => {
+        const guest = guests.find((g) => g.id === gid);
+        if (!guest) return;
+
+        const payment = guestPayments[guest.id] || {};
+        const voucher = addon.vouchers?.[guest.id] || {};
+        const bDate = getGuestBDate(guest);
+        const age = calculateAge(bDate);
+        const { tierLabel } = getAddonPriceForGuest(addon, age);
+
+        // Filtro de busca
+        if (voucherSearchQuery.trim()) {
+          const q = voucherSearchQuery.toLowerCase();
+          const matchName = guest.nome?.toLowerCase().includes(q);
+          const matchDoc = guest.documento?.toLowerCase().includes(q);
+          const matchCode = voucher.voucherCode?.toLowerCase().includes(q);
+          const matchAddon = addon.title.toLowerCase().includes(q);
+          if (!matchName && !matchDoc && !matchCode && !matchAddon) return;
+        }
+
+        // Filtro de status
+        const isEmitted = !!voucher.emitted;
+        const isSent = !!voucher.sent;
+        if (voucherStatusFilter === "pending_emit" && isEmitted) return;
+        if (voucherStatusFilter === "pending_send" && (!isEmitted || isSent)) return;
+        if (voucherStatusFilter === "completed" && (!isEmitted || !isSent)) return;
+
+        rows.push({
+          addon,
+          guest,
+          payment,
+          voucher,
+          age,
+          tierLabel,
+        });
+      });
+    });
+
+    return rows;
+  }, [
+    voucherAddons,
+    voucherFilterAddonId,
+    voucherSearchQuery,
+    voucherStatusFilter,
+    guests,
+    guestPayments,
+    birthdaysMap,
+  ]);
 
   // Passageiros filtrados pela busca
   const filteredGuests = useMemo(() => {
@@ -766,6 +945,394 @@ export function AdicionaisView({
               </div>
             </div>
           )}
+
+          {/* ======================================================== */}
+          {/* SEGUNDA TABELA: CONTROLE E ENVIO DE VOUCHERS             */}
+          {/* ======================================================== */}
+          {voucherAddons.length > 0 && (
+            <div className="space-y-4 pt-6 border-t-2 border-border/80">
+              {/* Header da Seção de Vouchers */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-surface rounded-2xl border border-border p-4 shadow-shadow-card">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <Ticket size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-text-title">
+                        Controle e Envio de Vouchers
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-primary/15 text-primary">
+                        {voucherAddons.length}{" "}
+                        {voucherAddons.length === 1
+                          ? "adicional com voucher"
+                          : "adicionais com voucher"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-muted mt-0.5">
+                      Acompanhe quem já contratou itens que exigem voucher, confirme a emissão e registre o envio ao passageiro.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Filtro por Adicional se houver mais de um */}
+                {voucherAddons.length > 1 && (
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <span className="text-xs text-text-muted font-medium shrink-0">
+                      Filtrar:
+                    </span>
+                    <select
+                      value={voucherFilterAddonId}
+                      onChange={(e) => setVoucherFilterAddonId(e.target.value)}
+                      className="px-3 py-1.5 rounded-xl border border-border bg-surface-subtle text-xs font-semibold text-text-body focus:outline-none focus:border-primary cursor-pointer"
+                    >
+                      <option value="all">
+                        Todos os adicionais ({voucherAddons.length})
+                      </option>
+                      {voucherAddons.map((va) => (
+                        <option key={va.id} value={va.id}>
+                          {va.title || "Adicional"} ({va.assignedGuestIds?.length || 0})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Cards de Resumo dos Vouchers */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-surface rounded-xl border border-border p-3.5 space-y-1">
+                  <span className="text-[11px] font-semibold text-text-muted uppercase flex items-center gap-1.5">
+                    <Ticket size={13} className="text-primary" /> Total Necessários
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-extrabold text-text-title tabular-nums">
+                      {voucherStats.totalAssigned}
+                    </span>
+                    <span className="text-xs text-text-muted">vouchers nominais</span>
+                  </div>
+                </div>
+
+                <div className="bg-surface rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 space-y-1">
+                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1.5">
+                    <FileCheck size={13} /> Emitidos
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      {voucherStats.totalEmitted}
+                    </span>
+                    <span className="text-xs text-text-muted">
+                      de {voucherStats.totalAssigned} (
+                      {voucherStats.totalAssigned > 0
+                        ? Math.round(
+                            (voucherStats.totalEmitted / voucherStats.totalAssigned) * 100
+                          )
+                        : 0}
+                      %)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-surface rounded-xl border border-blue-500/20 bg-blue-500/5 p-3.5 space-y-1">
+                  <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 uppercase flex items-center gap-1.5">
+                    <Send size={13} /> Enviados ao Cliente
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-extrabold text-blue-600 dark:text-blue-400 tabular-nums">
+                      {voucherStats.totalSent}
+                    </span>
+                    <span className="text-xs text-text-muted">
+                      de {voucherStats.totalAssigned} (
+                      {voucherStats.totalAssigned > 0
+                        ? Math.round(
+                            (voucherStats.totalSent / voucherStats.totalAssigned) * 100
+                          )
+                        : 0}
+                      %)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-surface rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 space-y-1">
+                  <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase flex items-center gap-1.5">
+                    <Clock size={13} /> Pendentes de Envio
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-extrabold text-amber-600 dark:text-amber-400 tabular-nums">
+                      {voucherStats.totalAssigned - voucherStats.totalSent}
+                    </span>
+                    <span className="text-xs text-text-muted">restantes</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filtros da Tabela de Vouchers */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="relative w-full sm:w-80">
+                  <Search
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                  />
+                  <input
+                    type="text"
+                    value={voucherSearchQuery}
+                    onChange={(e) => setVoucherSearchQuery(e.target.value)}
+                    placeholder="Buscar por passageiro, doc ou voucher..."
+                    className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-border bg-surface text-xs text-text-body placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-surface-subtle border border-border overflow-x-auto w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setVoucherStatusFilter("all")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      voucherStatusFilter === "all"
+                        ? "bg-surface text-text-title shadow-2xs font-bold"
+                        : "text-text-muted hover:text-text-body"
+                    }`}
+                  >
+                    Todos ({voucherRows.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVoucherStatusFilter("pending_emit")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      voucherStatusFilter === "pending_emit"
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold"
+                        : "text-text-muted hover:text-text-body"
+                    }`}
+                  >
+                    A Emitir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVoucherStatusFilter("pending_send")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      voucherStatusFilter === "pending_send"
+                        ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 font-bold"
+                        : "text-text-muted hover:text-text-body"
+                    }`}
+                  >
+                    A Enviar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVoucherStatusFilter("completed")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      voucherStatusFilter === "completed"
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold"
+                        : "text-text-muted hover:text-text-body"
+                    }`}
+                  >
+                    Enviados ✓
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabela de Vouchers */}
+              {voucherRows.length === 0 ? (
+                <div className="bg-surface rounded-2xl border border-dashed border-border p-8 text-center space-y-2">
+                  <Ticket size={26} className="text-text-muted mx-auto" />
+                  <h4 className="text-xs font-bold text-text-title">
+                    Nenhum voucher pendente ou encontrado
+                  </h4>
+                  <p className="text-[11px] text-text-muted max-w-sm mx-auto">
+                    {voucherStats.totalAssigned === 0
+                      ? "Marque passageiros nos adicionais que emitem voucher na tabela acima para que apareçam aqui."
+                      : "Nenhum resultado corresponde aos filtros selecionados."}
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-surface rounded-2xl border border-border shadow-shadow-card overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-surface-subtle border-b border-border text-[11px] font-semibold text-text-muted uppercase">
+                          <th className="py-3 px-4 min-w-[170px]">Adicional</th>
+                          <th className="py-3 px-4 min-w-[200px]">Passageiro</th>
+                          <th className="py-3 px-3 text-center min-w-[90px]">Idade</th>
+                          <th className="py-3 px-3 text-center min-w-[110px]">Pagamento</th>
+                          <th className="py-3 px-3 min-w-[160px]">Código / Voucher</th>
+                          <th className="py-3 px-3 text-center min-w-[130px]">
+                            Voucher Emitido?
+                          </th>
+                          <th className="py-3 px-3 text-center min-w-[140px]">
+                            Voucher Enviado?
+                          </th>
+                          <th className="py-3 px-4 text-center min-w-[120px]">
+                            Status Geral
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {voucherRows.map((row) => {
+                          const isPaid = !!row.payment?.paid;
+                          const isEmitted = !!row.voucher?.emitted;
+                          const isSent = !!row.voucher?.sent;
+
+                          return (
+                            <tr
+                              key={`${row.addon.id}_${row.guest.id}`}
+                              className={`transition-colors ${
+                                isSent && isEmitted
+                                  ? "bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08]"
+                                  : "hover:bg-surface-subtle"
+                              }`}
+                            >
+                              {/* Adicional */}
+                              <td className="py-2.5 px-4 font-semibold text-text-title">
+                                <div className="flex items-center gap-1.5">
+                                  <Ticket size={13} className="text-primary shrink-0" />
+                                  <span className="truncate">{row.addon.title}</span>
+                                </div>
+                                {row.addon.location && (
+                                  <span className="block text-[10px] text-text-muted/70 truncate">
+                                    {row.addon.location}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Passageiro */}
+                              <td className="py-2.5 px-4">
+                                <span className="font-semibold text-text-title block truncate">
+                                  {row.guest.nome || "Sem nome"}
+                                </span>
+                                {row.guest.documento && (
+                                  <span className="text-[10px] text-text-muted block">
+                                    Doc: {row.guest.documento}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Idade */}
+                              <td className="py-2.5 px-3 text-center">
+                                {row.age !== null ? (
+                                  <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold bg-surface-subtle border border-border text-text-title">
+                                    {row.age} {row.age === 1 ? "ano" : "anos"}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-text-muted">
+                                    Adulto
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Pagamento */}
+                              <td className="py-2.5 px-3 text-center">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                    isPaid
+                                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                      : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                                  }`}
+                                >
+                                  {isPaid ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                                  {isPaid ? "Pago" : "Pendente"}
+                                </span>
+                              </td>
+
+                              {/* Código do Voucher */}
+                              <td className="py-2.5 px-3">
+                                <input
+                                  type="text"
+                                  value={row.voucher.voucherCode || ""}
+                                  onChange={(e) =>
+                                    handleUpdateVoucher(row.addon.id, row.guest.id, {
+                                      voucherCode: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Ex: #VOUCH-001"
+                                  className="w-full px-2.5 py-1 rounded-lg border border-border bg-surface text-xs font-mono font-medium text-text-body placeholder:text-text-muted/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                />
+                              </td>
+
+                              {/* Voucher Emitido? */}
+                              <td className="py-2.5 px-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleToggleVoucherEmitted(row.addon.id, row.guest.id)
+                                  }
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                    isEmitted
+                                      ? "bg-emerald-500 text-white shadow-xs hover:bg-emerald-600"
+                                      : "bg-surface-subtle hover:bg-surface border border-border text-text-muted hover:text-text-title"
+                                  }`}
+                                  title={
+                                    isEmitted
+                                      ? `Emitido em ${
+                                          row.voucher.emittedAt || "data registrada"
+                                        }. Clique para desmarcar.`
+                                      : "Clique para confirmar emissão do voucher"
+                                  }
+                                >
+                                  <FileCheck size={13} />
+                                  <span>{isEmitted ? "Emitido" : "Pendente"}</span>
+                                </button>
+                                {isEmitted && row.voucher.emittedAt && (
+                                  <span className="block text-[9px] text-text-muted mt-0.5">
+                                    {row.voucher.emittedAt}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Voucher Enviado para a Pessoa? */}
+                              <td className="py-2.5 px-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleToggleVoucherSent(row.addon.id, row.guest.id)
+                                  }
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                    isSent
+                                      ? "bg-blue-600 text-white shadow-xs hover:bg-blue-700"
+                                      : "bg-surface-subtle hover:bg-surface border border-border text-text-muted hover:text-text-title"
+                                  }`}
+                                  title={
+                                    isSent
+                                      ? `Enviado em ${
+                                          row.voucher.sentAt || "data registrada"
+                                        }. Clique para desmarcar.`
+                                      : "Clique para confirmar que enviou o voucher para o passageiro"
+                                  }
+                                >
+                                  <Send size={12} />
+                                  <span>{isSent ? "Enviado" : "Não Enviado"}</span>
+                                </button>
+                                {isSent && row.voucher.sentAt && (
+                                  <span className="block text-[9px] text-text-muted mt-0.5">
+                                    {row.voucher.sentAt}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Status Geral Consolidado */}
+                              <td className="py-2.5 px-4 text-center">
+                                {isEmitted && isSent ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                    <CheckCircle2 size={11} /> Entregue
+                                  </span>
+                                ) : isEmitted ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">
+                                    <Send size={11} /> Pronto p/ Envio
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                    <Clock size={11} /> A Emitir
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -830,6 +1397,32 @@ export function AdicionaisView({
                       </div>
 
                       <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+                        {/* Checkbox Emite Voucher */}
+                        <label
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer select-none transition-all ${
+                            addon.emiteVoucher
+                              ? "bg-primary/10 border-primary/40 text-primary shadow-2xs font-bold"
+                              : "bg-surface border-border text-text-muted hover:border-primary/30 hover:text-text-body"
+                          }`}
+                          title="Marque se este passeio/adicional necessita de emissão e envio de voucher nominal para o passageiro"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!addon.emiteVoucher}
+                            onChange={(e) =>
+                              handleUpdateAddon(addon.id, {
+                                emiteVoucher: e.target.checked,
+                              })
+                            }
+                            className="w-3.5 h-3.5 rounded text-primary focus:ring-primary focus:ring-1 border-border cursor-pointer transition-all"
+                          />
+                          <Ticket
+                            size={14}
+                            className={addon.emiteVoucher ? "text-primary" : "text-text-muted"}
+                          />
+                          <span>Emite Voucher</span>
+                        </label>
+
                         <span className="text-xs text-text-muted font-medium px-2.5 py-1 rounded-lg bg-surface border border-border">
                           {optInCount} {optInCount === 1 ? "adesão" : "adesões"}
                         </span>
@@ -901,6 +1494,16 @@ export function AdicionaisView({
                           />
                         </div>
                       </div>
+
+                      {/* Aviso de Voucher Ativo */}
+                      {addon.emiteVoucher && (
+                        <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-primary/5 border border-primary/20 text-xs text-primary">
+                          <Ticket size={14} className="shrink-0" />
+                          <span>
+                            <strong>Voucher Ativado:</strong> Os passageiros que aderirem a este adicional constarão na tabela de emissão e envio de vouchers na aba Adesão.
+                          </span>
+                        </div>
+                      )}
 
                       {/* Seção de Faixas de Idade e Valores (Custo e Lucro) */}
                       <div className="pt-3 border-t border-border/70 space-y-3">

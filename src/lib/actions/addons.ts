@@ -20,6 +20,15 @@ export interface AddonGuestPayment {
   paidAt?: string;
 }
 
+export interface AddonGuestVoucher {
+  voucherCode?: string;
+  emitted?: boolean;
+  emittedAt?: string;
+  sent?: boolean;
+  sentAt?: string;
+  notes?: string;
+}
+
 export interface ExcursionAddon {
   id: string;
   title: string;
@@ -27,6 +36,8 @@ export interface ExcursionAddon {
   latitude?: number;
   longitude?: number;
   observation?: string;
+  emiteVoucher?: boolean;
+  vouchers?: Record<string, AddonGuestVoucher>;
   price: number;
   cost?: number;
   profit?: number;
