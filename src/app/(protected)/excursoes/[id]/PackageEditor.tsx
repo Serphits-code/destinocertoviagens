@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import type { EditorBlock, BlockCategoryId, BlockData } from "@/lib/editor-types";
 import type { ItineraryItem } from "@/lib/actions/itinerary";
-import type { ExcursionAddon } from "@/lib/actions/addons";
+import type { ExcursionAddon, AddonGuestPayment } from "@/lib/actions/addons";
 import {
   updateExcursionAddons,
   updateExcursionProfitMargin,
@@ -84,6 +84,7 @@ interface PackageEditorProps {
   initialBlocks: EditorBlock[];
   initialItinerary?: ItineraryItem[];
   initialAddons?: ExcursionAddon[];
+  initialGuestPayments?: Record<string, AddonGuestPayment>;
   initialProfitMargin?: number;
   currentUser?: {
     id: string;
@@ -109,6 +110,7 @@ export function PackageEditor({
   initialBlocks,
   initialItinerary,
   initialAddons = [],
+  initialGuestPayments = {},
   initialProfitMargin = 0,
   currentUser,
 }: PackageEditorProps) {
@@ -128,6 +130,9 @@ export function PackageEditor({
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [view, setView] = useState<"pacote" | "roomlist" | "roteiro" | "adicionais" | "checkout">("pacote");
   const [addons, setAddons] = useState<ExcursionAddon[]>(initialAddons || []);
+  const [guestPayments, setGuestPayments] = useState<Record<string, AddonGuestPayment>>(
+    initialGuestPayments || {}
+  );
   const [profitMargin, setProfitMargin] = useState<number>(initialProfitMargin || 0);
 
   // Timer e flash de status Salvo
@@ -335,11 +340,14 @@ export function PackageEditor({
   // ---- Adicionais & Lucro da Agência ----
   const addonsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistAddons = useCallback(
-    (newAddons: ExcursionAddon[]) => {
+    (newAddons: ExcursionAddon[], newPayments: Record<string, AddonGuestPayment>) => {
       broadcastMutation({ type: "addons", addons: newAddons });
       if (addonsTimer.current) clearTimeout(addonsTimer.current);
       addonsTimer.current = setTimeout(async () => {
-        await updateExcursionAddons(excursionId, newAddons);
+        await updateExcursionAddons(excursionId, {
+          addons: newAddons,
+          guestPayments: newPayments,
+        });
         flashSaved();
       }, 500);
     },
@@ -347,11 +355,13 @@ export function PackageEditor({
   );
 
   const handleUpdateAddons = useCallback(
-    (newAddons: ExcursionAddon[]) => {
+    (newAddons: ExcursionAddon[], newPayments?: Record<string, AddonGuestPayment>) => {
       setAddons(newAddons);
-      persistAddons(newAddons);
+      const paymentsToPersist = newPayments ?? guestPayments;
+      if (newPayments) setGuestPayments(newPayments);
+      persistAddons(newAddons, paymentsToPersist);
     },
-    [persistAddons]
+    [persistAddons, guestPayments]
   );
 
   const marginTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -834,6 +844,10 @@ export function PackageEditor({
               addons={addons}
               onUpdateAddons={handleUpdateAddons}
               guests={guests}
+              guestPayments={guestPayments}
+              onUpdateGuestPayments={(newPayments) => handleUpdateAddons(addons, newPayments)}
+              periodStart={periodStart}
+              periodEnd={periodEnd}
             />
           ) : view === "checkout" ? (
             <CheckoutView

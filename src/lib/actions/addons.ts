@@ -4,6 +4,22 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireWritePermission } from "@/lib/auth-guards";
 
+export interface AddonAgeTier {
+  id: string;
+  label?: string; // Ex: "0 a 3 anos (Bebê)"
+  minAge: number; // Ex: 0
+  maxAge: number; // Ex: 3
+  cost: number;   // Custo
+  profit: number; // Lucro
+  price: number;  // Custo + Lucro
+}
+
+export interface AddonGuestPayment {
+  paymentMethod?: string;
+  paid?: boolean;
+  paidAt?: string;
+}
+
 export interface ExcursionAddon {
   id: string;
   title: string;
@@ -12,19 +28,29 @@ export interface ExcursionAddon {
   longitude?: number;
   observation?: string;
   price: number;
+  cost?: number;
+  profit?: number;
+  ageTiers?: AddonAgeTier[];
   assignedGuestIds: string[];
 }
 
+export type ExcursionAddonsPayload =
+  | ExcursionAddon[]
+  | {
+      addons: ExcursionAddon[];
+      guestPayments?: Record<string, AddonGuestPayment>;
+    };
+
 export async function updateExcursionAddons(
   excursionId: string,
-  addons: ExcursionAddon[]
+  payload: ExcursionAddonsPayload
 ) {
   await requireWritePermission();
 
   await db.excursion.update({
     where: { id: excursionId },
     data: {
-      addonsJson: addons as any,
+      addonsJson: payload as any,
     },
   });
 
