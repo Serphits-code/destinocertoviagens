@@ -930,6 +930,16 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         });
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const getCapacityFromRooms = (roomsList: any[]) => {
+        let cap = 0;
+        for (const r of roomsList ?? []) {
+          if (String(r.totalPeriodo || "").toLowerCase().includes("cortesia")) continue;
+          cap += getRoomCapacity(r.tipo) * (parseNum(r.qtd) || 0);
+        }
+        return cap;
+      };
+
       const handleRoomQtdChange = (idx: number, newQtd: string) => {
         const rooms = [...(d.rooms ?? [])];
         const r = { ...rooms[idx], qtd: newQtd };
@@ -948,10 +958,16 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           sumReserva += parseNum(rm.totalPeriodo);
         }
 
+        const newVagasNum = parseNum(d.vagas) > 0 ? parseNum(d.vagas) : getCapacityFromRooms(rooms);
+        const uNet = parseNum(d.valorNetUnitario);
+        const uSinal = parseNum(d.sinalUnitario);
+
         onUpdate({
           ...d,
           rooms,
           totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+          ...(uNet > 0 && newVagasNum > 0 ? { valorNetTotal: (uNet * newVagasNum).toFixed(2), valorNet: (uNet * newVagasNum).toFixed(2) } : {}),
+          ...(uSinal > 0 && newVagasNum > 0 ? { sinalTotal: (uSinal * newVagasNum).toFixed(2), sinal: (uSinal * newVagasNum).toFixed(2) } : {}),
         });
       };
 
@@ -969,6 +985,84 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           ...d,
           rooms,
           totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+        });
+      };
+
+      const vagasNum = parseNum(d.vagas) > 0 ? parseNum(d.vagas) : getCapacityFromRooms(d.rooms);
+
+      const sinalUnitarioDisplay =
+        d.sinalUnitario !== undefined && d.sinalUnitario !== ""
+          ? d.sinalUnitario
+          : vagasNum > 0 && parseNum(d.sinal) > 0 && !isNaN(Number(d.sinal))
+          ? (parseNum(d.sinal) / vagasNum).toFixed(2)
+          : "";
+
+      const sinalTotalDisplay =
+        d.sinalTotal !== undefined && d.sinalTotal !== ""
+          ? d.sinalTotal
+          : d.sinal !== undefined && d.sinal !== "" && !isNaN(Number(d.sinal))
+          ? d.sinal
+          : vagasNum > 0 && parseNum(d.sinalUnitario) > 0
+          ? (parseNum(d.sinalUnitario) * vagasNum).toFixed(2)
+          : "";
+
+      const valorNetUnitarioDisplay =
+        d.valorNetUnitario !== undefined
+          ? d.valorNetUnitario
+          : d.valorNet && parseNum(d.valorNet) > 0 && vagasNum > 0
+          ? (parseNum(d.valorNet) / vagasNum).toFixed(2)
+          : "";
+
+      const valorNetTotalDisplay =
+        d.valorNetTotal !== undefined
+          ? d.valorNetTotal
+          : d.valorNet !== undefined && d.valorNet !== "" && !isNaN(Number(d.valorNet))
+          ? d.valorNet
+          : vagasNum > 0 && parseNum(d.valorNetUnitario) > 0
+          ? (parseNum(d.valorNetUnitario) * vagasNum).toFixed(2)
+          : "";
+
+      const handleUnitValorNetChange = (val: string) => {
+        const u = parseNum(val);
+        const total = vagasNum > 0 && u > 0 ? (u * vagasNum).toFixed(2) : (vagasNum > 0 && !val ? "" : (d.valorNetTotal ?? d.valorNet));
+        onUpdate({
+          ...d,
+          valorNetUnitario: val,
+          valorNetTotal: total,
+          valorNet: total,
+        });
+      };
+
+      const handleTotalValorNetChange = (val: string) => {
+        const t = parseNum(val);
+        const unit = vagasNum > 0 && t > 0 ? (t / vagasNum).toFixed(2) : d.valorNetUnitario;
+        onUpdate({
+          ...d,
+          valorNetTotal: val,
+          valorNet: val,
+          valorNetUnitario: unit,
+        });
+      };
+
+      const handleUnitSinalChange = (val: string) => {
+        const u = parseNum(val);
+        const total = vagasNum > 0 && u > 0 ? (u * vagasNum).toFixed(2) : (vagasNum > 0 && !val ? "" : (d.sinalTotal ?? d.sinal));
+        onUpdate({
+          ...d,
+          sinalUnitario: val,
+          sinalTotal: total,
+          sinal: total,
+        });
+      };
+
+      const handleTotalSinalChange = (val: string) => {
+        const t = parseNum(val);
+        const unit = vagasNum > 0 && t > 0 ? (t / vagasNum).toFixed(2) : d.sinalUnitario;
+        onUpdate({
+          ...d,
+          sinalTotal: val,
+          sinal: val,
+          sinalUnitario: unit,
         });
       };
 
@@ -1107,9 +1201,9 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             <Plus size={14} /> Adicionar Quarto
           </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/40">
-            <label className="text-xs text-text-muted">
-              <span className="block mb-1 font-medium">Total Reserva (R$)</span>
+          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50">
+            <label className="text-xs text-text-muted block">
+              <span className="block mb-1 font-medium text-text-title">Total Reserva (R$)</span>
               <input
                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 value={d.totalReserva ?? ""}
@@ -1117,36 +1211,253 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                 onChange={(e) => set("totalReserva", e.target.value)}
               />
             </label>
-            <label className="text-xs text-text-muted">
-              <span className="block mb-1 font-medium">Observação</span>
-              <input
-                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                value={d.observation ?? ""}
-                placeholder="Ex: Cortesia concedida no quarto duplo solteiro..."
-                onChange={(e) => set("observation", e.target.value)}
-              />
-            </label>
           </div>
+
+          {/* Valor NET e Sinal */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 p-3.5 rounded-xl border border-border bg-surface-subtle/50">
+            {/* Bloco Valor NET */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                <DollarSign size={14} className="text-emerald-500" />
+                <span>Valor NET (Custo Líquido)</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-text-muted">
+                  <span className="block mb-1 font-medium">NET Unitário (R$)</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={valorNetUnitarioDisplay}
+                    onChange={(e) => handleUnitValorNetChange(e.target.value)}
+                  />
+                </label>
+                <label className="text-xs text-text-muted">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">NET Total (R$)</span>
+                    {vagasNum > 0 && (
+                      <span className="text-[10px] text-text-muted font-normal">
+                        ({vagasNum}v)
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={valorNetTotalDisplay}
+                    onChange={(e) => handleTotalValorNetChange(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Bloco Sinal */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                <DollarSign size={14} className="text-amber-500" />
+                <span>Sinal / Entrada</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-text-muted">
+                  <span className="block mb-1 font-medium">Sinal Unit. (R$)</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={sinalUnitarioDisplay}
+                    onChange={(e) => handleUnitSinalChange(e.target.value)}
+                  />
+                </label>
+                <label className="text-xs text-text-muted">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">Sinal Total (R$)</span>
+                    {vagasNum > 0 && (
+                      <span className="text-[10px] text-text-muted font-normal">
+                        ({vagasNum}v)
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-text-title focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={sinalTotalDisplay}
+                    onChange={(e) => handleTotalSinalChange(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Prazos / Datas Limite */}
+          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+              <Calendar size={14} className="text-primary" />
+              <span>Prazos e Datas Limite</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="text-xs text-text-muted">
+                <span className="block mb-1 font-medium">Prazo Pagamento do Sinal</span>
+                <input
+                  type="date"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                  value={toInputDate(d.prazoSinal)}
+                  onChange={(e) => set("prazoSinal", e.target.value)}
+                />
+              </label>
+              <label className="text-xs text-text-muted">
+                <span className="block mb-1 font-medium">Prazo Pagamento Total</span>
+                <input
+                  type="date"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                  value={toInputDate(d.prazoPagamentoTotal)}
+                  onChange={(e) => set("prazoPagamentoTotal", e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+
+          <BlockObservation
+            value={d.observation}
+            onChange={(v) => set("observation", v)}
+            placeholder="Ex: Cortesia concedida no quarto duplo solteiro..."
+          />
         </div>
       );
     }
 
     // ---- Rodoviário ----
     case "rodoviario": {
-      const handleVagasChange = (newVagas: string) => {
-        const vagasNum = parseNum(newVagas);
-        const vContrato = parseNum(d.valorContrato);
-        const rateio = vagasNum > 0 && vContrato > 0 ? (vContrato / vagasNum).toFixed(2) : d.rateioPorPessoa;
+      const vagasNum = parseNum(d.vagas);
+
+      const sinalUnitarioDisplay =
+        d.sinalUnitario !== undefined && d.sinalUnitario !== ""
+          ? d.sinalUnitario
+          : vagasNum > 0 && parseNum(d.sinal) > 0
+          ? (parseNum(d.sinal) / vagasNum).toFixed(2)
+          : "";
+
+      const sinalTotalDisplay =
+        d.sinalTotal !== undefined && d.sinalTotal !== ""
+          ? d.sinalTotal
+          : d.sinal !== undefined && d.sinal !== ""
+          ? d.sinal
+          : vagasNum > 0 && parseNum(d.sinalUnitario) > 0
+          ? (parseNum(d.sinalUnitario) * vagasNum).toFixed(2)
+          : "";
+
+      const valorNetUnitarioDisplay =
+        d.valorNetUnitario !== undefined
+          ? d.valorNetUnitario
+          : d.valorNet && parseNum(d.valorNet) > 0 && vagasNum > 0
+          ? (parseNum(d.valorNet) / vagasNum).toFixed(2)
+          : "";
+
+      const valorNetTotalDisplay =
+        d.valorNetTotal !== undefined
+          ? d.valorNetTotal
+          : d.valorNet !== undefined && d.valorNet !== ""
+          ? d.valorNet
+          : vagasNum > 0 && parseNum(d.valorNetUnitario) > 0
+          ? (parseNum(d.valorNetUnitario) * vagasNum).toFixed(2)
+          : "";
+
+      const handleUnitValorNetChange = (val: string) => {
+        const u = parseNum(val);
+        const total = vagasNum > 0 && u > 0 ? (u * vagasNum).toFixed(2) : (vagasNum > 0 && !val ? "" : (d.valorNetTotal ?? d.valorNet));
         onUpdate({
+          ...d,
+          valorNetUnitario: val,
+          valorNetTotal: total,
+          valorNet: total,
+        });
+      };
+
+      const handleTotalValorNetChange = (val: string) => {
+        const t = parseNum(val);
+        const unit = vagasNum > 0 && t > 0 ? (t / vagasNum).toFixed(2) : d.valorNetUnitario;
+        onUpdate({
+          ...d,
+          valorNetTotal: val,
+          valorNet: val,
+          valorNetUnitario: unit,
+        });
+      };
+
+      const handleUnitSinalChange = (val: string) => {
+        const u = parseNum(val);
+        const total = vagasNum > 0 && u > 0 ? (u * vagasNum).toFixed(2) : (vagasNum > 0 && !val ? "" : (d.sinalTotal ?? d.sinal));
+        onUpdate({
+          ...d,
+          sinalUnitario: val,
+          sinalTotal: total,
+          sinal: total,
+        });
+      };
+
+      const handleTotalSinalChange = (val: string) => {
+        const t = parseNum(val);
+        const unit = vagasNum > 0 && t > 0 ? (t / vagasNum).toFixed(2) : d.sinalUnitario;
+        onUpdate({
+          ...d,
+          sinalTotal: val,
+          sinal: val,
+          sinalUnitario: unit,
+        });
+      };
+
+      const handleVagasChange = (newVagas: string) => {
+        const vNum = parseNum(newVagas);
+        const vContrato = parseNum(d.valorContrato);
+        const rateio = vNum > 0 && vContrato > 0 ? (vContrato / vNum).toFixed(2) : d.rateioPorPessoa;
+
+        const currentUnitSinal = parseNum(
+          d.sinalUnitario !== undefined && d.sinalUnitario !== ""
+            ? d.sinalUnitario
+            : d.sinal && parseNum(d.vagas) > 0
+            ? parseNum(d.sinal) / parseNum(d.vagas)
+            : 0
+        );
+        const currentUnitNet = parseNum(
+          d.valorNetUnitario !== undefined && d.valorNetUnitario !== ""
+            ? d.valorNetUnitario
+            : d.valorNet && parseNum(d.vagas) > 0
+            ? parseNum(d.valorNet) / parseNum(d.vagas)
+            : 0
+        );
+
+        const updated: Record<string, unknown> = {
           ...d,
           vagas: newVagas,
           ...(rateio ? { rateioPorPessoa: rateio } : {}),
-        });
+        };
+
+        if (currentUnitSinal > 0 && vNum > 0) {
+          const st = (currentUnitSinal * vNum).toFixed(2);
+          updated.sinalTotal = st;
+          updated.sinal = st;
+          if (!d.sinalUnitario) {
+            updated.sinalUnitario = currentUnitSinal.toFixed(2);
+          }
+        }
+        if (currentUnitNet > 0 && vNum > 0) {
+          const nt = (currentUnitNet * vNum).toFixed(2);
+          updated.valorNetTotal = nt;
+          updated.valorNet = nt;
+          if (!d.valorNetUnitario) {
+            updated.valorNetUnitario = currentUnitNet.toFixed(2);
+          }
+        }
+        onUpdate(updated);
       };
 
       const handleValorContratoChange = (newVal: string) => {
         const vNum = parseNum(newVal);
-        const vagasNum = parseNum(d.vagas);
         const rateio = vagasNum > 0 && vNum > 0 ? (vNum / vagasNum).toFixed(2) : d.rateioPorPessoa;
         onUpdate({
           ...d,
@@ -1157,8 +1468,8 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       const handleRateioChange = (newRateio: string) => {
         const rNum = parseNum(newRateio);
-        const vagasNum = parseNum(d.vagas) || 20;
-        const vContrato = rNum > 0 && vagasNum > 0 ? (rNum * vagasNum).toFixed(2) : (newRateio === "" ? "" : d.valorContrato);
+        const vNum = vagasNum || 20;
+        const vContrato = rNum > 0 && vNum > 0 ? (rNum * vNum).toFixed(2) : (newRateio === "" ? "" : d.valorContrato);
         onUpdate({
           ...d,
           rateioPorPessoa: newRateio,
@@ -1250,6 +1561,115 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                 <StatusSelect value={(d.status as RowStatus) ?? "COTADO"} onChange={(v) => set("status", v)} />
               </div>
             </label>
+          </div>
+
+          {/* Valor NET e Sinal */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 p-3.5 rounded-xl border border-border bg-surface-subtle/50">
+            {/* Bloco Valor NET */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                <DollarSign size={14} className="text-emerald-500" />
+                <span>Valor NET (Custo Líquido)</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-text-muted">
+                  <span className="block mb-1 font-medium">NET Unitário (R$)</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={valorNetUnitarioDisplay}
+                    onChange={(e) => handleUnitValorNetChange(e.target.value)}
+                  />
+                </label>
+                <label className="text-xs text-text-muted">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">NET Total (R$)</span>
+                    {vagasNum > 0 && (
+                      <span className="text-[10px] text-text-muted font-normal">
+                        ({vagasNum}v)
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={valorNetTotalDisplay}
+                    onChange={(e) => handleTotalValorNetChange(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Bloco Sinal */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                <DollarSign size={14} className="text-amber-500" />
+                <span>Sinal / Entrada</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-text-muted">
+                  <span className="block mb-1 font-medium">Sinal Unit. (R$)</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={sinalUnitarioDisplay}
+                    onChange={(e) => handleUnitSinalChange(e.target.value)}
+                  />
+                </label>
+                <label className="text-xs text-text-muted">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium">Sinal Total (R$)</span>
+                    {vagasNum > 0 && (
+                      <span className="text-[10px] text-text-muted font-normal">
+                        ({vagasNum}v)
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-text-title focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    placeholder="0.00"
+                    value={sinalTotalDisplay}
+                    onChange={(e) => handleTotalSinalChange(e.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Prazos / Datas Limite */}
+          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+              <Calendar size={14} className="text-primary" />
+              <span>Prazos e Datas Limite</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="text-xs text-text-muted">
+                <span className="block mb-1 font-medium">Prazo Pagamento do Sinal</span>
+                <input
+                  type="date"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                  value={toInputDate(d.prazoSinal)}
+                  onChange={(e) => set("prazoSinal", e.target.value)}
+                />
+              </label>
+              <label className="text-xs text-text-muted">
+                <span className="block mb-1 font-medium">Prazo Pagamento Total</span>
+                <input
+                  type="date"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                  value={toInputDate(d.prazoPagamentoTotal)}
+                  onChange={(e) => set("prazoPagamentoTotal", e.target.value)}
+                />
+              </label>
+            </div>
           </div>
 
           <BlockObservation

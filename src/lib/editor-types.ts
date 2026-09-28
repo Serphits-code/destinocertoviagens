@@ -58,6 +58,56 @@ export interface HospedagemRoom {
   totalPeriodo: string;
 }
 
+export interface HospedagemBlockData {
+  title?: string;
+  hotel?: string;
+  cidade?: string;
+  diarias?: string;
+  periodo?: string;
+  reserva?: string;
+  localizador?: string;
+  rooms?: HospedagemRoom[];
+  totalReserva?: string;
+  valorNet?: string;
+  valorNetUnitario?: string;
+  valorNetTotal?: string;
+  sinalUnitario?: string;
+  sinalTotal?: string;
+  sinal?: string;
+  prazoSinal?: string;
+  prazoPagamentoTotal?: string;
+  status?: RowStatus;
+  observation?: string;
+}
+
+export interface RodoviarioBlockData {
+  title?: string;
+  empresa?: string;
+  atendente?: string;
+  veiculo?: string;
+  vagas?: string;
+  wifi?: string;
+  banheiro?: string;
+  ar?: string;
+  agua?: string;
+  itinerario?: string;
+  trajeto?: string;
+  tipoTrajeto?: string;
+  valorContrato?: string;
+  cancelamento?: string;
+  rateioPorPessoa?: string;
+  status?: RowStatus;
+  observation?: string;
+  valorNet?: string;
+  valorNetUnitario?: string;
+  valorNetTotal?: string;
+  sinalUnitario?: string;
+  sinalTotal?: string;
+  sinal?: string;
+  prazoSinal?: string;
+  prazoPagamentoTotal?: string;
+}
+
 export interface GuiaEntry {
   nome: string;
   tipo: string;

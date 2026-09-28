@@ -50,8 +50,11 @@ export function calculateBaseCardsCost(blocks: EditorBlock[], defaultCardVagas: 
       }
     }
 
-    // Hospedagem: Total da Reserva ou soma dos quartos
+    // Hospedagem: Valor NET, Total da Reserva ou soma dos quartos
     else if (block.categoryId === "hospedagem") {
+      const netTotal = parseNum(d.valorNetTotal ?? d.valorNet);
+      const netUnit = parseNum(d.valorNetUnitario);
+      const blockVagas = parseNum(d.vagas) || defaultCardVagas;
       const totalReserva = parseNum(d.totalReserva);
       let sumRooms = 0;
       const dDiarias = parseNum(d.diarias) || 1;
@@ -82,19 +85,29 @@ export function calculateBaseCardsCost(blocks: EditorBlock[], defaultCardVagas: 
           }
         }
       }
-      if (totalReserva > 0) {
+      if (netTotal > 0) {
+        total += netTotal;
+      } else if (netUnit > 0) {
+        total += netUnit * blockVagas;
+      } else if (totalReserva > 0) {
         total += totalReserva;
       } else if (sumRooms > 0) {
         total += sumRooms;
       }
     }
 
-    // Rodoviário: Valor do Contrato ou rateio * vagas
+    // Rodoviário: Valor NET, Valor do Contrato ou rateio * vagas
     else if (block.categoryId === "rodoviario") {
+      const netTotal = parseNum(d.valorNetTotal ?? d.valorNet);
+      const netUnit = parseNum(d.valorNetUnitario);
       const vContrato = parseNum(d.valorContrato);
       const blockVagas = parseNum(d.vagas) || defaultCardVagas;
       const rateio = parseNum(d.rateioPorPessoa);
-      if (vContrato > 0) {
+      if (netTotal > 0) {
+        total += netTotal;
+      } else if (netUnit > 0) {
+        total += netUnit * blockVagas;
+      } else if (vContrato > 0) {
         total += vContrato;
       } else if (rateio > 0) {
         total += rateio * blockVagas;
