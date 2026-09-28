@@ -24,6 +24,7 @@ import {
   Coins,
   CheckSquare,
   Target,
+  Code2,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -37,15 +38,12 @@ interface MenuItem {
   icon: any;
   label: string;
   href: string;
+  isGroupOnly?: boolean;
+  badge?: string;
   subItems?: SubMenuItem[];
 }
 
 const menuItems: MenuItem[] = [
-  { icon: LayoutDashboard, label: "Cockpit", href: "/cockpit" },
-  { icon: Landmark, label: "Extrato Bancário", href: "/financeiro/extrato" },
-  { icon: Coins, label: "Livro Caixa", href: "/financeiro/caixa" },
-  { icon: CreditCard, label: "Recebimentos por Tipo", href: "/financeiro/recebimentos" },
-  { icon: Receipt, label: "Vendas & Emissões", href: "/vendas" },
   { icon: Map, label: "Excursões", href: "/excursoes" },
   {
     icon: Users,
@@ -55,11 +53,25 @@ const menuItems: MenuItem[] = [
       { icon: Cake, label: "Aniversariantes", href: "/clientes/aniversariantes" },
     ],
   },
-  { icon: CheckSquare, label: "Tarefas & CRM", href: "/tarefas" },
-  { icon: Target, label: "Vendedores & Metas", href: "/vendedores" },
+  { icon: Building2, label: "Fornecedores & Parceiros", href: "/fornecedores" },
   { icon: StickyNote, label: "Quadro de Notas", href: "/notas" },
   { icon: Share2, label: "Rede Social", href: "/rede-social" },
-  { icon: Building2, label: "Fornecedores & Parceiros", href: "/fornecedores" },
+  {
+    icon: Code2,
+    label: "(EM DEV)",
+    href: "#dev",
+    isGroupOnly: true,
+    badge: "DEV",
+    subItems: [
+      { icon: LayoutDashboard, label: "Cockpit", href: "/cockpit" },
+      { icon: Landmark, label: "Extrato Bancário", href: "/financeiro/extrato" },
+      { icon: Coins, label: "Livro Caixa", href: "/financeiro/caixa" },
+      { icon: CreditCard, label: "Recebimento por Tipo", href: "/financeiro/recebimentos" },
+      { icon: Receipt, label: "Vendas & Emissões", href: "/vendas" },
+      { icon: CheckSquare, label: "Tarefas & CRM", href: "/tarefas" },
+      { icon: Target, label: "Vendedores & Metas", href: "/vendedores" },
+    ],
+  },
   { icon: Settings, label: "Configurações", href: "/configuracoes" },
 ];
 
@@ -73,7 +85,14 @@ export function Sidebar() {
   const toggleSubmenu = (href: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setOpenSubmenus((prev) => ({ ...prev, [href]: !prev[href] }));
+    setOpenSubmenus((prev) => {
+      const current =
+        prev[href] !== undefined
+          ? prev[href]
+          : menuItems.find((m) => m.href === href)?.subItems?.some((sub) => pathname === sub.href) ||
+            (href !== "#dev" && pathname.startsWith(href));
+      return { ...prev, [href]: !current };
+    });
   };
 
   return (
@@ -144,122 +163,215 @@ export function Sidebar() {
           const hasSubItems = Boolean(item.subItems && item.subItems.length > 0);
           const isSubActive = hasSubItems && item.subItems?.some((sub) => pathname === sub.href);
           const isParentActive =
-            pathname === item.href || (pathname.startsWith(item.href) && !isSubActive);
+            !item.isGroupOnly && (pathname === item.href || (pathname.startsWith(item.href) && !isSubActive));
           const isSubmenuOpen =
-            openSubmenus[item.href] ?? pathname.startsWith(item.href);
+            openSubmenus[item.href] !== undefined
+              ? openSubmenus[item.href]
+              : isSubActive || (item.href !== "#dev" && pathname.startsWith(item.href));
           const Icon = item.icon;
+          const isGroupOnly = Boolean(item.isGroupOnly);
 
           return (
             <div key={item.href} className="space-y-1">
-              <Link href={item.href} className="block group relative">
-                <motion.div
-                  whileHover={{ x: collapsed ? 0 : 2 }}
-                  whileTap={{ scale: 0.985 }}
-                  transition={{ duration: 0.15 }}
-                  className={`relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors duration-200 cursor-pointer overflow-hidden ${
-                    isParentActive
-                      ? "text-white font-bold"
-                      : isSubActive
-                      ? "text-white bg-white/[0.08] border border-white/10 font-semibold"
-                      : "text-slate-300/75 hover:text-white"
-                  }`}
+              {item.isGroupOnly && (
+                <div className="pt-2 pb-1 px-2">
+                  <div className="h-px bg-white/10 w-full" />
+                </div>
+              )}
+
+              {isGroupOnly ? (
+                <button
+                  type="button"
+                  onClick={(e) => toggleSubmenu(item.href, e)}
+                  className="w-full text-left block group relative"
+                  title={collapsed ? item.label : undefined}
                 >
-                  {/* Transição Suave de Fundo Ativo (Shared Layout Animation entre botões) */}
-                  {isParentActive && (
-                    <motion.div
-                      layoutId="active-sidebar-pill"
-                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary via-[#ff7a22] to-orange-500 shadow-lg shadow-primary/25 border border-primary-strong/40 z-0 overflow-hidden"
-                      transition={{
-                        type: "spring",
-                        stiffness: 380,
-                        damping: 32,
-                        mass: 0.8,
-                      }}
-                    >
-                      {/* Fill progressivo / varredura luminosa da esquerda para a direita */}
-                      <motion.div
-                        initial={{ x: "-100%" }}
-                        animate={{ x: "100%" }}
-                        transition={{ duration: 0.65, ease: "easeOut" }}
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12 pointer-events-none"
-                      />
-                    </motion.div>
-                  )}
-
-                  {/* Fill progressivo da esquerda para a direita no Hover (Inativo) */}
-                  {!isParentActive && !isSubActive && (
-                    <motion.div
-                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-white/[0.09] via-white/[0.05] to-transparent border border-white/10 pointer-events-none z-0"
-                      initial={{ scaleX: 0, opacity: 0 }}
-                      whileHover={{ scaleX: 1, opacity: 1 }}
-                      transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-                      style={{ originX: 0 }}
-                    />
-                  )}
-
-                  {/* Cápsula Indicadora Branca na borda esquerda com transição suave */}
-                  {isParentActive && (
-                    <motion.div
-                      layoutId="active-sidebar-capsule"
-                      className="w-1.5 h-4 rounded-full bg-white shrink-0 -ml-0.5 shadow-sm z-10"
-                      transition={{
-                        type: "spring",
-                        stiffness: 400,
-                        damping: 30,
-                      }}
-                    />
-                  )}
-
-                  {/* Ícone com destaque */}
-                  <Icon
-                    size={19}
-                    className={`shrink-0 transition-colors z-10 ${
-                      isParentActive || isSubActive
-                        ? "text-white drop-shadow-xs"
-                        : "text-slate-400 group-hover:text-primary"
+                  <motion.div
+                    whileHover={{ x: collapsed ? 0 : 2 }}
+                    whileTap={{ scale: 0.985 }}
+                    transition={{ duration: 0.15 }}
+                    className={`relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors duration-200 cursor-pointer overflow-hidden ${
+                      isSubActive
+                        ? "text-amber-300 bg-amber-500/10 border border-amber-500/25 font-semibold"
+                        : "text-slate-300/80 hover:text-amber-200 hover:bg-amber-500/5 border border-transparent"
                     }`}
-                  />
-
-                  <AnimatePresence>
-                    {!collapsed && (
+                  >
+                    {/* Cápsula Indicadora Âmbar na borda esquerda quando subitem ativo */}
+                    {isSubActive && (
                       <motion.div
-                        initial={{ opacity: 0, width: 0 }}
-                        animate={{ opacity: 1, width: "auto" }}
-                        exit={{ opacity: 0, width: 0 }}
-                        className="flex-1 flex items-center justify-between min-w-0 z-10"
-                      >
-                        <span
-                          className={`truncate text-[13px] tracking-tight ${
-                            isParentActive
-                              ? "font-bold text-white"
-                              : isSubActive
-                              ? "font-semibold text-white"
-                              : "font-medium"
-                          }`}
-                        >
-                          {item.label}
-                        </span>
+                        layoutId="active-dev-capsule"
+                        className="w-1.5 h-4 rounded-full bg-amber-400 shrink-0 -ml-0.5 shadow-sm z-10"
+                        transition={{
+                          type: "spring",
+                          stiffness: 400,
+                          damping: 30,
+                        }}
+                      />
+                    )}
 
-                        {hasSubItems && (
-                          <button
-                            type="button"
-                            onClick={(e) => toggleSubmenu(item.href, e)}
-                            className="p-1 rounded-md hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer ml-1 shrink-0"
-                            title={isSubmenuOpen ? "Recolher subitens" : "Expandir subitens"}
-                          >
+                    {/* Ícone com destaque */}
+                    <Icon
+                      size={19}
+                      className={`shrink-0 transition-colors z-10 ${
+                        isSubActive
+                          ? "text-amber-400 drop-shadow-xs"
+                          : "text-amber-400/80 group-hover:text-amber-300"
+                      }`}
+                    />
+
+                    <AnimatePresence>
+                      {!collapsed && (
+                        <motion.div
+                          initial={{ opacity: 0, width: 0 }}
+                          animate={{ opacity: 1, width: "auto" }}
+                          exit={{ opacity: 0, width: 0 }}
+                          className="flex-1 flex items-center justify-between min-w-0 z-10"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className={`truncate text-[13px] tracking-tight ${
+                                isSubActive
+                                  ? "font-bold text-amber-300"
+                                  : "font-semibold text-amber-400/90 group-hover:text-amber-200"
+                              }`}
+                            >
+                              {item.label}
+                            </span>
+                            {item.badge && (
+                              <span className="text-[9px] uppercase font-mono font-bold px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="p-1 rounded-md text-amber-400/70 group-hover:text-amber-300 transition-colors shrink-0 ml-1">
                             <ChevronDown
                               size={14}
                               className={`transition-transform duration-200 ${
-                                isSubmenuOpen ? "rotate-180 text-white" : ""
+                                isSubmenuOpen ? "rotate-180 text-amber-300" : ""
                               }`}
                             />
-                          </button>
-                        )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                </button>
+              ) : (
+                <Link
+                  href={item.href}
+                  className="block group relative"
+                  title={collapsed ? item.label : undefined}
+                >
+                  <motion.div
+                    whileHover={{ x: collapsed ? 0 : 2 }}
+                    whileTap={{ scale: 0.985 }}
+                    transition={{ duration: 0.15 }}
+                    className={`relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-colors duration-200 cursor-pointer overflow-hidden ${
+                      isParentActive
+                        ? "text-white font-bold"
+                        : isSubActive
+                        ? "text-white bg-white/[0.08] border border-white/10 font-semibold"
+                        : "text-slate-300/75 hover:text-white"
+                    }`}
+                  >
+                    {/* Transição Suave de Fundo Ativo (Shared Layout Animation entre botões) */}
+                    {isParentActive && (
+                      <motion.div
+                        layoutId="active-sidebar-pill"
+                        className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary via-[#ff7a22] to-orange-500 shadow-lg shadow-primary/25 border border-primary-strong/40 z-0 overflow-hidden"
+                        transition={{
+                          type: "spring",
+                          stiffness: 380,
+                          damping: 32,
+                          mass: 0.8,
+                        }}
+                      >
+                        {/* Fill progressivo / varredura luminosa da esquerda para a direita */}
+                        <motion.div
+                          initial={{ x: "-100%" }}
+                          animate={{ x: "100%" }}
+                          transition={{ duration: 0.65, ease: "easeOut" }}
+                          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12 pointer-events-none"
+                        />
                       </motion.div>
                     )}
-                  </AnimatePresence>
-                </motion.div>
-              </Link>
+
+                    {/* Fill progressivo da esquerda para a direita no Hover (Inativo) */}
+                    {!isParentActive && !isSubActive && (
+                      <motion.div
+                        className="absolute inset-0 rounded-xl bg-gradient-to-r from-white/[0.09] via-white/[0.05] to-transparent border border-white/10 pointer-events-none z-0"
+                        initial={{ scaleX: 0, opacity: 0 }}
+                        whileHover={{ scaleX: 1, opacity: 1 }}
+                        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                        style={{ originX: 0 }}
+                      />
+                    )}
+
+                    {/* Cápsula Indicadora Branca na borda esquerda com transição suave */}
+                    {isParentActive && (
+                      <motion.div
+                        layoutId="active-sidebar-capsule"
+                        className="w-1.5 h-4 rounded-full bg-white shrink-0 -ml-0.5 shadow-sm z-10"
+                        transition={{
+                          type: "spring",
+                          stiffness: 400,
+                          damping: 30,
+                        }}
+                      />
+                    )}
+
+                    {/* Ícone com destaque */}
+                    <Icon
+                      size={19}
+                      className={`shrink-0 transition-colors z-10 ${
+                        isParentActive || isSubActive
+                          ? "text-white drop-shadow-xs"
+                          : "text-slate-400 group-hover:text-primary"
+                      }`}
+                    />
+
+                    <AnimatePresence>
+                      {!collapsed && (
+                        <motion.div
+                          initial={{ opacity: 0, width: 0 }}
+                          animate={{ opacity: 1, width: "auto" }}
+                          exit={{ opacity: 0, width: 0 }}
+                          className="flex-1 flex items-center justify-between min-w-0 z-10"
+                        >
+                          <span
+                            className={`truncate text-[13px] tracking-tight ${
+                              isParentActive
+                                ? "font-bold text-white"
+                                : isSubActive
+                                ? "font-semibold text-white"
+                                : "font-medium"
+                            }`}
+                          >
+                            {item.label}
+                          </span>
+
+                          {hasSubItems && (
+                            <button
+                              type="button"
+                              onClick={(e) => toggleSubmenu(item.href, e)}
+                              className="p-1 rounded-md hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer ml-1 shrink-0"
+                              title={isSubmenuOpen ? "Recolher subitens" : "Expandir subitens"}
+                            >
+                              <ChevronDown
+                                size={14}
+                                className={`transition-transform duration-200 ${
+                                  isSubmenuOpen ? "rotate-180 text-white" : ""
+                                }`}
+                              />
+                            </button>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                </Link>
+              )}
 
               {/* Renderização dos Sub-itens */}
               {hasSubItems && !collapsed && (
@@ -270,7 +382,9 @@ export function Sidebar() {
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
                       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                      className="ml-4 pl-3 border-l-2 border-white/10 mt-1 space-y-1 overflow-hidden"
+                      className={`ml-4 pl-3 border-l-2 mt-1 space-y-1 overflow-hidden ${
+                        isGroupOnly ? "border-amber-500/30" : "border-white/10"
+                      }`}
                     >
                       {item.subItems?.map((sub) => {
                         const isThisSubActive = pathname === sub.href;
@@ -333,6 +447,8 @@ export function Sidebar() {
                                 className={`shrink-0 transition-colors z-10 ${
                                   isThisSubActive
                                     ? "text-white"
+                                    : isGroupOnly
+                                    ? "text-amber-400/80 group-hover/sub:text-amber-300"
                                     : "text-slate-400 group-hover/sub:text-primary"
                                 }`}
                               />
@@ -347,7 +463,7 @@ export function Sidebar() {
               )}
 
               {/* Sub-itens no Modo Recolhido (collapsed) */}
-              {hasSubItems && collapsed && (
+              {hasSubItems && collapsed && isSubmenuOpen && (
                 <div className="space-y-1 pt-0.5">
                   {item.subItems?.map((sub) => {
                     const isThisSubActive = pathname === sub.href;
