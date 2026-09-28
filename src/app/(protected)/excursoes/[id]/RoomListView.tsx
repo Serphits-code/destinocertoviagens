@@ -1104,57 +1104,41 @@ export function RoomListView({
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-6">
-        {/* Banner de Aniversariantes no Período da Viagem */}
+        {/* Banner de Aniversariantes no Período da Viagem (Enxuto) */}
         {allBirthdayGuests.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.99 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-pink-500/10 to-purple-500/10 border border-amber-500/30 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex flex-wrap items-center justify-between gap-3 text-xs"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-pink-500 text-white flex items-center justify-center text-xl shadow-md shrink-0">
-                🎂
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h4 className="font-extrabold text-sm text-text-title">
-                    {allBirthdayGuests.length === 1
-                      ? "1 Aniversariante nesta viagem!"
-                      : `${allBirthdayGuests.length} Aniversariantes nesta viagem!`}
-                  </h4>
-                  <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs">
-                    Comemoração no Roteiro
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs mt-1">
-                  {allBirthdayGuests.map((bg, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface/80 border border-amber-500/30 text-text-title font-medium"
-                    >
-                      <span>🎉</span>
-                      <span className="font-bold">{bg.guest.nome}</span>
-                      <span className="text-amber-600 dark:text-amber-400 font-extrabold">
-                        dia {bg.birthdayInfo.dateFormatted}
-                        {bg.birthdayInfo.turningAge ? ` (${bg.birthdayInfo.turningAge} anos)` : ""}
-                      </span>
-                      <span className="text-text-muted text-[11px]">
-                        [{bg.roomNumero}{hospedagemBlocks.length > 1 ? ` · ${bg.hotelName}` : ""}]
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+              <span className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-300 shrink-0">
+                <Cake size={15} className="text-amber-500" />
+                <span>
+                  {allBirthdayGuests.length === 1
+                    ? "Aniversariante na viagem:"
+                    : `${allBirthdayGuests.length} Aniversariantes na viagem:`}
+                </span>
+              </span>
 
-            <div className="text-right shrink-0 hidden md:block">
-              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1 justify-end">
-                <PartyPopper size={14} />
-                <span>Planejar bolo ou brinde!</span>
-              </span>
-              <span className="text-[10px] text-text-muted">
-                Notificação automática da agência
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {allBirthdayGuests.map((bg, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface/90 border border-amber-500/20 text-text-title shadow-2xs font-medium"
+                  >
+                    <span className="font-bold">{bg.guest.nome}</span>
+                    <span className="text-amber-600 dark:text-amber-400 font-extrabold">
+                      {bg.birthdayInfo.dateFormatted}
+                      {bg.birthdayInfo.turningAge ? ` (${bg.birthdayInfo.turningAge} anos)` : ""}
+                    </span>
+                    <span className="text-text-muted text-[11px]">
+                      · Quarto {bg.roomNumero}
+                      {hospedagemBlocks.length > 1 ? ` (${bg.hotelName})` : ""}
+                    </span>
+                  </span>
+                ))}
+              </div>
             </div>
           </motion.div>
         )}
