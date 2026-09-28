@@ -49,6 +49,12 @@ export interface ExcursionAddon {
   vouchers?: Record<string, AddonGuestVoucher>;
   canalVendaNome?: string;
   canalVendaContato?: string;
+  valorUnitario?: string;
+  valorTotal?: string;
+  sinalUnitario?: string;
+  sinalTotal?: string;
+  prazoSinal?: string;
+  prazoPagamentoTotal?: string;
   price: number;
   cost?: number;
   profit?: number;

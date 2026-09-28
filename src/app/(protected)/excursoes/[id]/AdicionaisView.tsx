@@ -74,6 +74,16 @@ function parseNum(val: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
+function toInputDate(val: unknown): string {
+  if (!val || typeof val !== "string") return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const match = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+  return "";
+}
+
 function calculateAge(birthDateStr?: string | null): number | null {
   if (!birthDateStr) return null;
   const d = new Date(birthDateStr);
@@ -205,6 +215,55 @@ export function AdicionaisView({
   const handleDeleteAddon = (id: string) => {
     if (!confirm("Deseja realmente excluir este adicional?")) return;
     onUpdateAddons(addons.filter((a) => a.id !== id));
+  };
+
+  // Handlers para cálculo de Valor Total e Sinal no Adicional
+  const handleAddonUnitValorChange = (addonId: string, val: string) => {
+    const addon = addons.find((a) => a.id === addonId);
+    if (!addon) return;
+    const count = addon.assignedGuestIds?.length || 0;
+    const u = parseNum(val);
+    const total = count > 0 && u > 0 ? (u * count).toFixed(2) : (count > 0 && !val ? "" : (addon.valorTotal ?? ""));
+    handleUpdateAddon(addonId, {
+      valorUnitario: val,
+      valorTotal: total,
+    });
+  };
+
+  const handleAddonTotalValorChange = (addonId: string, val: string) => {
+    const addon = addons.find((a) => a.id === addonId);
+    if (!addon) return;
+    const count = addon.assignedGuestIds?.length || 0;
+    const t = parseNum(val);
+    const unit = count > 0 && t > 0 ? (t / count).toFixed(2) : (addon.valorUnitario ?? "");
+    handleUpdateAddon(addonId, {
+      valorTotal: val,
+      valorUnitario: unit,
+    });
+  };
+
+  const handleAddonUnitSinalChange = (addonId: string, val: string) => {
+    const addon = addons.find((a) => a.id === addonId);
+    if (!addon) return;
+    const count = addon.assignedGuestIds?.length || 0;
+    const u = parseNum(val);
+    const total = count > 0 && u > 0 ? (u * count).toFixed(2) : (count > 0 && !val ? "" : (addon.sinalTotal ?? ""));
+    handleUpdateAddon(addonId, {
+      sinalUnitario: val,
+      sinalTotal: total,
+    });
+  };
+
+  const handleAddonTotalSinalChange = (addonId: string, val: string) => {
+    const addon = addons.find((a) => a.id === addonId);
+    if (!addon) return;
+    const count = addon.assignedGuestIds?.length || 0;
+    const t = parseNum(val);
+    const unit = count > 0 && t > 0 ? (t / count).toFixed(2) : (addon.sinalUnitario ?? "");
+    handleUpdateAddon(addonId, {
+      sinalTotal: val,
+      sinalUnitario: unit,
+    });
   };
 
   // Faixas etárias de um adicional
@@ -1553,6 +1612,123 @@ export function AdicionaisView({
                             placeholder="Ex: (11) 98765-4321 ou contato@fornecedor.com"
                             className="w-full px-3 py-2 rounded-xl border border-border bg-surface-subtle text-xs text-text-title placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:bg-surface font-medium"
                           />
+                        </div>
+                      </div>
+
+                      {/* Grid de Valores: Valor Total Contratado e Sinal / Entrada */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 p-3.5 rounded-xl border border-border bg-surface-subtle/50">
+                        {/* Bloco Valor Total */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                            <DollarSign size={14} className="text-emerald-500" />
+                            <span>Valor Total Contratado</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="text-xs text-text-muted">
+                              <span className="block mb-1 font-medium">Valor Unit. (R$)</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-medium"
+                                placeholder="0.00"
+                                value={addon.valorUnitario ?? ""}
+                                onChange={(e) => handleAddonUnitValorChange(addon.id, e.target.value)}
+                              />
+                            </label>
+                            <label className="text-xs text-text-muted">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium">Valor Total (R$)</span>
+                                {optInCount > 0 && (
+                                  <span className="text-[10px] text-text-muted font-normal">
+                                    ({optInCount} {optInCount === 1 ? "adesão" : "adesões"})
+                                  </span>
+                                )}
+                              </div>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-sm text-right tabular-nums font-bold text-emerald-700 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                placeholder="0.00"
+                                value={addon.valorTotal ?? ""}
+                                onChange={(e) => handleAddonTotalValorChange(addon.id, e.target.value)}
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Bloco Sinal / Entrada */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                            <DollarSign size={14} className="text-amber-500" />
+                            <span>Sinal / Entrada</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="text-xs text-text-muted">
+                              <span className="block mb-1 font-medium">Sinal Unit. (R$)</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-medium"
+                                placeholder="0.00"
+                                value={addon.sinalUnitario ?? ""}
+                                onChange={(e) => handleAddonUnitSinalChange(addon.id, e.target.value)}
+                              />
+                            </label>
+                            <label className="text-xs text-text-muted">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium">Sinal Total (R$)</span>
+                                {optInCount > 0 && (
+                                  <span className="text-[10px] text-text-muted font-normal">
+                                    ({optInCount} {optInCount === 1 ? "adesão" : "adesões"})
+                                  </span>
+                                )}
+                              </div>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-sm text-right tabular-nums font-bold text-amber-700 dark:text-amber-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                                placeholder="0.00"
+                                value={addon.sinalTotal ?? ""}
+                                onChange={(e) => handleAddonTotalSinalChange(addon.id, e.target.value)}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Prazos e Datas Limite */}
+                      <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
+                          <Calendar size={14} className="text-primary" />
+                          <span>Prazos e Datas Limite</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <label className="text-xs text-text-muted">
+                            <span className="block mb-1 font-medium">Prazo Pagamento do Sinal</span>
+                            <input
+                              type="date"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer font-medium"
+                              value={toInputDate(addon.prazoSinal)}
+                              onChange={(e) =>
+                                handleUpdateAddon(addon.id, {
+                                  prazoSinal: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="text-xs text-text-muted">
+                            <span className="block mb-1 font-medium">Prazo Pagamento Total</span>
+                            <input
+                              type="date"
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer font-medium"
+                              value={toInputDate(addon.prazoPagamentoTotal)}
+                              onChange={(e) =>
+                                handleUpdateAddon(addon.id, {
+                                  prazoPagamentoTotal: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
                         </div>
                       </div>
 
