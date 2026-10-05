@@ -1,16 +1,23 @@
 import type { NextConfig } from "next";
+import os from "os";
+
+// Detecta automaticamente todos os endereços IPv4 da máquina atual
+const detectedLocalIps = Object.values(os.networkInterfaces())
+  .flat()
+  .filter((iface): iface is os.NetworkInterfaceInfo => Boolean(iface && iface.family === "IPv4"))
+  .map((iface) => iface.address);
 
 const nextConfig: NextConfig = {
-  // Permite acesso de outros dispositivos na rede local sem bloquear scripts e HMR
+  // Permite acesso de qualquer IP ou dispositivo na rede local sem bloquear scripts e HMR
   allowedDevOrigins: [
     "localhost",
-    "localhost:3000",
     "127.0.0.1",
-    "127.0.0.1:3000",
-    "10.0.0.189",
-    "10.0.0.189:3000",
-    "192.168.1.113",
-    "192.168.1.113:3000",
+    "*.*.*.*",        // Permite qualquer IPv4 (evita bloqueio quando o roteador muda de IP)
+    "192.168.*.*",    // Redes locais padrão
+    "10.*.*.*",       // Redes locais corporativas/roteadores
+    "172.*.*.*",      // Redes locais 172.16-31
+    "**.local",       // Permite acessar pelo nome da máquina (ex: desktop.local)
+    ...detectedLocalIps,
   ],
   async headers() {
     return [
