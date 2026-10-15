@@ -40,12 +40,13 @@ import {
 } from "lucide-react";
 import type { EditorBlock, BlockCategoryId, BlockData } from "@/lib/editor-types";
 import type { ItineraryItem } from "@/lib/actions/itinerary";
-import type { ExcursionAddon, AddonGuestPayment, InterestedLead } from "@/lib/actions/addons";
+import type { ExcursionAddon, AddonGuestPayment, InterestedLead, RoomTypePricing } from "@/lib/actions/addons";
 import {
   updateExcursionAddons,
   updateExcursionProfitMargin,
   updateExcursionPricing,
   updateExcursionLeads,
+  updateExcursionCheckoutConfig,
 } from "@/lib/actions/addons";
 import {
   updateExcursionHeader,
@@ -92,6 +93,8 @@ interface PackageEditorProps {
   initialAddons?: ExcursionAddon[];
   initialGuestPayments?: Record<string, AddonGuestPayment>;
   initialInterestedLeads?: InterestedLead[];
+  initialRoomPricing?: Record<string, RoomTypePricing>;
+  initialGuestPaymentModes?: Record<string, "vista" | "prazo">;
   initialProfitMargin?: number;
   initialCustomProfitAmount?: number | null;
   initialCustomPackagePrice?: number | null;
@@ -121,6 +124,8 @@ export function PackageEditor({
   initialAddons = [],
   initialGuestPayments = {},
   initialInterestedLeads = [],
+  initialRoomPricing = {},
+  initialGuestPaymentModes = {},
   initialProfitMargin = 0,
   initialCustomProfitAmount = null,
   initialCustomPackagePrice = null,
@@ -147,6 +152,12 @@ export function PackageEditor({
   );
   const [interestedLeads, setInterestedLeads] = useState<InterestedLead[]>(
     initialInterestedLeads || []
+  );
+  const [roomPricing, setRoomPricing] = useState<Record<string, RoomTypePricing>>(
+    initialRoomPricing || {}
+  );
+  const [guestPaymentModes, setGuestPaymentModes] = useState<Record<string, "vista" | "prazo">>(
+    initialGuestPaymentModes || {}
   );
   const [profitMargin, setProfitMargin] = useState<number>(initialProfitMargin || 0);
   const [customProfitAmount, setCustomProfitAmount] = useState<number | null>(initialCustomProfitAmount ?? null);
@@ -437,6 +448,33 @@ export function PackageEditor({
       }, 400);
     },
     [broadcastMutation, excursionId, flashSaved]
+  );
+
+  const checkoutConfigTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleUpdateCheckoutConfig = useCallback(
+    (config: {
+      roomPricing?: Record<string, RoomTypePricing>;
+      guestPaymentModes?: Record<string, "vista" | "prazo">;
+      profitMargin?: number;
+    }) => {
+      if (config.roomPricing) setRoomPricing(config.roomPricing);
+      if (config.guestPaymentModes) setGuestPaymentModes(config.guestPaymentModes);
+      if (config.profitMargin !== undefined) {
+        setProfitMargin(config.profitMargin);
+        broadcastMutation({ type: "profit_margin", profitMargin: config.profitMargin });
+      }
+
+      if (checkoutConfigTimer.current) clearTimeout(checkoutConfigTimer.current);
+      checkoutConfigTimer.current = setTimeout(async () => {
+        await updateExcursionCheckoutConfig(excursionId, {
+          roomPricing: config.roomPricing ?? roomPricing,
+          guestPaymentModes: config.guestPaymentModes ?? guestPaymentModes,
+          profitMargin: config.profitMargin ?? profitMargin,
+        });
+        flashSaved();
+      }, 400);
+    },
+    [broadcastMutation, excursionId, flashSaved, guestPaymentModes, profitMargin, roomPricing]
   );
 
   // Extrai quartos e passageiros de todas as hospedagens para vincular em Adicionais e Checkout
@@ -955,17 +993,12 @@ export function PackageEditor({
               addons={addons}
               totalBaseCostPerPerson={financialSummary.costPerPerson}
               profitMargin={profitMargin}
-              customProfitAmount={customProfitAmount}
-              customPackagePrice={customPackagePrice}
-              onUpdatePricing={handleUpdatePricing}
-              onUpdateProfitMargin={handleUpdateProfitMargin}
               slots={financialSummary.activePeople}
-              basePackagePrice={financialSummary.pricePerPerson}
-              profitPerPerson={financialSummary.effectiveProfitPerPerson}
-              totalAgencyProfit={financialSummary.totalAgencyProfit}
-              roundingDifference={financialSummary.roundingDifference}
               isSimulationActive={financialSummary.isSimulationActive}
               periodStart={periodStart}
+              roomPricing={roomPricing}
+              guestPaymentModes={guestPaymentModes}
+              onUpdateCheckoutConfig={handleUpdateCheckoutConfig}
             />
           ) : view === "relatorio" ? (
             <ExcursionFinancialReportView
@@ -1141,11 +1174,6 @@ export function PackageEditor({
             <SummaryWidget
               blocks={blocks}
               slots={slots}
-              profitMargin={profitMargin}
-              customProfitAmount={customProfitAmount}
-              customPackagePrice={customPackagePrice}
-              onUpdatePricing={handleUpdatePricing}
-              onUpdateProfitMargin={handleUpdateProfitMargin}
               testPeople={simulatedPeople}
               onTestPeopleChange={setSimulatedPeople}
             />

@@ -44,6 +44,12 @@ export default async function ExcursionEditorPage({
     : Array.isArray(rawAddons?.interestedLeads)
     ? rawAddons.interestedLeads
     : [];
+  const initialRoomPricing = Array.isArray(rawAddons)
+    ? {}
+    : rawAddons?.roomPricing || {};
+  const initialGuestPaymentModes = Array.isArray(rawAddons)
+    ? {}
+    : rawAddons?.guestPaymentModes || {};
 
   return (
     <PackageEditor
@@ -61,6 +67,8 @@ export default async function ExcursionEditorPage({
       initialAddons={initialAddons}
       initialGuestPayments={initialGuestPayments}
       initialInterestedLeads={initialInterestedLeads}
+      initialRoomPricing={initialRoomPricing}
+      initialGuestPaymentModes={initialGuestPaymentModes}
       initialProfitMargin={excursion.profitMargin ?? 0}
       initialCustomProfitAmount={excursion.customProfitAmount ?? null}
       initialCustomPackagePrice={excursion.customPackagePrice ?? null}

@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Percent,
-  DollarSign,
   TrendingUp,
   User,
   Package,
@@ -13,24 +11,22 @@ import {
   Search,
   BedDouble,
   Building2,
-  Pencil,
   Plane,
   Bus,
   Compass,
   CheckCircle2,
   Sparkles,
-  HelpCircle,
   Coins,
-  ArrowRight,
+  CreditCard,
+  Percent,
 } from "lucide-react";
-import type { ExcursionAddon } from "@/lib/actions/addons";
+import type { ExcursionAddon, RoomTypePricing } from "@/lib/actions/addons";
 import type { EditorBlock } from "@/lib/editor-types";
 import type { RoomGuest, RoomEntry } from "./RoomListView";
 import {
   getGuestAgeBracket,
   getGuestAge,
   getBlockUnitPriceForTier,
-  AGE_BRACKET_LABELS,
   type AgeBracket,
   parseNum,
 } from "@/lib/package-calc";
@@ -42,21 +38,16 @@ interface CheckoutViewProps {
   addons: ExcursionAddon[];
   totalBaseCostPerPerson: number;
   profitMargin: number;
-  customProfitAmount?: number | null;
-  customPackagePrice?: number | null;
-  onUpdatePricing?: (pricing: {
-    profitMargin?: number;
-    customProfitAmount?: number | null;
-    customPackagePrice?: number | null;
-  }) => void;
-  onUpdateProfitMargin?: (margin: number) => void;
   slots: number;
-  basePackagePrice?: number;
-  profitPerPerson?: number;
-  totalAgencyProfit?: number;
-  roundingDifference?: number;
   isSimulationActive?: boolean;
   periodStart?: string | null;
+  roomPricing?: Record<string, RoomTypePricing>;
+  guestPaymentModes?: Record<string, "vista" | "prazo">;
+  onUpdateCheckoutConfig?: (config: {
+    roomPricing?: Record<string, RoomTypePricing>;
+    guestPaymentModes?: Record<string, "vista" | "prazo">;
+    profitMargin?: number;
+  }) => void;
 }
 
 function fmt(v: number) {
@@ -92,90 +83,144 @@ export function CheckoutView({
   addons,
   totalBaseCostPerPerson,
   profitMargin,
-  customProfitAmount = null,
-  customPackagePrice = null,
-  onUpdatePricing,
-  onUpdateProfitMargin,
   slots,
-  basePackagePrice: propBasePackagePrice,
-  profitPerPerson: propProfitPerPerson,
-  totalAgencyProfit: propTotalAgencyProfit,
-  roundingDifference: propRoundingDiff = 0,
   isSimulationActive = false,
   periodStart = null,
+  roomPricing = {},
+  guestPaymentModes = {},
+  onUpdateCheckoutConfig,
 }: CheckoutViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [isEditingMargin, setIsEditingMargin] = useState(false);
-  const [editMode, setEditMode] = useState<"percent" | "profit" | "price">("percent");
-  const [tempVal, setTempVal] = useState(String(profitMargin || 0));
+  const [tempMargin, setTempMargin] = useState(String(profitMargin || 0));
+
+  // 1. Custo Base do Adulto (sempre a referência de cálculo)
+  const adultBaseCost = useMemo(() => {
+    const sum = blocks.reduce((acc, b) => {
+      return acc + getBlockUnitPriceForTier(b, "adulto", slots || 20);
+    }, 0);
+    return sum > 0 ? sum : totalBaseCostPerPerson;
+  }, [blocks, slots, totalBaseCostPerPerson]);
+
+  const marginNum = Number(profitMargin) || 0;
+  const suggestedProfitAdult = adultBaseCost * (marginNum / 100);
+  const suggestedPriceAdult = adultBaseCost + suggestedProfitAdult;
+
+  // 2. Detecção automática de todos os tipos de quarto configurados nos cards de hospedagem
+  const detectedRoomTypes = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; count: number }>();
+
+    for (const b of blocks) {
+      if (b.categoryId === "hospedagem") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const hRooms = (b.data as any)?.rooms || [];
+        for (const hr of hRooms) {
+          const raw = hr?.tipo?.trim();
+          if (raw) {
+            const key = raw.toLowerCase();
+            if (!map.has(key)) {
+              map.set(key, { key, label: raw, count: 0 });
+            }
+          }
+        }
+      }
+    }
+
+    for (const r of rooms) {
+      const raw = r?.tipo?.trim();
+      if (raw) {
+        const key = raw.toLowerCase();
+        const guestCount = (r.hospedes || []).length;
+        const existing = map.get(key);
+        if (existing) {
+          existing.count += guestCount;
+        } else {
+          map.set(key, { key, label: raw, count: guestCount });
+        }
+      }
+    }
+
+    if (map.size === 0) {
+      map.set("duplo", { key: "duplo", label: "Duplo", count: 0 });
+    }
+
+    return Array.from(map.values());
+  }, [blocks, rooms]);
 
   // Mapa de quarto por hóspede
-  const guestRoomMap: Record<string, { roomNumber: string; roomType: string }> = {};
-  for (const r of rooms) {
-    for (const g of r.hospedes) {
-      guestRoomMap[g.id] = {
-        roomNumber: r.numero || "Quarto",
-        roomType: r.tipo || "Standard",
-      };
-    }
-  }
-
-  // Filtragem de passageiros
-  const filteredGuests = searchTerm
-    ? guests.filter(
-        (g) =>
-          g.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          g.documento.includes(searchTerm)
-      )
-    : guests;
-
-  // Cálculos de Lucro e Arredondamento da Agência
-  const marginPercent = Number(profitMargin) || 0;
-  const calculatedProfitPerPerson = totalBaseCostPerPerson * (marginPercent / 100);
-
-  const customProfit = customProfitAmount !== null && customProfitAmount !== undefined ? Number(customProfitAmount) : null;
-  const customPrice = customPackagePrice !== null && customPackagePrice !== undefined ? Number(customPackagePrice) : null;
-
-  let effectiveProfitPerPerson = propProfitPerPerson ?? calculatedProfitPerPerson;
-  let basePackagePrice = propBasePackagePrice ?? (totalBaseCostPerPerson + effectiveProfitPerPerson);
-  let roundingDifference = propRoundingDiff;
-
-  if (customProfit !== null && !isNaN(customProfit) && customProfit > 0) {
-    effectiveProfitPerPerson = customProfit;
-    basePackagePrice = totalBaseCostPerPerson + customProfit;
-    roundingDifference = customProfit - calculatedProfitPerPerson;
-  } else if (customPrice !== null && !isNaN(customPrice) && customPrice > 0) {
-    basePackagePrice = customPrice;
-    effectiveProfitPerPerson = Math.max(0, customPrice - totalBaseCostPerPerson);
-    roundingDifference = effectiveProfitPerPerson - calculatedProfitPerPerson;
-  }
-
-  const handleSavePricing = () => {
-    const parsed = parseNum(tempVal);
-    if (editMode === "percent") {
-      if (onUpdatePricing) {
-        onUpdatePricing({ profitMargin: parsed, customProfitAmount: null, customPackagePrice: null });
-      } else {
-        onUpdateProfitMargin?.(parsed);
-      }
-    } else if (editMode === "profit") {
-      if (onUpdatePricing) {
-        onUpdatePricing({ customProfitAmount: parsed, customPackagePrice: null });
-      }
-    } else if (editMode === "price") {
-      if (onUpdatePricing) {
-        onUpdatePricing({ customPackagePrice: parsed, customProfitAmount: null });
+  const guestRoomMap = useMemo(() => {
+    const map: Record<string, { roomNumber: string; roomType: string }> = {};
+    for (const r of rooms) {
+      for (const g of r.hospedes) {
+        map[g.id] = {
+          roomNumber: r.numero || "Quarto",
+          roomType: r.tipo || "Duplo",
+        };
       }
     }
-    setIsEditingMargin(false);
+    return map;
+  }, [rooms]);
+
+  // Auxiliar para obter a precificação configurada de um tipo de quarto
+  const getPricingForRoomType = (roomTypeRaw: string): RoomTypePricing => {
+    const key = (roomTypeRaw || "duplo").trim().toLowerCase();
+    const found = roomPricing[key] || roomPricing[roomTypeRaw];
+    if (found && found.cashPrice > 0) {
+      return found;
+    }
+    // Valor padrão baseado no preço sugerido para adulto
+    return {
+      cashPrice: suggestedPriceAdult > 0 ? Math.round(suggestedPriceAdult) : Math.round(adultBaseCost),
+      installmentExtra: found?.installmentExtra ?? 0,
+      cardFee: found?.cardFee ?? 0,
+    };
   };
 
-  // Contabilidade individual de cada passageiro pela idade
+  // Handlers de configuração
+  const handleMarginChange = (val: number) => {
+    setTempMargin(String(val));
+    onUpdateCheckoutConfig?.({ profitMargin: val });
+  };
+
+  const handleRoomPriceChange = (
+    roomKey: string,
+    field: "cashPrice" | "installmentExtra" | "cardFee",
+    value: number
+  ) => {
+    const current = getPricingForRoomType(roomKey);
+    const updated = {
+      ...current,
+      [field]: Math.max(0, value),
+    };
+    const nextPricing = {
+      ...roomPricing,
+      [roomKey.toLowerCase()]: updated,
+    };
+    onUpdateCheckoutConfig?.({ roomPricing: nextPricing });
+  };
+
+  const handleApplySuggested = (roomKey: string) => {
+    const rounded = Math.round(suggestedPriceAdult);
+    handleRoomPriceChange(roomKey, "cashPrice", rounded);
+  };
+
+  const handleTogglePaymentMode = (guestId: string, mode: "vista" | "prazo") => {
+    const nextModes = {
+      ...guestPaymentModes,
+      [guestId]: mode,
+    };
+    onUpdateCheckoutConfig?.({ guestPaymentModes: nextModes });
+  };
+
+  // 3. Cálculos individuais para cada passageiro
   const passengerCalculations = guests.map((guest) => {
     const ageBracket: AgeBracket = getGuestAgeBracket(guest, periodStart);
     const guestAge = getGuestAge(guest, periodStart);
+    const guestRoom = guestRoomMap[guest.id];
+    const roomType = guestRoom?.roomType || "Duplo";
+    const pricing = getPricingForRoomType(roomType);
+    const paymentMode: "vista" | "prazo" = guestPaymentModes[guest.id] || "vista";
 
-    // Valores discriminados de cada bloco para a idade deste hóspede
+    // Valores discriminados dos blocos para a idade deste hóspede
     const blockBreakdown = blocks.map((b) => {
       const unitCost = getBlockUnitPriceForTier(b, ageBracket, slots || 20);
       return {
@@ -188,17 +233,22 @@ export function CheckoutView({
 
     const guestBaseCost = blockBreakdown.reduce((sum, item) => sum + item.cost, 0);
 
-    // Margem de lucro base + diferença de arredondamento incorporada como lucro
-    const guestProfitBase = guestBaseCost * (marginPercent / 100);
-    const guestRoundingExtra =
-      ageBracket === "adulto"
-        ? Math.max(0, roundingDifference)
-        : totalBaseCostPerPerson > 0
-        ? Math.max(0, roundingDifference) * (guestBaseCost / totalBaseCostPerPerson)
-        : 0;
+    // Preço do pacote base (fixo por quarto, independentemente da faixa etária)
+    const baseRoomCashPrice = pricing.cashPrice;
+    const isPrazo = paymentMode === "prazo";
+    const guestPackagePrice = isPrazo
+      ? baseRoomCashPrice + pricing.installmentExtra
+      : baseRoomCashPrice;
 
-    const guestProfitTotal = guestProfitBase + guestRoundingExtra;
-    const guestPackagePrice = guestBaseCost + guestProfitTotal;
+    // Custos efetivos: custos da idade + taxa de cartão se a prazo
+    const cardFeeApplied = isPrazo ? pricing.cardFee : 0;
+    const guestEffectiveCost = guestBaseCost + cardFeeApplied;
+
+    // Lucro da agência:
+    // À vista: Preço Quarto - Custos da Idade
+    // A prazo: (Preço Quarto + Extra) - (Custos da Idade + Taxa Cartão)
+    const guestProfitTotal = Math.max(0, guestPackagePrice - guestEffectiveCost);
+    const extraPrazoLucro = isPrazo ? pricing.installmentExtra - pricing.cardFee : 0;
 
     // Adicionais contratados
     const guestAddons = addons.filter((a) => a.assignedGuestIds?.includes(guest.id));
@@ -209,23 +259,29 @@ export function CheckoutView({
       guest,
       ageBracket,
       guestAge,
+      guestRoom,
+      roomType,
+      pricing,
+      paymentMode,
       blockBreakdown,
       guestBaseCost,
-      guestProfitTotal,
-      guestProfitBase,
-      guestRoundingExtra,
+      cardFeeApplied,
+      guestEffectiveCost,
       guestPackagePrice,
+      guestProfitTotal,
+      extraPrazoLucro,
       guestAddons,
       totalGuestAddons,
       guestTotalPrice,
     };
   });
 
-  // Totais consolidados da excursão inteira
+  // 4. Totais consolidados
   let grandTotalAereo = 0;
   let grandTotalHospedagem = 0;
   let grandTotalRodoviario = 0;
   let grandTotalOutros = 0;
+  let grandTotalCardFees = 0;
   let grandTotalLucroAgencia = 0;
   let grandTotalBasePackages = 0;
   let grandTotalAddons = 0;
@@ -238,27 +294,31 @@ export function CheckoutView({
       else if (b.categoryId === "rodoviario") grandTotalRodoviario += b.cost;
       else grandTotalOutros += b.cost;
     }
+    grandTotalCardFees += p.cardFeeApplied;
     grandTotalLucroAgencia += p.guestProfitTotal;
     grandTotalBasePackages += p.guestPackagePrice;
     grandTotalAddons += p.totalGuestAddons;
     grandTotalGeral += p.guestTotalPrice;
   }
 
-  // Se não houver passageiros na room list ainda, simula com as vagas
-  const activeSlots = guests.length > 0 ? guests.length : slots || 20;
-  const simulatedAgencyProfit =
-    guests.length > 0 ? grandTotalLucroAgencia : effectiveProfitPerPerson * activeSlots;
+  // Filtragem de passageiros para busca
+  const filteredPassengers = passengerCalculations.filter((p) =>
+    searchTerm
+      ? p.guest.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.guest.documento.includes(searchTerm)
+      : true
+  );
 
   return (
     <div className="space-y-6">
-      {/* Topo: Painel de Configuração de Lucro & Arredondamento da Agência */}
-      <div className="bg-surface rounded-2xl border border-border shadow-shadow-card p-6 space-y-5">
+      {/* 1. TOPO: Painel de Precificação e Margem Sugerida */}
+      <div className="bg-surface rounded-2xl border border-border shadow-shadow-card p-6 space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2.5 text-primary mb-1">
-              <Receipt size={20} />
+              <Receipt size={22} />
               <h2 className="text-xl font-bold text-text-title">
-                Checkout &amp; Precificação por Passageiro
+                Checkout &amp; Precificação por Quarto
               </h2>
               {isSimulationActive && (
                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-status-success/15 text-status-success flex items-center gap-1 border border-status-success/30">
@@ -267,214 +327,214 @@ export function CheckoutView({
               )}
             </div>
             <p className="text-sm text-text-muted max-w-2xl leading-relaxed">
-              O sistema calcula a tarifa de cada passageiro automaticamente pela faixa etária configurada nos blocos e idade do cliente na Room List.
-              Ajuste a porcentagem ou edite o valor cheio do lucro/pacote para arredondar — qualquer diferença entra <strong>integralmente como lucro da agência</strong>.
+              Estime a porcentagem de margem sugerida baseada no custo de um <strong>adulto</strong> e configure o valor de venda de cada tipo de quarto configurado na hospedagem.
             </p>
           </div>
 
-          {/* Botão / Controle de Margem e Arredondamento */}
+          {/* Controle da Margem Sugerida */}
           <div className="bg-surface-subtle border border-border p-3.5 rounded-2xl flex items-center gap-3 shrink-0">
-            <div className="p-2 rounded-xl bg-primary/10 text-primary">
-              <TrendingUp size={20} />
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+              <Percent size={20} />
             </div>
-
             <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">
-                  Lucro &amp; Arredondamento
-                </span>
-                {roundingDifference > 0 && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                    +{fmt(roundingDifference)} arr.
-                  </span>
-                )}
+              <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider block">
+                Margem Sugerida (Base Adulto)
+              </span>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="relative flex items-center">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={tempMargin}
+                    onChange={(e) => setTempMargin(e.target.value)}
+                    onBlur={() => handleMarginChange(parseNum(tempMargin))}
+                    onKeyDown={(e) => e.key === "Enter" && handleMarginChange(parseNum(tempMargin))}
+                    className="w-20 px-2 py-1 text-sm font-bold bg-surface border border-primary rounded-lg focus:outline-none focus:ring-1 focus:ring-primary text-text-title tabular-nums"
+                  />
+                  <span className="ml-1 text-xs font-bold text-text-muted">%</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {[10, 15, 20, 30].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => handleMarginChange(pct)}
+                      className={`px-2 py-0.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                        marginNum === pct
+                          ? "bg-primary text-white"
+                          : "bg-surface border border-border hover:border-primary text-text-body"
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
               </div>
-
-              {isEditingMargin ? (
-                <div className="flex flex-col gap-2 mt-1.5">
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => { setEditMode("percent"); setTempVal(String(marginPercent)); }}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
-                        editMode === "percent" ? "bg-primary text-white" : "bg-surface border border-border text-text-muted"
-                      }`}
-                    >
-                      % Margem
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setEditMode("profit"); setTempVal(effectiveProfitPerPerson > 0 ? effectiveProfitPerPerson.toFixed(2) : ""); }}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
-                        editMode === "profit" ? "bg-primary text-white" : "bg-surface border border-border text-text-muted"
-                      }`}
-                    >
-                      R$ Lucro
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setEditMode("price"); setTempVal(basePackagePrice > 0 ? basePackagePrice.toFixed(2) : ""); }}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
-                        editMode === "price" ? "bg-primary text-white" : "bg-surface border border-border text-text-muted"
-                      }`}
-                    >
-                      R$ Arredondar Preço
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex items-center">
-                      <span className="absolute left-2 text-xs font-bold text-text-muted">
-                        {editMode === "percent" ? "%" : "R$"}
-                      </span>
-                      <input
-                        type="number"
-                        step={editMode === "percent" ? "0.5" : "1"}
-                        value={tempVal}
-                        onChange={(e) => setTempVal(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleSavePricing()}
-                        className="w-28 pl-7 pr-2 py-1 text-sm font-bold bg-surface border border-primary rounded-lg focus:outline-none focus:ring-1 focus:ring-primary text-text-title"
-                        autoFocus
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleSavePricing}
-                      className="px-2.5 py-1 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-hover transition-colors cursor-pointer"
-                    >
-                      Salvar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingMargin(false)}
-                      className="px-2 py-1 text-text-muted text-xs hover:text-text-body transition-colors cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-lg font-black text-primary">
-                    {marginPercent}% ({fmt(effectiveProfitPerPerson)})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditMode("percent");
-                      setTempVal(String(marginPercent));
-                      setIsEditingMargin(true);
-                    }}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted hover:text-primary transition-colors cursor-pointer px-2 py-0.5 rounded-md hover:bg-surface"
-                    title="Editar porcentagem ou arredondar valor do pacote"
-                  >
-                    <Pencil size={11} />
-                    <span>Arredondar / Ajustar</span>
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         </div>
 
-        {/* Métricas e Detalhamento da Precificação */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+        {/* Métricas da Sugestão Base Adulto */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pt-1">
           <div className="bg-surface-subtle p-3.5 rounded-xl border border-border/70">
             <span className="text-[11px] font-semibold text-text-muted uppercase block">
               Custo Estimado Base / Adulto
             </span>
-            <span className="text-base font-bold text-text-title">
-              {fmt(totalBaseCostPerPerson)}
-            </span>
-          </div>
-
-          <div className="bg-surface-subtle p-3.5 rounded-xl border border-border/70">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-text-muted uppercase block">
-                Lucro Líquido / Adulto
-              </span>
-              {roundingDifference > 0 && (
-                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                  +{fmt(roundingDifference)}
-                </span>
-              )}
-            </div>
-            <span className="text-base font-bold text-status-success">
-              +{fmt(effectiveProfitPerPerson)}
-            </span>
-            <span className="text-[10px] text-text-muted block">
-              Base: {fmt(calculatedProfitPerPerson)} {roundingDifference > 0 ? `+ ${fmt(roundingDifference)} arredondamento` : ""}
-            </span>
-          </div>
-
-          <div className="bg-primary/5 p-3.5 rounded-xl border border-primary/20">
-            <span className="text-[11px] font-bold text-primary uppercase block">
-              Preço Venda Pacote / Adulto
-            </span>
-            <span className="text-base font-black text-primary">
-              {fmt(basePackagePrice)}
-            </span>
-            <span className="text-[10px] text-primary/70 block font-medium">
-              Custo + Lucro total agência
+            <span className="text-base font-bold text-text-title mt-0.5 block">
+              {fmt(adultBaseCost)}
             </span>
           </div>
 
           <div className="bg-surface-subtle p-3.5 rounded-xl border border-border/70">
             <span className="text-[11px] font-semibold text-text-muted uppercase block">
-              Lucro Total ({activeSlots} {activeSlots === 1 ? "Pax" : "Passageiros"})
+              Lucro Sugerido ({marginNum}%)
             </span>
-            <span className="text-base font-bold text-status-success">
-              {fmt(simulatedAgencyProfit)}
+            <span className="text-base font-bold text-status-success mt-0.5 block">
+              +{fmt(suggestedProfitAdult)}
             </span>
-            <span className="text-[10px] text-text-muted block">
-              {guests.length > 0 ? "Calculado pelos passageiros na Room List" : "Estimado pelas vagas"}
+          </div>
+
+          <div className="bg-primary/5 p-3.5 rounded-xl border border-primary/20 col-span-2 md:col-span-1">
+            <span className="text-[11px] font-bold text-primary uppercase block">
+              Preço Sugerido / Adulto
+            </span>
+            <span className="text-base font-black text-primary mt-0.5 block">
+              {fmt(suggestedPriceAdult)}
             </span>
           </div>
         </div>
 
-        {/* Atalhos Rápidos de Margem */}
-        <div className="flex items-center gap-2 pt-1 text-xs text-text-muted flex-wrap">
-          <span className="font-semibold">Margens sugeridas:</span>
-          {[10, 15, 20, 25, 30].map((pct) => (
-            <button
-              key={pct}
-              type="button"
-              onClick={() => {
-                if (onUpdatePricing) {
-                  onUpdatePricing({ profitMargin: pct, customProfitAmount: null, customPackagePrice: null });
-                } else {
-                  onUpdateProfitMargin?.(pct);
-                }
-              }}
-              className={`px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer ${
-                marginPercent === pct && !customProfit && !customPrice
-                  ? "bg-primary text-white"
-                  : "bg-surface-subtle border border-border hover:border-primary text-text-body"
-              }`}
-            >
-              {pct}%
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => {
-              // Sugestão de arredondamento para a próxima dezena/centena
-              const nextRound = Math.ceil(basePackagePrice / 50) * 50;
-              if (onUpdatePricing) {
-                onUpdatePricing({ customPackagePrice: nextRound, customProfitAmount: null });
-              }
-            }}
-            className="ml-auto inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30 cursor-pointer text-[11px]"
-            title="Arredonda o preço do pacote para o múltiplo de R$ 50 mais próximo e adiciona a diferença ao lucro"
-          >
-            <Sparkles size={11} />
-            <span>Arredondar p/ {fmt(Math.ceil(basePackagePrice / 50) * 50)}</span>
-          </button>
+        {/* 2. CONFIGURAÇÃO DOS QUARTOS CONFIGURADOS NA HOSPEDAGEM */}
+        <div className="space-y-3 pt-3 border-t border-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BedDouble size={18} className="text-primary" />
+              <h3 className="text-sm font-bold text-text-title uppercase tracking-wide">
+                Configuração de Valores por Tipo de Quarto ({detectedRoomTypes.length})
+              </h3>
+            </div>
+            <span className="text-xs text-text-muted">
+              Valores fixos por passageiro no quarto ocupado
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {detectedRoomTypes.map((rt) => {
+              const pricing = getPricingForRoomType(rt.key);
+              const extraLucroPrazo = pricing.installmentExtra - pricing.cardFee;
+
+              return (
+                <div
+                  key={rt.key}
+                  className="bg-surface-subtle p-4 rounded-2xl border border-border/80 space-y-3 hover:border-primary/40 transition-all shadow-sm"
+                >
+                  {/* Cabeçalho do Quarto */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                        <BedDouble size={16} />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-text-title capitalize">
+                          Quarto {rt.label}
+                        </h4>
+                        <span className="text-[11px] text-text-muted block">
+                          {rt.count} {rt.count === 1 ? "passageiro alocado" : "passageiros alocados"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleApplySuggested(rt.key)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all cursor-pointer"
+                      title="Preenche o valor à vista com o preço sugerido do adulto"
+                    >
+                      <Sparkles size={12} />
+                      <span>Sugerido ({fmt(Math.round(suggestedPriceAdult))})</span>
+                    </button>
+                  </div>
+
+                  {/* 3 Campos: À Vista, Acréscimo a Prazo, Taxa Cartão */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    {/* 1. Valor Base (À Vista) */}
+                    <div>
+                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+                        Valor (À Vista)
+                      </label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-2.5 text-xs font-bold text-text-muted">R$</span>
+                        <input
+                          type="number"
+                          step="1"
+                          placeholder={Math.round(suggestedPriceAdult).toFixed(2)}
+                          value={pricing.cashPrice || ""}
+                          onChange={(e) =>
+                            handleRoomPriceChange(rt.key, "cashPrice", parseNum(e.target.value))
+                          }
+                          className="w-full pl-8 pr-2 py-1.5 text-sm font-bold bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-title tabular-nums"
+                        />
+                      </div>
+                      <span className="text-[10px] text-text-muted mt-0.5 block">
+                        Base por pessoa
+                      </span>
+                    </div>
+
+                    {/* 2. Acréscimo a Prazo */}
+                    <div>
+                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+                        Acréscimo Prazo
+                      </label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-2.5 text-xs font-bold text-text-muted">R$</span>
+                        <input
+                          type="number"
+                          step="1"
+                          placeholder="0.00"
+                          value={pricing.installmentExtra || ""}
+                          onChange={(e) =>
+                            handleRoomPriceChange(rt.key, "installmentExtra", parseNum(e.target.value))
+                          }
+                          className="w-full pl-8 pr-2 py-1.5 text-sm font-bold bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-title tabular-nums"
+                        />
+                      </div>
+                      <span className="text-[10px] text-primary font-semibold mt-0.5 block">
+                        Total: {fmt(pricing.cashPrice + pricing.installmentExtra)}
+                      </span>
+                    </div>
+
+                    {/* 3. Taxa do Cartão */}
+                    <div>
+                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+                        Taxa Cartão
+                      </label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-2.5 text-xs font-bold text-text-muted">R$</span>
+                        <input
+                          type="number"
+                          step="1"
+                          placeholder="0.00"
+                          value={pricing.cardFee || ""}
+                          onChange={(e) =>
+                            handleRoomPriceChange(rt.key, "cardFee", parseNum(e.target.value))
+                          }
+                          className="w-full pl-8 pr-2 py-1.5 text-sm font-bold bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-title tabular-nums"
+                        />
+                      </div>
+                      <span className="text-[10px] text-status-success font-semibold mt-0.5 block">
+                        Extra prazo: +{fmt(extraLucroPrazo)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Barra de Filtro e Contadores de Passageiros */}
+      {/* 3. FILTRO E CONTADOR DE PASSAGEIROS */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Users size={16} className="text-primary" />
@@ -495,7 +555,7 @@ export function CheckoutView({
         </div>
       </div>
 
-      {/* Estado Vazio de Passageiros */}
+      {/* ESTADO VAZIO */}
       {guests.length === 0 ? (
         <div className="bg-surface rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
           <div className="w-12 h-12 rounded-2xl bg-surface-subtle flex items-center justify-center mx-auto text-text-muted">
@@ -505,180 +565,229 @@ export function CheckoutView({
             Nenhum passageiro encontrado na Room List
           </h4>
           <p className="text-xs text-text-muted max-w-sm mx-auto leading-relaxed">
-            Acesse a aba <strong>Room List</strong> e adicione hóspedes aos quartos para visualizar o espelho com cada bloco discriminado e contabilidade automática por idade.
+            Acesse a aba <strong>Room List</strong> e aloque os hóspedes nos quartos para visualizar os cálculos individuais de cada quarto e faixa etária.
           </p>
         </div>
       ) : (
-        /* Grid de Cards dos Passageiros com Discriminação dos Blocos */
+        /* 4. GRID DE CARDS DOS PASSAGEIROS */
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {passengerCalculations
-            .filter((p) =>
-              searchTerm
-                ? p.guest.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  p.guest.documento.includes(searchTerm)
-                : true
-            )
-            .map((p, idx) => {
-              const {
-                guest,
-                ageBracket,
-                guestAge,
-                blockBreakdown,
-                guestBaseCost,
-                guestProfitTotal,
-                guestRoundingExtra,
-                guestPackagePrice,
-                guestAddons,
-                guestTotalPrice,
-              } = p;
-              const guestRoom = guestRoomMap[guest.id];
+          {filteredPassengers.map((p, idx) => {
+            const {
+              guest,
+              ageBracket,
+              guestAge,
+              guestRoom,
+              roomType,
+              pricing,
+              paymentMode,
+              blockBreakdown,
+              guestBaseCost,
+              cardFeeApplied,
+              guestPackagePrice,
+              guestProfitTotal,
+              guestAddons,
+              guestTotalPrice,
+            } = p;
 
-              const bracketLabel =
-                ageBracket === "bebe"
-                  ? `Bebê / Colo ${guestAge !== null ? `(${guestAge}a)` : ""}`
-                  : ageBracket === "crianca"
-                  ? `Criança ${guestAge !== null ? `(${guestAge}a)` : ""}`
-                  : `Adulto ${guestAge !== null ? `(${guestAge}a)` : ""}`;
+            const bracketLabel =
+              ageBracket === "bebe"
+                ? `Bebê / Colo ${guestAge !== null ? `(${guestAge}a)` : ""}`
+                : ageBracket === "crianca"
+                ? `Criança ${guestAge !== null ? `(${guestAge}a)` : ""}`
+                : `Adulto ${guestAge !== null ? `(${guestAge}a)` : ""}`;
 
-              return (
-                <motion.div
-                  key={guest.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.03 }}
-                  className="bg-surface rounded-2xl border border-border shadow-shadow-card p-5 space-y-4 hover:shadow-shadow-hover transition-all flex flex-col justify-between"
-                >
-                  {/* Header do Passageiro */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
-                        <User size={18} />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-sm text-text-title leading-snug">
-                          {guest.nome || "Hóspede sem nome"}
-                        </h4>
-                        <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5 flex-wrap">
-                          {guest.documento && (
-                            <span>Doc: {guest.documento}</span>
-                          )}
-                          <span>·</span>
-                          <span className="font-semibold text-text-title">{bracketLabel}</span>
-                        </div>
+            const isPrazo = paymentMode === "prazo";
+
+            return (
+              <motion.div
+                key={guest.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.02 }}
+                className="bg-surface rounded-2xl border border-border shadow-shadow-card p-5 space-y-4 hover:shadow-shadow-hover transition-all flex flex-col justify-between"
+              >
+                {/* Header do Passageiro */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                      <User size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-text-title leading-snug">
+                        {guest.nome || "Hóspede sem nome"}
+                      </h4>
+                      <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5 flex-wrap">
+                        {guest.documento && <span>Doc: {guest.documento}</span>}
+                        <span>·</span>
+                        <span className="font-semibold text-text-title">{bracketLabel}</span>
                       </div>
                     </div>
-
-                    {guestRoom && (
-                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-surface-subtle border border-border text-text-muted shrink-0 flex items-center gap-1">
-                        <BedDouble size={12} className="text-primary" />
-                        <span>{guestRoom.roomNumber} ({guestRoom.roomType})</span>
-                      </span>
-                    )}
                   </div>
 
-                  {/* Discriminação de TODOS os Blocos Individuais */}
-                  <div className="space-y-2 pt-2 border-t border-border/70 text-xs">
+                  {guestRoom && (
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-surface-subtle border border-border text-text-muted shrink-0 flex items-center gap-1">
+                      <BedDouble size={12} className="text-primary" />
+                      <span>
+                        {guestRoom.roomNumber} ({guestRoom.roomType})
+                      </span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Seletor Toggle À Vista / A Prazo */}
+                <div className="flex items-center justify-between p-2 rounded-xl bg-surface-subtle/80 border border-border/80">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-text-title">
+                    <CreditCard size={14} className="text-primary" />
+                    <span>Pagamento:</span>
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-border">
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePaymentMode(guest.id, "vista")}
+                      className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                        !isPrazo
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-text-muted hover:text-text-title"
+                      }`}
+                    >
+                      💵 À Vista ({fmt(pricing.cashPrice)})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePaymentMode(guest.id, "prazo")}
+                      className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                        isPrazo
+                          ? "bg-primary text-white shadow-sm"
+                          : "text-text-muted hover:text-text-title"
+                      }`}
+                    >
+                      💳 A Prazo ({fmt(pricing.cashPrice + pricing.installmentExtra)})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Discriminação de TODOS os Blocos Individuais */}
+                <div className="space-y-2 pt-1 border-t border-border/70 text-xs">
+                  <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-text-muted uppercase tracking-wide block">
                       Valores Discriminados por Bloco ({ageBracket}):
                     </span>
-
-                    <div className="space-y-1 bg-surface-subtle/60 rounded-xl p-2.5 border border-border/60">
-                      {blockBreakdown.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between py-0.5 text-text-body"
-                        >
-                          <div className="flex items-center gap-1.5 truncate pr-2">
-                            {getCategoryIcon(item.categoryId)}
-                            <span className="truncate">{item.title}</span>
-                          </div>
-                          <span className="font-semibold text-text-title tabular-nums shrink-0">
-                            {fmt(item.cost)}
-                          </span>
-                        </div>
-                      ))}
-
-                      {/* Subtotal Custos Base do Passageiro */}
-                      <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border/50 font-semibold text-text-muted">
-                        <span>Subtotal Custos Base</span>
-                        <span className="text-text-title">{fmt(guestBaseCost)}</span>
-                      </div>
-
-                      {/* Lucro da Agência com Arredondamento */}
-                      <div className="flex items-center justify-between text-status-success font-semibold">
-                        <div className="flex items-center gap-1">
-                          <span>+ Lucro Agência</span>
-                          {guestRoundingExtra > 0 && (
-                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                              (inclui arredondamento)
-                            </span>
-                          )}
-                        </div>
-                        <span>+{fmt(guestProfitTotal)}</span>
-                      </div>
-                    </div>
-
-                    {/* Preço do Pacote Base */}
-                    <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-primary/5 border border-primary/20">
-                      <div className="flex items-center gap-1.5 text-primary font-bold text-xs">
-                        <Package size={13} />
-                        <span>Preço Pacote Base</span>
-                      </div>
-                      <span className="font-black text-primary text-sm">
-                        {fmt(guestPackagePrice)}
-                      </span>
-                    </div>
-
-                    {/* Lista de Adicionais Contratados */}
-                    <div className="space-y-1 pt-1">
-                      <span className="text-[11px] font-bold text-text-muted uppercase tracking-wide block">
-                        Adicionais Contratados ({guestAddons.length}):
-                      </span>
-
-                      {guestAddons.length === 0 ? (
-                        <div className="text-[11px] text-text-muted/70 italic py-0.5 px-1">
-                          Nenhum adicional selecionado para este passageiro.
-                        </div>
-                      ) : (
-                        guestAddons.map((addon) => (
-                          <div
-                            key={addon.id}
-                            className="flex items-center justify-between text-xs py-1 px-2 rounded-md bg-surface-subtle"
-                          >
-                            <span className="text-text-body truncate pr-2">
-                              + {addon.title}
-                            </span>
-                            <span className="font-semibold text-status-success shrink-0">
-                              +{fmt(addon.price || 0)}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Total Final a Pagar do Passageiro */}
-                  <div className="pt-3 border-t border-border flex items-center justify-between">
-                    <div>
-                      <span className="text-[11px] font-bold text-text-muted uppercase block">
-                        Total do Passageiro
-                      </span>
-                      <span className="text-[11px] text-text-muted/70">
-                        Pacote ({bracketLabel}) + Adicionais
-                      </span>
-                    </div>
-
-                    <span className="text-xl font-black text-primary">
-                      {fmt(guestTotalPrice)}
+                    <span className="text-[10px] text-text-muted">
+                      Tarifas da idade aplicada
                     </span>
                   </div>
-                </motion.div>
-              );
-            })}
+
+                  <div className="space-y-1 bg-surface-subtle/60 rounded-xl p-2.5 border border-border/60">
+                    {blockBreakdown.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between py-0.5 text-text-body"
+                      >
+                        <div className="flex items-center gap-1.5 truncate pr-2">
+                          {getCategoryIcon(item.categoryId)}
+                          <span className="truncate">{item.title}</span>
+                        </div>
+                        <span className="font-semibold text-text-title tabular-nums shrink-0">
+                          {fmt(item.cost)}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Subtotal Custos Base do Passageiro */}
+                    <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border/50 font-semibold text-text-muted">
+                      <span>Subtotal Custos Base ({ageBracket})</span>
+                      <span className="text-text-title">{fmt(guestBaseCost)}</span>
+                    </div>
+
+                    {/* Taxa de Cartão se a prazo */}
+                    {isPrazo && pricing.cardFee > 0 && (
+                      <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 font-semibold text-xs">
+                        <span>+ Taxa do Cartão (Custo Operadora)</span>
+                        <span>+{fmt(pricing.cardFee)}</span>
+                      </div>
+                    )}
+
+                    {/* Lucro da Agência com Arredondamento */}
+                    <div className="flex items-center justify-between text-status-success font-bold pt-0.5 border-t border-border/30">
+                      <div>
+                        <span>+ Lucro Agência</span>
+                        {isPrazo && (
+                          <span className="text-[10px] text-text-muted block font-normal">
+                            (Base: +{fmt(pricing.cashPrice - guestBaseCost)} | Prazo líq: +{fmt(pricing.installmentExtra - pricing.cardFee)})
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm">+{fmt(guestProfitTotal)}</span>
+                    </div>
+                  </div>
+
+                  {/* Preço do Pacote Base */}
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-primary/5 border border-primary/20">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-primary font-bold text-xs">
+                        <Package size={13} />
+                        <span>Preço Pacote Base (Quarto {roomType})</span>
+                      </div>
+                      <span className="text-[10px] text-text-muted">
+                        {isPrazo ? "Valor a prazo configurado" : "Valor à vista configurado"}
+                      </span>
+                    </div>
+                    <span className="font-black text-primary text-base">
+                      {fmt(guestPackagePrice)}
+                    </span>
+                  </div>
+
+                  {/* Lista de Adicionais Contratados */}
+                  <div className="space-y-1 pt-1">
+                    <span className="text-[11px] font-bold text-text-muted uppercase tracking-wide block">
+                      Adicionais Contratados ({guestAddons.length}):
+                    </span>
+
+                    {guestAddons.length === 0 ? (
+                      <div className="text-[11px] text-text-muted/70 italic py-0.5 px-1">
+                        Nenhum adicional selecionado para este passageiro.
+                      </div>
+                    ) : (
+                      guestAddons.map((addon) => (
+                        <div
+                          key={addon.id}
+                          className="flex items-center justify-between text-xs py-1 px-2 rounded-md bg-surface-subtle"
+                        >
+                          <span className="text-text-body truncate pr-2">
+                            + {addon.title}
+                          </span>
+                          <span className="font-semibold text-status-success shrink-0">
+                            +{fmt(addon.price || 0)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Total Final a Pagar do Passageiro */}
+                <div className="pt-3 border-t border-border flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold text-text-muted uppercase block">
+                      Total do Passageiro
+                    </span>
+                    <span className="text-[11px] text-text-muted/70">
+                      Pacote ({bracketLabel}) + Adicionais
+                    </span>
+                  </div>
+
+                  <span className="text-xl font-black text-primary">
+                    {fmt(guestTotalPrice)}
+                  </span>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
-      {/* Resumo Consolidado do Checkout no Rodapé */}
+      {/* 5. RESUMO CONSOLIDADO NO RODAPÉ */}
       {guests.length > 0 && (
         <div className="bg-surface rounded-2xl border border-border p-6 space-y-4">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -687,7 +796,7 @@ export function CheckoutView({
                 Consolidado Geral da Excursão ({guests.length} passageiros na Room List)
               </h4>
               <p className="text-xs text-text-muted mt-0.5">
-                Valores calculados em tempo real pela idade de cada hóspede em cada bloco.
+                Cálculo em tempo real considerando o quarto ocupado, custos da faixa etária e pagamento à vista / a prazo.
               </p>
             </div>
 
@@ -701,8 +810,8 @@ export function CheckoutView({
             </div>
           </div>
 
-          {/* Cards dos Totais por Bloco */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 pt-2 border-t border-border/70 text-xs">
+          {/* Cards dos Totais */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5 pt-2 border-t border-border/70 text-xs">
             <div className="p-2.5 rounded-xl bg-surface-subtle border border-border/60">
               <span className="text-[10px] font-bold text-text-muted uppercase block flex items-center gap-1">
                 <Plane size={11} className="text-sky-500" /> Aéreo
@@ -732,19 +841,19 @@ export function CheckoutView({
 
             <div className="p-2.5 rounded-xl bg-surface-subtle border border-border/60">
               <span className="text-[10px] font-bold text-text-muted uppercase block flex items-center gap-1">
-                <Compass size={11} className="text-emerald-500" /> Outros / Guias
+                <Compass size={11} className="text-emerald-500" /> Outros
               </span>
               <span className="font-bold text-text-title text-sm mt-0.5 block">
                 {fmt(grandTotalOutros)}
               </span>
             </div>
 
-            <div className="p-2.5 rounded-xl bg-status-success/10 border border-status-success/30">
-              <span className="text-[10px] font-bold text-status-success uppercase block flex items-center gap-1">
-                <Coins size={11} /> Lucro Agência
+            <div className="p-2.5 rounded-xl bg-surface-subtle border border-border/60">
+              <span className="text-[10px] font-bold text-text-muted uppercase block flex items-center gap-1">
+                <CreditCard size={11} className="text-amber-500" /> Taxas Cartão
               </span>
-              <span className="font-black text-status-success text-sm mt-0.5 block">
-                {fmt(grandTotalLucroAgencia)}
+              <span className="font-bold text-text-title text-sm mt-0.5 block">
+                {fmt(grandTotalCardFees)}
               </span>
             </div>
 
@@ -754,6 +863,15 @@ export function CheckoutView({
               </span>
               <span className="font-bold text-text-title text-sm mt-0.5 block">
                 {fmt(grandTotalAddons)}
+              </span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-status-success/10 border border-status-success/30 col-span-2 sm:col-span-1">
+              <span className="text-[10px] font-bold text-status-success uppercase block flex items-center gap-1">
+                <Coins size={11} /> Lucro Agência
+              </span>
+              <span className="font-black text-status-success text-sm mt-0.5 block">
+                {fmt(grandTotalLucroAgencia)}
               </span>
             </div>
           </div>
