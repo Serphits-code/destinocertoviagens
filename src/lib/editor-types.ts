@@ -2,6 +2,21 @@
 
 export type RowStatus = "PENDENTE" | "COTADO" | "CONFIRMADO" | "CANCELADO";
 
+export interface CustomAgeTier {
+  id: string;
+  label: string;      // Ex: "Adulto", "Criança 02 a 05 anos", "Criança 06 a 11 anos", "Bebê", etc.
+  minAge: number;     // Idade mínima (anos)
+  maxAge: number;     // Idade máxima (anos)
+  price: string | number; // Valor em R$ para este bloco
+}
+
+export interface BlockAgePricing {
+  adulto?: number | string;
+  crianca?: number | string;
+  bebe?: number | string;
+  tiers?: CustomAgeTier[];
+}
+
 export interface ItensInclusosRow {
   type: string;
   icon: string;
@@ -49,6 +64,7 @@ export interface AereoBlockData {
   prazoEmissao?: string;
   status?: RowStatus;
   observation?: string;
+  agePricing?: BlockAgePricing;
 }
 
 export interface HospedagemRoom {
@@ -80,6 +96,7 @@ export interface HospedagemBlockData {
   prazoPagamentoTotal?: string;
   status?: RowStatus;
   observation?: string;
+  agePricing?: BlockAgePricing;
 }
 
 export interface RodoviarioBlockData {
@@ -108,6 +125,7 @@ export interface RodoviarioBlockData {
   sinal?: string;
   prazoSinal?: string;
   prazoPagamentoTotal?: string;
+  agePricing?: BlockAgePricing;
 }
 
 export interface GuiaEntry {

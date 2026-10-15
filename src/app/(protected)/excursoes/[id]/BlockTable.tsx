@@ -1,7 +1,9 @@
 "use client";
 
-import { Plus, Trash2, Plane, DollarSign, Calendar } from "lucide-react";
-import type { EditorBlock, BlockData, RowStatus } from "@/lib/editor-types";
+import { useState } from "react";
+import { Plus, Trash2, Plane, DollarSign, Calendar, Users, ChevronDown, ChevronUp } from "lucide-react";
+import type { EditorBlock, BlockData, RowStatus, BlockAgePricing, CustomAgeTier } from "@/lib/editor-types";
+import { getBlockBaseUnitCost } from "@/lib/package-calc";
 
 interface BlockTableProps {
   block: EditorBlock;
@@ -91,6 +93,272 @@ function BlockObservation({
           onChange={(e) => onChange(e.target.value)}
         />
       </label>
+    </div>
+  );
+}
+
+function BlockAgePricingSection({
+  agePricing,
+  defaultBaseCost = 0,
+  onChange,
+}: {
+  agePricing?: BlockAgePricing;
+  defaultBaseCost?: number;
+  onChange: (v: BlockAgePricing) => void;
+}) {
+  const tiers: CustomAgeTier[] = Array.isArray(agePricing?.tiers) ? agePricing.tiers : [];
+  const [isOpen, setIsOpen] = useState(false);
+
+  const saveTiers = (newTiers: CustomAgeTier[]) => {
+    onChange({
+      ...(agePricing || {}),
+      tiers: newTiers,
+    });
+  };
+
+  const handleAddTier = (template?: { label: string; minAge: number; maxAge: number; price?: string }) => {
+    const newTier: CustomAgeTier = {
+      id: `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      label: template?.label || (tiers.length === 0 ? "Criança" : `Faixa ${tiers.length + 1}`),
+      minAge: template?.minAge ?? 2,
+      maxAge: template?.maxAge ?? 11,
+      price: template?.price ?? (defaultBaseCost > 0 ? (defaultBaseCost * 0.5).toFixed(2) : "0.00"),
+    };
+    saveTiers([...tiers, newTier]);
+    setIsOpen(true);
+  };
+
+  const handleUpdateTier = (idx: number, patch: Partial<CustomAgeTier>) => {
+    const next = [...tiers];
+    next[idx] = { ...next[idx], ...patch };
+    saveTiers(next);
+  };
+
+  const handleRemoveTier = (idx: number) => {
+    const next = tiers.filter((_, i) => i !== idx);
+    saveTiers(next);
+  };
+
+  const fmt = (v: number) =>
+    v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  return (
+    <div className="mt-4 pt-3 border-t border-border/40">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 text-xs font-bold text-text-title hover:text-primary transition-colors cursor-pointer group"
+        >
+          <div className="p-1 rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+            <Users size={13} />
+          </div>
+          <span>
+            Precificação por Faixa Etária{" "}
+            {tiers.length > 0 ? (
+              <span className="text-primary font-semibold">
+                ({tiers.length} {tiers.length === 1 ? "faixa criada" : "faixas criadas"})
+              </span>
+            ) : (
+              <span className="text-text-muted font-normal text-[11px]">(opcional)</span>
+            )}
+          </span>
+          {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+
+        {/* Resumo compacto de todas as faixas configuradas */}
+        <div className="flex items-center flex-wrap gap-1.5 text-[11px] font-medium text-text-muted">
+          {tiers.length === 0 ? (
+            <span className="px-2 py-0.5 rounded-md bg-surface-subtle border border-border/50 text-text-muted italic text-[11px]">
+              Sem faixas adicionais (valor padrão do bloco aplicado)
+            </span>
+          ) : (
+            tiers.map((t, idx) => (
+              <span
+                key={t.id || idx}
+                className="px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 text-[11px] font-semibold"
+              >
+                {t.label || "Sem nome"} ({t.minAge} a {t.maxAge >= 999 ? "+" : `${t.maxAge}a`}):{" "}
+                <strong className="text-text-title">{fmt(parseNum(t.price))}</strong>
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="mt-3 p-4 bg-surface-subtle/70 rounded-xl border border-border/70 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h4 className="text-xs font-bold text-text-title">
+                Faixas Etárias Personalizadas deste Bloco
+              </h4>
+              <p className="text-[11px] text-text-muted mt-0.5">
+                Crie livremente as faixas de idade que desejar (ex: Bebê 0 a 1 ano, Criança 2 a 5 anos, etc.). Ao registrar o passageiro na Room List com a data de nascimento, o sistema detecta a idade e aplica o valor deste bloco no Checkout automaticamente.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleAddTier()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-hover shadow-xs transition-colors cursor-pointer shrink-0"
+            >
+              <Plus size={13} />
+              <span>+ Criar Faixa Etária</span>
+            </button>
+          </div>
+
+          {/* Lista de Faixas Customizáveis */}
+          <div className="space-y-2.5">
+            {tiers.length === 0 ? (
+              <div className="p-6 text-center border-2 border-dashed border-border/80 rounded-xl bg-surface/70 space-y-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                  <Users size={18} />
+                </div>
+                <div>
+                  <h5 className="text-xs font-bold text-text-title">
+                    Nenhuma faixa etária criada para este bloco
+                  </h5>
+                  <p className="text-[11px] text-text-muted max-w-md mx-auto mt-0.5">
+                    Todos os passageiros pagarão a tarifa base padrão deste bloco. Caso queira cobrar valores diferenciados por idade, crie suas próprias faixas abaixo.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAddTier()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary-hover shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>Criar Minha Primeira Faixa Etária</span>
+                </button>
+              </div>
+            ) : (
+              tiers.map((tier, idx) => (
+                <div
+                  key={tier.id || idx}
+                  className="p-3 bg-surface rounded-xl border border-border/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 flex-1 items-center">
+                    {/* Nome da Faixa */}
+                    <div className="sm:col-span-5">
+                      <label className="text-[10px] font-bold text-text-muted uppercase block mb-0.5">
+                        Nome da Faixa Etária
+                      </label>
+                      <input
+                        type="text"
+                        value={tier.label}
+                        onChange={(e) => handleUpdateTier(idx, { label: e.target.value })}
+                        placeholder="Ex: Criança 02 a 05 anos, Bebê, Adulto..."
+                        className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-border bg-surface text-text-title focus:outline-none focus:border-primary"
+                      />
+                    </div>
+
+                    {/* Idade De */}
+                    <div className="sm:col-span-2">
+                      <label className="text-[10px] font-bold text-text-muted uppercase block mb-0.5">
+                        De (idade)
+                      </label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="number"
+                          min={0}
+                          max={120}
+                          value={tier.minAge}
+                          onChange={(e) => handleUpdateTier(idx, { minAge: parseInt(e.target.value) || 0 })}
+                          className="w-full px-2 py-1.5 text-xs font-bold rounded-lg border border-border bg-surface text-text-title text-center focus:outline-none focus:border-primary"
+                        />
+                        <span className="text-[10px] text-text-muted ml-1 shrink-0">anos</span>
+                      </div>
+                    </div>
+
+                    {/* Idade Até */}
+                    <div className="sm:col-span-2">
+                      <label className="text-[10px] font-bold text-text-muted uppercase block mb-0.5">
+                        Até (idade)
+                      </label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="number"
+                          min={0}
+                          max={999}
+                          value={tier.maxAge >= 999 ? "" : tier.maxAge}
+                          placeholder="Sem limite"
+                          onChange={(e) => handleUpdateTier(idx, { maxAge: e.target.value === "" ? 999 : parseInt(e.target.value) || 0 })}
+                          className="w-full px-2 py-1.5 text-xs font-bold rounded-lg border border-border bg-surface text-text-title text-center focus:outline-none focus:border-primary"
+                        />
+                        <span className="text-[10px] text-text-muted ml-1 shrink-0">anos</span>
+                      </div>
+                    </div>
+
+                    {/* Valor do Bloco */}
+                    <div className="sm:col-span-3">
+                      <label className="text-[10px] font-bold text-text-muted uppercase block mb-0.5">
+                        Valor neste Bloco
+                      </label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-2.5 text-xs text-text-muted font-bold">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={tier.price}
+                          onChange={(e) => handleUpdateTier(idx, { price: e.target.value })}
+                          placeholder="0.00"
+                          className="w-full pl-8 pr-2.5 py-1.5 text-xs font-bold rounded-lg border border-border bg-surface text-text-title focus:outline-none focus:border-primary tabular-nums"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ação de Remoção */}
+                  <div className="flex items-center justify-end shrink-0 pt-1 md:pt-0">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTier(idx)}
+                      className="p-1.5 rounded-lg text-text-muted hover:text-status-danger hover:bg-status-danger/10 transition-colors cursor-pointer"
+                      title="Excluir esta faixa etária"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Sugestões de Faixas Comuns para Adicionar Rápido */}
+          <div className="pt-2 border-t border-border/50 flex items-center gap-1.5 flex-wrap text-xs text-text-muted">
+            <span className="font-semibold text-[11px]">Sugestões rápidas:</span>
+            <button
+              type="button"
+              onClick={() => handleAddTier({ label: "Adulto", minAge: 12, maxAge: 999, price: defaultBaseCost > 0 ? defaultBaseCost.toFixed(2) : "0.00" })}
+              className="text-[11px] px-2 py-0.5 rounded-md bg-surface border border-border hover:border-primary text-text-body transition-colors cursor-pointer"
+            >
+              + Adulto (12+ anos)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddTier({ label: "Criança 02 a 05 anos", minAge: 2, maxAge: 5, price: defaultBaseCost > 0 ? (defaultBaseCost * 0.5).toFixed(2) : "0.00" })}
+              className="text-[11px] px-2 py-0.5 rounded-md bg-surface border border-border hover:border-primary text-text-body transition-colors cursor-pointer"
+            >
+              + Criança (2 a 5 anos)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddTier({ label: "Criança 06 a 11 anos", minAge: 6, maxAge: 11, price: defaultBaseCost > 0 ? (defaultBaseCost * 0.75).toFixed(2) : "0.00" })}
+              className="text-[11px] px-2 py-0.5 rounded-md bg-surface border border-border hover:border-primary text-text-body transition-colors cursor-pointer"
+            >
+              + Criança (6 a 11 anos)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddTier({ label: "Bebê / Colo", minAge: 0, maxAge: 1, price: "0.00" })}
+              className="text-[11px] px-2 py-0.5 rounded-md bg-status-success/10 hover:bg-status-success/20 text-status-success border border-status-success/30 font-semibold transition-colors cursor-pointer"
+            >
+              + Bebê / Colo (0 a 1 ano)
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -380,6 +648,12 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               </span>
             </div>
           </div>
+
+          <BlockAgePricingSection
+            agePricing={d.agePricing}
+            defaultBaseCost={vagasNum > 0 ? totalGeralCalc / vagasNum : 0}
+            onChange={(val) => set("agePricing", val)}
+          />
 
           <BlockObservation
             value={d.observation}
@@ -772,6 +1046,12 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               </label>
             </div>
           </div>
+
+          <BlockAgePricingSection
+            agePricing={d.agePricing}
+            defaultBaseCost={parseNum(d.custoUnitario) || parseNum(d.valorNetUnitario) || (vagasNum > 0 ? parseNum(d.custoTotal) / vagasNum : 0)}
+            onChange={(val) => set("agePricing", val)}
+          />
 
           {/* Observações */}
           <div className="space-y-1">
@@ -1315,6 +1595,12 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             </div>
           </div>
 
+          <BlockAgePricingSection
+            agePricing={d.agePricing}
+            defaultBaseCost={getBlockBaseUnitCost(block, vagasNum)}
+            onChange={(val) => set("agePricing", val)}
+          />
+
           <BlockObservation
             value={d.observation}
             onChange={(v) => set("observation", v)}
@@ -1664,6 +1950,12 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               </label>
             </div>
           </div>
+
+          <BlockAgePricingSection
+            agePricing={d.agePricing}
+            defaultBaseCost={parseNum(d.rateioPorPessoa) || parseNum(d.valorNetUnitario) || (vagasNum > 0 ? parseNum(d.valorContrato) / vagasNum : 0)}
+            onChange={(val) => set("agePricing", val)}
+          />
 
           <BlockObservation
             value={d.observation}
@@ -2153,6 +2445,12 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               <Plus size={14} /> Adicionar Coluna
             </button>
           </div>
+          <BlockAgePricingSection
+            agePricing={d.agePricing}
+            defaultBaseCost={getBlockBaseUnitCost(block, 20)}
+            onChange={(val) => set("agePricing", val)}
+          />
+
           <BlockObservation
             value={d.observation}
             onChange={(v) => set("observation", v)}

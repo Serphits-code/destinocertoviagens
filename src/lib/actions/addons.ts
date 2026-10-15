@@ -135,13 +135,33 @@ export async function updateExcursionProfitMargin(
   excursionId: string,
   profitMargin: number
 ) {
+  return updateExcursionPricing(excursionId, { profitMargin });
+}
+
+export async function updateExcursionPricing(
+  excursionId: string,
+  data: {
+    profitMargin?: number;
+    customProfitAmount?: number | null;
+    customPackagePrice?: number | null;
+  }
+) {
   await requireWritePermission();
+
+  const updateData: any = {};
+  if (data.profitMargin !== undefined) {
+    updateData.profitMargin = Number(data.profitMargin) || 0;
+  }
+  if (data.customProfitAmount !== undefined) {
+    updateData.customProfitAmount = data.customProfitAmount !== null ? Number(data.customProfitAmount) : null;
+  }
+  if (data.customPackagePrice !== undefined) {
+    updateData.customPackagePrice = data.customPackagePrice !== null ? Number(data.customPackagePrice) : null;
+  }
 
   await db.excursion.update({
     where: { id: excursionId },
-    data: {
-      profitMargin: Number(profitMargin) || 0,
-    },
+    data: updateData,
   });
 
   revalidatePath(`/excursoes/${excursionId}`);

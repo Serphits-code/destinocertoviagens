@@ -9,6 +9,13 @@ interface SummaryWidgetProps {
   blocks: EditorBlock[];
   slots: number;
   profitMargin?: number;
+  customProfitAmount?: number | null;
+  customPackagePrice?: number | null;
+  onUpdatePricing?: (pricing: {
+    profitMargin?: number;
+    customProfitAmount?: number | null;
+    customPackagePrice?: number | null;
+  }) => void;
   onUpdateProfitMargin?: (newMargin: number) => void;
   testPeople?: string;
   onTestPeopleChange?: (val: string) => void;
@@ -18,6 +25,9 @@ export function SummaryWidget({
   blocks,
   slots,
   profitMargin = 0,
+  customProfitAmount = null,
+  customPackagePrice = null,
+  onUpdatePricing,
   onUpdateProfitMargin,
   testPeople: controlledTestPeople,
   onTestPeopleChange,
@@ -27,13 +37,22 @@ export function SummaryWidget({
   const testPeople = controlledTestPeople !== undefined ? controlledTestPeople : internalTestPeople;
   const setTestPeople = onTestPeopleChange ?? setInternalTestPeople;
 
-  // Edição inline da margem de lucro
-  const [isEditingMargin, setIsEditingMargin] = useState(false);
-  const [tempMargin, setTempMargin] = useState(String(profitMargin || 0));
+  // Edição inline da margem e valores cheios
+  const [isEditing, setIsEditing] = useState(false);
+  const [editMode, setEditMode] = useState<"percent" | "profit" | "price">("percent");
+  const [tempVal, setTempVal] = useState(String(profitMargin || 0));
 
   const summary = useMemo(
-    () => calculatePackageFinancialSummary(blocks, slots, profitMargin, testPeople),
-    [blocks, slots, profitMargin, testPeople]
+    () =>
+      calculatePackageFinancialSummary(
+        blocks,
+        slots,
+        profitMargin,
+        testPeople,
+        customProfitAmount,
+        customPackagePrice
+      ),
+    [blocks, slots, profitMargin, testPeople, customProfitAmount, customPackagePrice]
   );
 
   const {
@@ -44,6 +63,8 @@ export function SummaryWidget({
     costPerPerson,
     marginPercent: marginNum,
     agencyProfitPerPerson,
+    effectiveProfitPerPerson,
+    roundingDifference,
     totalAgencyProfit,
     pricePerPerson,
     grandTotalRevenue,
@@ -56,10 +77,24 @@ export function SummaryWidget({
       minimumFractionDigits: 2,
     });
 
-  const handleSaveMargin = () => {
-    const val = parseNum(tempMargin);
-    onUpdateProfitMargin?.(val);
-    setIsEditingMargin(false);
+  const handleSave = () => {
+    const parsed = parseNum(tempVal);
+    if (editMode === "percent") {
+      if (onUpdatePricing) {
+        onUpdatePricing({ profitMargin: parsed, customProfitAmount: null, customPackagePrice: null });
+      } else {
+        onUpdateProfitMargin?.(parsed);
+      }
+    } else if (editMode === "profit") {
+      if (onUpdatePricing) {
+        onUpdatePricing({ customProfitAmount: parsed, customPackagePrice: null });
+      }
+    } else if (editMode === "price") {
+      if (onUpdatePricing) {
+        onUpdatePricing({ customPackagePrice: parsed, customProfitAmount: null });
+      }
+    }
+    setIsEditing(false);
   };
 
   return (
@@ -71,38 +106,74 @@ export function SummaryWidget({
           <span>Resumo Financeiro</span>
         </div>
 
-        {/* Badge / Edição da Margem de Lucro */}
-        {isEditingMargin ? (
-          <div className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-lg">
-            <input
-              type="number"
-              className="w-12 bg-transparent text-xs font-bold text-green-300 outline-none text-right"
-              value={tempMargin}
-              onChange={(e) => setTempMargin(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSaveMargin()}
-              autoFocus
-            />
-            <span className="text-[10px] text-green-300 font-bold">%</span>
-            <button
-              onClick={handleSaveMargin}
-              className="p-0.5 text-green-400 hover:text-green-300 cursor-pointer"
-              title="Confirmar"
-            >
-              <Check size={12} />
-            </button>
+        {/* Badge / Edição da Margem de Lucro e Valor Cheio */}
+        {isEditing ? (
+          <div className="flex flex-col gap-2 bg-black/40 p-2.5 rounded-xl border border-white/20 text-xs">
+            <div className="flex items-center gap-1.5 pb-1 border-b border-white/10">
+              <button
+                type="button"
+                onClick={() => { setEditMode("percent"); setTempVal(String(marginNum)); }}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold ${editMode === "percent" ? "bg-green-500 text-black" : "bg-white/10 text-white/70"}`}
+              >
+                % Margem
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditMode("profit"); setTempVal(effectiveProfitPerPerson > 0 ? effectiveProfitPerPerson.toFixed(2) : ""); }}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold ${editMode === "profit" ? "bg-green-500 text-black" : "bg-white/10 text-white/70"}`}
+              >
+                R$ Lucro
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditMode("price"); setTempVal(pricePerPerson > 0 ? pricePerPerson.toFixed(2) : ""); }}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold ${editMode === "price" ? "bg-green-500 text-black" : "bg-white/10 text-white/70"}`}
+              >
+                R$ Preço
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-white/60 font-semibold text-[11px]">
+                {editMode === "percent" ? "%" : "R$"}
+              </span>
+              <input
+                type="number"
+                step={editMode === "percent" ? "0.5" : "1"}
+                className="w-20 px-2 py-1 bg-white/10 border border-white/20 rounded-md text-xs font-bold text-green-300 outline-none"
+                value={tempVal}
+                onChange={(e) => setTempVal(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSave()}
+                autoFocus
+              />
+              <button
+                onClick={handleSave}
+                className="p-1 rounded bg-green-500 text-black font-bold hover:bg-green-400 cursor-pointer"
+                title="Salvar"
+              >
+                <Check size={12} />
+              </button>
+              <button
+                onClick={() => setIsEditing(false)}
+                className="px-1.5 py-1 text-white/60 hover:text-white text-[10px] cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         ) : (
           <button
             type="button"
             onClick={() => {
-              setTempMargin(String(profitMargin || 0));
-              setIsEditingMargin(true);
+              setEditMode("percent");
+              setTempVal(String(marginNum));
+              setIsEditing(true);
             }}
-            className="group flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-green-500/20 hover:bg-green-500/30 text-green-300 transition-colors cursor-pointer"
-            title="Clique para editar a margem de lucro"
+            className="group flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-300 transition-colors cursor-pointer border border-green-500/30"
+            title="Clique para editar % de lucro ou valor cheio arredondado"
           >
             <Percent size={11} />
-            <span>{marginNum}%</span>
+            <span>{marginNum}% ({fmt(effectiveProfitPerPerson)})</span>
             <Edit2 size={10} className="opacity-60 group-hover:opacity-100 ml-0.5" />
           </button>
         )}
@@ -168,14 +239,21 @@ export function SummaryWidget({
           <p className="text-xs text-white/60 uppercase tracking-wider font-medium">
             Lucro estimado líquido
           </p>
-          {marginNum > 0 && (
-            <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-green-500/20 text-green-300">
-              {marginNum}%
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {roundingDifference > 0 && (
+              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-amber-400/20 text-amber-300" title="Diferença de arredondamento incorporada ao lucro">
+                +{fmt(roundingDifference)} arr.
+              </span>
+            )}
+            {marginNum > 0 && (
+              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-green-500/20 text-green-300">
+                {marginNum}%
+              </span>
+            )}
+          </div>
         </div>
         <p className="text-xl font-extrabold text-green-300">
-          {fmt(agencyProfitPerPerson)}
+          {fmt(effectiveProfitPerPerson)}
           <span className="text-xs text-white/60 font-normal ml-1.5">/ passageiro</span>
         </p>
         <p className="text-[11px] text-white/70 font-medium">

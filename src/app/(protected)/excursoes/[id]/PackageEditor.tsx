@@ -36,6 +36,7 @@ import {
   Receipt,
   Settings,
   ClipboardList,
+  BarChart3,
 } from "lucide-react";
 import type { EditorBlock, BlockCategoryId, BlockData } from "@/lib/editor-types";
 import type { ItineraryItem } from "@/lib/actions/itinerary";
@@ -43,6 +44,7 @@ import type { ExcursionAddon, AddonGuestPayment, InterestedLead } from "@/lib/ac
 import {
   updateExcursionAddons,
   updateExcursionProfitMargin,
+  updateExcursionPricing,
   updateExcursionLeads,
 } from "@/lib/actions/addons";
 import {
@@ -63,6 +65,7 @@ import { RoomListView, type RoomGuest, type RoomEntry } from "./RoomListView";
 import { ItineraryView, DEFAULT_SAO_PAULO_ITINERARY } from "./ItineraryView";
 import { AdicionaisView } from "./AdicionaisView";
 import { CheckoutView } from "./CheckoutView";
+import { ExcursionFinancialReportView } from "./ExcursionFinancialReportView";
 import { InterestedLeadsView } from "./InterestedLeadsView";
 import { updateExcursionItinerary } from "@/lib/actions/itinerary";
 import { WeatherClimateBadge } from "@/components/WeatherClimateBadge";
@@ -90,6 +93,8 @@ interface PackageEditorProps {
   initialGuestPayments?: Record<string, AddonGuestPayment>;
   initialInterestedLeads?: InterestedLead[];
   initialProfitMargin?: number;
+  initialCustomProfitAmount?: number | null;
+  initialCustomPackagePrice?: number | null;
   currentUser?: {
     id: string;
     name?: string | null;
@@ -117,6 +122,8 @@ export function PackageEditor({
   initialGuestPayments = {},
   initialInterestedLeads = [],
   initialProfitMargin = 0,
+  initialCustomProfitAmount = null,
+  initialCustomPackagePrice = null,
   currentUser,
 }: PackageEditorProps) {
   const editorContainerRef = useRef<HTMLDivElement>(null);
@@ -133,7 +140,7 @@ export function PackageEditor({
   const [insertIndex, setInsertIndex] = useState<number | undefined>(undefined);
   const [mounted, setMounted] = useState(false);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
-  const [view, setView] = useState<"pacote" | "roomlist" | "roteiro" | "adicionais" | "checkout" | "interessados">("pacote");
+  const [view, setView] = useState<"pacote" | "roomlist" | "roteiro" | "adicionais" | "checkout" | "interessados" | "relatorio">("pacote");
   const [addons, setAddons] = useState<ExcursionAddon[]>(initialAddons || []);
   const [guestPayments, setGuestPayments] = useState<Record<string, AddonGuestPayment>>(
     initialGuestPayments || {}
@@ -142,6 +149,8 @@ export function PackageEditor({
     initialInterestedLeads || []
   );
   const [profitMargin, setProfitMargin] = useState<number>(initialProfitMargin || 0);
+  const [customProfitAmount, setCustomProfitAmount] = useState<number | null>(initialCustomProfitAmount ?? null);
+  const [customPackagePrice, setCustomPackagePrice] = useState<number | null>(initialCustomPackagePrice ?? null);
 
   // Timer e flash de status Salvo
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -396,7 +405,34 @@ export function PackageEditor({
       broadcastMutation({ type: "profit_margin", profitMargin: newMargin });
       if (marginTimer.current) clearTimeout(marginTimer.current);
       marginTimer.current = setTimeout(async () => {
-        await updateExcursionProfitMargin(excursionId, newMargin);
+        await updateExcursionPricing(excursionId, { profitMargin: newMargin });
+        flashSaved();
+      }, 400);
+    },
+    [broadcastMutation, excursionId, flashSaved]
+  );
+
+  const pricingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleUpdatePricing = useCallback(
+    (newPricing: {
+      profitMargin?: number;
+      customProfitAmount?: number | null;
+      customPackagePrice?: number | null;
+    }) => {
+      if (newPricing.profitMargin !== undefined) {
+        setProfitMargin(newPricing.profitMargin);
+        broadcastMutation({ type: "profit_margin", profitMargin: newPricing.profitMargin });
+      }
+      if (newPricing.customProfitAmount !== undefined) {
+        setCustomProfitAmount(newPricing.customProfitAmount);
+      }
+      if (newPricing.customPackagePrice !== undefined) {
+        setCustomPackagePrice(newPricing.customPackagePrice);
+      }
+
+      if (pricingTimer.current) clearTimeout(pricingTimer.current);
+      pricingTimer.current = setTimeout(async () => {
+        await updateExcursionPricing(excursionId, newPricing);
         flashSaved();
       }, 400);
     },
@@ -436,8 +472,16 @@ export function PackageEditor({
 
   // Resumo financeiro consolidado (custo base, margem, preço base por passageiro e simulação)
   const financialSummary = useMemo(
-    () => calculatePackageFinancialSummary(blocks, slots, profitMargin, simulatedPeople),
-    [blocks, slots, profitMargin, simulatedPeople]
+    () =>
+      calculatePackageFinancialSummary(
+        blocks,
+        slots,
+        profitMargin,
+        simulatedPeople,
+        customProfitAmount,
+        customPackagePrice
+      ),
+    [blocks, slots, profitMargin, simulatedPeople, customProfitAmount, customPackagePrice]
   );
 
   // ---- Blocos ----
@@ -720,6 +764,16 @@ export function PackageEditor({
             >
               <Receipt size={15} className="text-status-success" /> Checkout
             </button>
+            <button
+              onClick={() => setView("relatorio")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                view === "relatorio"
+                  ? "bg-surface text-text-title shadow-shadow-card"
+                  : "text-text-muted hover:text-text-body"
+              }`}
+            >
+              <BarChart3 size={15} className="text-primary" /> Relatório Financeiro
+            </button>
 
             {/* Ícone de Configuração do Pacote (Geração de Link com Senha) */}
             <button
@@ -897,15 +951,39 @@ export function PackageEditor({
             <CheckoutView
               guests={guests}
               rooms={rooms}
+              blocks={blocks}
               addons={addons}
               totalBaseCostPerPerson={financialSummary.costPerPerson}
               profitMargin={profitMargin}
+              customProfitAmount={customProfitAmount}
+              customPackagePrice={customPackagePrice}
+              onUpdatePricing={handleUpdatePricing}
               onUpdateProfitMargin={handleUpdateProfitMargin}
               slots={financialSummary.activePeople}
               basePackagePrice={financialSummary.pricePerPerson}
-              profitPerPerson={financialSummary.agencyProfitPerPerson}
+              profitPerPerson={financialSummary.effectiveProfitPerPerson}
               totalAgencyProfit={financialSummary.totalAgencyProfit}
+              roundingDifference={financialSummary.roundingDifference}
               isSimulationActive={financialSummary.isSimulationActive}
+              periodStart={periodStart}
+            />
+          ) : view === "relatorio" ? (
+            <ExcursionFinancialReportView
+              excursionId={excursionId}
+              excursionName={name}
+              destination={initialDestination}
+              periodStart={periodStart}
+              periodEnd={periodEnd}
+              slots={slots}
+              blocks={blocks}
+              rooms={rooms}
+              guests={guests}
+              addons={addons}
+              guestPayments={guestPayments}
+              profitMargin={profitMargin}
+              customProfitAmount={customProfitAmount}
+              customPackagePrice={customPackagePrice}
+              financialSummary={financialSummary}
             />
           ) : view === "interessados" ? (
             <InterestedLeadsView
@@ -1033,62 +1111,67 @@ export function PackageEditor({
         </div>
 
         {/* Sidebar: lateral com Resumo Financeiro, Ações e Botão que rolam juntos mantendo-se sempre visíveis */}
-        <aside className="w-72 shrink-0 hidden lg:block sticky top-20 self-start space-y-4">
-          {/* Botão de Adicionar Ponto — Posicionado junto com o Resumo Financeiro sem duplicação */}
-          {view === "roteiro" && (
-            <button
-              onClick={() => handleAddItineraryItem()}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-primary text-white text-sm font-bold shadow-lg hover:bg-primary-strong transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-            >
-              <Plus size={18} />
-              <span>Adicionar Ponto</span>
-            </button>
-          )}
+        {view !== "checkout" && view !== "relatorio" && (
+          <aside className="w-72 shrink-0 hidden lg:block sticky top-20 self-start space-y-4">
+            {/* Botão de Adicionar Ponto — Posicionado junto com o Resumo Financeiro sem duplicação */}
+            {view === "roteiro" && (
+              <button
+                onClick={() => handleAddItineraryItem()}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-primary text-white text-sm font-bold shadow-lg hover:bg-primary-strong transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+              >
+                <Plus size={18} />
+                <span>Adicionar Ponto</span>
+              </button>
+            )}
 
-          {/* Botão de Adicionar Card no Pacote */}
-          {view === "pacote" && (
-            <button
-              onClick={() => {
-                setInsertIndex(undefined);
-                setModalOpen(true);
-              }}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-primary text-white text-sm font-bold shadow-lg hover:bg-primary-strong transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-            >
-              <Plus size={18} />
-              <span>Adicionar Card</span>
-            </button>
-          )}
+            {/* Botão de Adicionar Card no Pacote */}
+            {view === "pacote" && (
+              <button
+                onClick={() => {
+                  setInsertIndex(undefined);
+                  setModalOpen(true);
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-primary text-white text-sm font-bold shadow-lg hover:bg-primary-strong transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+              >
+                <Plus size={18} />
+                <span>Adicionar Card</span>
+              </button>
+            )}
 
-          <SummaryWidget
-            blocks={blocks}
-            slots={slots}
-            profitMargin={profitMargin}
-            onUpdateProfitMargin={handleUpdateProfitMargin}
-            testPeople={simulatedPeople}
-            onTestPeopleChange={setSimulatedPeople}
-          />
-          <div className="bg-surface rounded-2xl border border-border shadow-shadow-card p-4 space-y-2">
-            <h4 className="text-sm font-semibold text-text-title">⚡ Ações Rápidas</h4>
-            <button
-              onClick={expandAll}
-              className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-body hover:bg-surface-muted transition-colors"
-            >
-              ➕ Expandir Todos
-            </button>
-            <button
-              onClick={collapseAll}
-              className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-body hover:bg-surface-muted transition-colors"
-            >
-              ➖ Minimizar Todos
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-body hover:bg-surface-muted transition-colors"
-            >
-              🖨️ Imprimir / PDF
-            </button>
-          </div>
-        </aside>
+            <SummaryWidget
+              blocks={blocks}
+              slots={slots}
+              profitMargin={profitMargin}
+              customProfitAmount={customProfitAmount}
+              customPackagePrice={customPackagePrice}
+              onUpdatePricing={handleUpdatePricing}
+              onUpdateProfitMargin={handleUpdateProfitMargin}
+              testPeople={simulatedPeople}
+              onTestPeopleChange={setSimulatedPeople}
+            />
+            <div className="bg-surface rounded-2xl border border-border shadow-shadow-card p-4 space-y-2">
+              <h4 className="text-sm font-semibold text-text-title">⚡ Ações Rápidas</h4>
+              <button
+                onClick={expandAll}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-body hover:bg-surface-muted transition-colors"
+              >
+                ➕ Expandir Todos
+              </button>
+              <button
+                onClick={collapseAll}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-body hover:bg-surface-muted transition-colors"
+              >
+                ➖ Minimizar Todos
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-text-body hover:bg-surface-muted transition-colors"
+              >
+                🖨️ Imprimir / PDF
+              </button>
+            </div>
+          </aside>
+        )}
       </div>
 
       {/* Modal de adicionar bloco */}

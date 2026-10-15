@@ -71,6 +71,8 @@ model Excursion {
   itineraryJson    Json?
   addonsJson       Json?
   profitMargin     Float?          @default(0)
+  customProfitAmount Float?
+  customPackagePrice Float?
   shareCode        String?         @unique
   sharePassword    String?
   isShareActive    Boolean         @default(true)

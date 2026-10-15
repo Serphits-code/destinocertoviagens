@@ -62,6 +62,8 @@ export default async function ExcursionEditorPage({
       initialGuestPayments={initialGuestPayments}
       initialInterestedLeads={initialInterestedLeads}
       initialProfitMargin={excursion.profitMargin ?? 0}
+      initialCustomProfitAmount={excursion.customProfitAmount ?? null}
+      initialCustomPackagePrice={excursion.customPackagePrice ?? null}
       currentUser={{
         id: session.user.id,
         name: session.user.name || session.user.email?.split("@")[0] || "Usuário",

@@ -1,7 +1,7 @@
 // src/lib/package-calc.ts
 // Cálculos financeiros consolidados e compartilhados entre SummaryWidget, PackageEditor e CheckoutView
 
-import type { EditorBlock } from "./editor-types";
+import type { EditorBlock, CustomAgeTier } from "./editor-types";
 
 export function parseNum(v: unknown): number {
   if (v === null || v === undefined) return 0;
@@ -182,6 +182,257 @@ export function calculateBaseCardsCost(blocks: EditorBlock[], defaultCardVagas: 
   return total;
 }
 
+export type AgeBracket = "adulto" | "crianca" | "bebe";
+
+export const AGE_BRACKET_LABELS: Record<AgeBracket, string> = {
+  adulto: "Adulto (12+ anos)",
+  crianca: "Criança (2 a 11 anos)",
+  bebe: "Bebê / Colo (0 a 1 ano)",
+};
+
+/**
+ * Calcula a idade do hóspede na data de início da viagem ou data atual
+ */
+export function getGuestAge(
+  guest: { birthDate?: string | null },
+  tripDateStr?: string | null
+): number | null {
+  if (!guest.birthDate) return null;
+  const targetDate = tripDateStr ? new Date(tripDateStr + "T00:00:00") : new Date();
+  const cleanBirth = guest.birthDate.split("T")[0];
+  const [bYear, bMonth, bDay] = cleanBirth.split("-").map(Number);
+  if (!bYear || !bMonth || !bDay || isNaN(targetDate.getTime())) return null;
+
+  let age = targetDate.getFullYear() - bYear;
+  const m = targetDate.getMonth() - (bMonth - 1);
+  if (m < 0 || (m === 0 && targetDate.getDate() < bDay)) {
+    age--;
+  }
+  return age >= 0 ? age : null;
+}
+
+/**
+ * Identifica a faixa etária do hóspede pela data de nascimento ou tipo selecionado
+ */
+export function getGuestAgeBracket(
+  guest: { birthDate?: string | null; tipo?: string },
+  tripDateStr?: string | null
+): AgeBracket {
+  const age = getGuestAge(guest, tripDateStr);
+  if (age !== null) {
+    if (age < 2) return "bebe";
+    if (age < 12) return "crianca";
+    return "adulto";
+  }
+
+  const tipo = (guest.tipo || "").toLowerCase();
+  if (tipo.includes("bebê") || tipo.includes("bebe") || tipo.includes("colo")) return "bebe";
+  if (tipo.includes("criança") || tipo.includes("crianca")) return "crianca";
+  return "adulto";
+}
+
+/**
+ * Retorna o custo base unitário estimado de um bloco por pessoa
+ */
+export function getBlockBaseUnitCost(block: EditorBlock, defaultVagas: number): number {
+  const d = block.data || {};
+  const vagas = parseNum(d.vagas) || defaultVagas || 1;
+
+  if (block.categoryId === "aereo") {
+    const netUnit = parseNum(d.valorNetUnitario);
+    if (netUnit > 0) return netUnit;
+    const custoUnit = parseNum(d.custoUnitario ?? d.custoPassagem);
+    if (custoUnit > 0) return custoUnit;
+    const netTotal = parseNum(d.valorNetTotal ?? d.valorNet);
+    if (netTotal > 0 && vagas > 0) return netTotal / vagas;
+    const custoTotal = parseNum(d.custoTotal);
+    if (custoTotal > 0 && vagas > 0) return custoTotal / vagas;
+  }
+
+  if (block.categoryId === "hospedagem") {
+    const netUnit = parseNum(d.valorNetUnitario);
+    if (netUnit > 0) return netUnit;
+    if (Array.isArray(d.rooms) && d.rooms.length > 0) {
+      let sumRooms = 0;
+      const dDiarias = parseNum(d.diarias) || 1;
+      let totalPessoasQuartos = 0;
+      for (const r of d.rooms) {
+        if (String(r.totalPeriodo || "").toLowerCase().includes("cortesia")) continue;
+        const totPer = parseNum(r.totalPeriodo);
+        const totQ = parseNum(r.totalQuarto);
+        const diaria = parseNum(r.diaria);
+        const qtd = parseNum(r.qtd) || 1;
+        const cap = r.tipo?.toLowerCase().includes("single")
+          ? 1
+          : r.tipo?.toLowerCase().includes("triplo")
+          ? 3
+          : r.tipo?.toLowerCase().includes("quadr")
+          ? 4
+          : 2;
+        totalPessoasQuartos += cap * qtd;
+        if (totPer > 0) sumRooms += totPer;
+        else if (totQ > 0) sumRooms += totQ * qtd;
+        else if (diaria > 0) sumRooms += diaria * dDiarias * qtd;
+      }
+      if (sumRooms > 0) {
+        return totalPessoasQuartos > 0 ? sumRooms / totalPessoasQuartos : sumRooms / vagas;
+      }
+    }
+    const netTotal = parseNum(d.valorNetTotal ?? d.valorNet);
+    if (netTotal > 0 && vagas > 0) return netTotal / vagas;
+    const totalReserva = parseNum(d.totalReserva);
+    if (totalReserva > 0 && vagas > 0) return totalReserva / vagas;
+  }
+
+  if (block.categoryId === "rodoviario") {
+    const netUnit = parseNum(d.valorNetUnitario);
+    if (netUnit > 0) return netUnit;
+    const rateio = parseNum(d.rateioPorPessoa);
+    if (rateio > 0) return rateio;
+    const vContrato = parseNum(d.valorContrato);
+    if (vContrato > 0 && vagas > 0) return vContrato / vagas;
+    const netTotal = parseNum(d.valorNetTotal ?? d.valorNet);
+    if (netTotal > 0 && vagas > 0) return netTotal / vagas;
+  }
+
+  if (block.categoryId === "guias") {
+    const rateio = parseNum(d.rateioPorPessoa);
+    if (rateio > 0) return rateio;
+    const totalDesp = parseNum(d.totalDespesas);
+    if (totalDesp > 0 && vagas > 0) return totalDesp / vagas;
+  }
+
+  if (block.categoryId === "personalizados") {
+    const totalDesp = parseNum(d.totalDespesas);
+    if (totalDesp > 0 && vagas > 0) return totalDesp / vagas;
+  }
+
+  if (block.categoryId === "servicos_inclusos") {
+    const tot = parseNum(d.totalGeral || d.valorContrato);
+    if (tot > 0 && vagas > 0) return tot / vagas;
+  }
+
+  return 0;
+}
+
+/**
+ * Retorna o preço de um bloco para um passageiro de acordo com as faixas etárias customizadas pelo usuário
+ */
+export function getBlockUnitPriceForGuest(
+  block: EditorBlock,
+  guest: { birthDate?: string | null; tipo?: string },
+  tripDateStr?: string | null,
+  defaultVagas: number = 20
+): { unitCost: number; matchedTierLabel: string } {
+  const baseCost = getBlockBaseUnitCost(block, defaultVagas);
+  const agePricing = block.data?.agePricing;
+  const tiers: CustomAgeTier[] = Array.isArray(agePricing?.tiers) ? agePricing.tiers : [];
+  const age = getGuestAge(guest, tripDateStr);
+
+  // 1. Prioridade: Faixas Etárias Customizadas criadas pelo usuário
+  if (tiers.length > 0) {
+    if (age !== null) {
+      // Procura a faixa onde minAge <= age <= maxAge
+      const matched = tiers.find(
+        (t: CustomAgeTier) => age >= Number(t.minAge || 0) && age <= Number(t.maxAge ?? 999)
+      );
+      if (matched && matched.price !== "" && matched.price !== undefined) {
+        return {
+          unitCost: parseNum(matched.price),
+          matchedTierLabel: matched.label || `Faixa (${matched.minAge}-${matched.maxAge}a)`,
+        };
+      }
+    } else {
+      // Fallback sem data de nascimento: tenta casar pelo tipo selecionado
+      const tipo = (guest.tipo || "").toLowerCase();
+      const matched = tiers.find(
+        (t: CustomAgeTier) =>
+          t.label.toLowerCase().includes(tipo) ||
+          tipo.includes(t.label.toLowerCase())
+      );
+      if (matched && matched.price !== "" && matched.price !== undefined) {
+        return {
+          unitCost: parseNum(matched.price),
+          matchedTierLabel: matched.label,
+        };
+      }
+    }
+  }
+
+  // 2. Fallback: campos direto adulto / crianca / bebe se existirem
+  const legacyBracket = getGuestAgeBracket(guest, tripDateStr);
+  if (legacyBracket === "crianca" && agePricing?.crianca !== undefined && agePricing?.crianca !== "") {
+    return { unitCost: parseNum(agePricing.crianca), matchedTierLabel: "Criança" };
+  }
+  if ((legacyBracket as string) === "bebe") {
+    if (agePricing?.bebe !== undefined && agePricing?.bebe !== "") {
+      return { unitCost: parseNum(agePricing.bebe), matchedTierLabel: "Bebê / Colo" };
+    }
+    return { unitCost: 0, matchedTierLabel: "Bebê / Colo" };
+  }
+  if (agePricing?.adulto !== undefined && agePricing?.adulto !== "") {
+    const val = parseNum(agePricing.adulto);
+    if (val >= 0) return { unitCost: val, matchedTierLabel: "Adulto" };
+  }
+
+  return {
+    unitCost: baseCost,
+    matchedTierLabel: legacyBracket === "crianca" ? "Criança" : (legacyBracket as string) === "bebe" ? "Bebê / Colo" : "Adulto",
+  };
+}
+
+/**
+ * Retorna o preço de um bloco para uma faixa etária específica
+ */
+export function getBlockUnitPriceForTier(
+  block: EditorBlock,
+  tier: AgeBracket,
+  defaultVagas: number
+): number {
+  const baseCost = getBlockBaseUnitCost(block, defaultVagas);
+  const agePricing = block.data?.agePricing;
+  const tiers: CustomAgeTier[] = Array.isArray(agePricing?.tiers) ? agePricing.tiers : [];
+
+  if (tiers.length > 0) {
+    if (tier === "bebe") {
+      const bTier = tiers.find((t: CustomAgeTier) => Number(t.minAge) === 0 || t.label.toLowerCase().includes("bebê") || t.label.toLowerCase().includes("bebe"));
+      if (bTier && bTier.price !== undefined && bTier.price !== "") return parseNum(bTier.price);
+    } else if (tier === "crianca") {
+      const cTier = tiers.find((t: CustomAgeTier) => (Number(t.minAge) >= 2 && Number(t.minAge) < 12) || t.label.toLowerCase().includes("criança") || t.label.toLowerCase().includes("crianca"));
+      if (cTier && cTier.price !== undefined && cTier.price !== "") return parseNum(cTier.price);
+    } else {
+      const aTier = tiers.find((t: CustomAgeTier) => Number(t.minAge) >= 12 || t.label.toLowerCase().includes("adulto"));
+      if (aTier && aTier.price !== undefined && aTier.price !== "") return parseNum(aTier.price);
+    }
+  }
+
+  if (tier === "adulto") {
+    if (agePricing && agePricing.adulto !== undefined && agePricing.adulto !== "") {
+      const val = parseNum(agePricing.adulto);
+      if (val >= 0) return val;
+    }
+    return baseCost;
+  }
+
+  if (tier === "crianca") {
+    if (agePricing && agePricing.crianca !== undefined && agePricing.crianca !== "") {
+      return parseNum(agePricing.crianca);
+    }
+    return agePricing && agePricing.adulto !== undefined && agePricing.adulto !== ""
+      ? parseNum(agePricing.adulto)
+      : baseCost;
+  }
+
+  if (tier === "bebe") {
+    if (agePricing && agePricing.bebe !== undefined && agePricing.bebe !== "") {
+      return parseNum(agePricing.bebe);
+    }
+    return 0;
+  }
+
+  return baseCost;
+}
+
 export interface PackageFinancialSummary {
   defaultCardVagas: number;
   testPeople: string;
@@ -192,6 +443,10 @@ export interface PackageFinancialSummary {
   costPerPerson: number;
   marginPercent: number;
   agencyProfitPerPerson: number;
+  customProfitAmount?: number | null;
+  customPackagePrice?: number | null;
+  effectiveProfitPerPerson: number;
+  roundingDifference: number;
   totalAgencyProfit: number;
   pricePerPerson: number;
   grandTotalRevenue: number;
@@ -201,7 +456,9 @@ export function calculatePackageFinancialSummary(
   blocks: EditorBlock[],
   slots: number,
   profitMargin: number,
-  testPeople: string = ""
+  testPeople: string = "",
+  customProfitAmount?: number | null,
+  customPackagePrice?: number | null
 ): PackageFinancialSummary {
   const defaultCardVagas = getDefaultCardVagas(blocks, slots);
   const testPeopleNum = parseNum(testPeople);
@@ -215,10 +472,27 @@ export function calculatePackageFinancialSummary(
   const costPerPerson = baseCostPerPerson;
 
   const marginPercent = Number(profitMargin) || 0;
-  const agencyProfitPerPerson = marginPercent > 0 ? costPerPerson * (marginPercent / 100) : 0;
-  const totalAgencyProfit = agencyProfitPerPerson * activePeople;
+  const calculatedProfitPerPerson = marginPercent > 0 ? costPerPerson * (marginPercent / 100) : 0;
 
-  const pricePerPerson = costPerPerson + agencyProfitPerPerson;
+  // Lógica de Lucro Cheio e Arredondamento
+  const customProfit = customProfitAmount !== undefined && customProfitAmount !== null ? Number(customProfitAmount) : null;
+  const customPrice = customPackagePrice !== undefined && customPackagePrice !== null ? Number(customPackagePrice) : null;
+
+  let effectiveProfitPerPerson = calculatedProfitPerPerson;
+  let pricePerPerson = costPerPerson + calculatedProfitPerPerson;
+  let roundingDifference = 0;
+
+  if (customProfit !== null && !isNaN(customProfit) && customProfit > 0) {
+    effectiveProfitPerPerson = customProfit;
+    pricePerPerson = costPerPerson + customProfit;
+    roundingDifference = customProfit - calculatedProfitPerPerson;
+  } else if (customPrice !== null && !isNaN(customPrice) && customPrice > 0) {
+    pricePerPerson = customPrice;
+    effectiveProfitPerPerson = Math.max(0, customPrice - costPerPerson);
+    roundingDifference = effectiveProfitPerPerson - calculatedProfitPerPerson;
+  }
+
+  const totalAgencyProfit = effectiveProfitPerPerson * activePeople;
   const grandTotalRevenue = pricePerPerson * activePeople;
 
   return {
@@ -230,7 +504,11 @@ export function calculatePackageFinancialSummary(
     totalGroupCost,
     costPerPerson,
     marginPercent,
-    agencyProfitPerPerson,
+    agencyProfitPerPerson: calculatedProfitPerPerson,
+    customProfitAmount: customProfit,
+    customPackagePrice: customPrice,
+    effectiveProfitPerPerson,
+    roundingDifference,
     totalAgencyProfit,
     pricePerPerson,
     grandTotalRevenue,

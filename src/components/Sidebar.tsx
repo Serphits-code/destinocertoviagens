@@ -25,6 +25,7 @@ import {
   CheckSquare,
   Target,
   Code2,
+  BarChart3,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
