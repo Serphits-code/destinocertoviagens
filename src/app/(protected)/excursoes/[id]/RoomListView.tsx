@@ -22,6 +22,7 @@ import {
   MapPin,
   Moon,
   Layers,
+  Baby,
 } from "lucide-react";
 import {
   DndContext,
@@ -37,6 +38,7 @@ import {
 import type { EditorBlock, BlockData } from "@/lib/editor-types";
 import { GuestSelectorModal } from "./GuestSelectorModal";
 import { getCustomersBirthdays } from "@/lib/actions/customers";
+import { getGuestAge, getGuestAgeBracket } from "@/lib/package-calc";
 
 interface RoomListViewProps {
   blocks: EditorBlock[];
@@ -66,7 +68,14 @@ interface HospedagemRoom {
   qtd: string;
 }
 
-const GUEST_TYPES = ["Adulto", "Criança (2a)", "Criança (Colo)", "Bebê"];
+function fmtBirthDate(bDate: string): string {
+  const clean = bDate.split("T")[0];
+  const parts = clean.split("-");
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return bDate;
+}
 
 const ROOM_CAPACITY: Record<string, number> = {
   single: 1,
@@ -200,6 +209,8 @@ interface DraggableGuestItemProps {
   guestIdx: number;
   slotNumber: number;
   birthdayInfo: { isBirthday: boolean; dateFormatted: string; turningAge?: number } | null;
+  birthDate?: string | null;
+  periodStart?: string | null;
   onUpdateGuest: (
     roomIdx: number,
     guestIdx: number,
@@ -221,6 +232,8 @@ function DraggableGuestItem({
   guestIdx,
   slotNumber,
   birthdayInfo,
+  birthDate,
+  periodStart,
   onUpdateGuest,
   onRemoveGuest,
   onOpenCustomerPicker,
@@ -235,7 +248,62 @@ function DraggableGuestItem({
     },
   });
 
+  const effectiveBirthDate = guest.birthDate || birthDate || null;
+  const guestAge = getGuestAge({ birthDate: effectiveBirthDate }, periodStart);
+  const ageBracket = getGuestAgeBracket(
+    { birthDate: effectiveBirthDate, tipo: guest.tipo },
+    periodStart
+  );
+
+  // Mantém guest.tipo sincronizado automaticamente com a idade
+  useEffect(() => {
+    if (guestAge !== null) {
+      const autoTipo =
+        guestAge < 2 ? "Bebê" : guestAge < 12 ? "Criança (2a)" : "Adulto";
+      if (guest.tipo !== autoTipo) {
+        onUpdateGuest(roomIdx, guestIdx, "tipo", autoTipo);
+      }
+    }
+  }, [guestAge, guest.tipo, roomIdx, guestIdx, onUpdateGuest]);
+
+  // Se tiver birthDate resolvido do banco mas não salvo no hóspede, persiste
+  useEffect(() => {
+    if (birthDate && !guest.birthDate) {
+      onUpdateGuest(roomIdx, guestIdx, "birthDate", birthDate);
+    }
+  }, [birthDate, guest.birthDate, roomIdx, guestIdx, onUpdateGuest]);
+
   const hasAlert = Boolean(guest.observacao && guest.observacao.trim().length > 0);
+
+  // Configuração do Badge Fixo de Idade / Categoria
+  let badgeLabel = "Adulto";
+  let badgeStyle = "bg-primary/10 text-primary border-primary/20";
+  let badgeIcon = <User size={12} className="text-primary/70 shrink-0" />;
+
+  if (ageBracket === "bebe") {
+    badgeLabel =
+      guestAge !== null
+        ? guestAge === 0
+          ? "Bebê (<1a)"
+          : `Bebê (${guestAge}a)`
+        : "Bebê";
+    badgeStyle = "bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/25";
+    badgeIcon = <Baby size={12} className="text-pink-600 dark:text-pink-400 shrink-0" />;
+  } else if (ageBracket === "crianca") {
+    badgeLabel = guestAge !== null ? `Criança (${guestAge}a)` : "Criança";
+    badgeStyle = "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25";
+    badgeIcon = <User size={12} className="text-amber-600 dark:text-amber-400 shrink-0" />;
+  } else {
+    badgeLabel = guestAge !== null ? `Adulto (${guestAge}a)` : "Adulto";
+    badgeStyle = "bg-surface-subtle text-text-title border-border/80";
+    badgeIcon = <User size={12} className="text-text-muted shrink-0" />;
+  }
+
+  const badgeTitle = effectiveBirthDate
+    ? `Data de nascimento: ${fmtBirthDate(effectiveBirthDate)}${
+        guestAge !== null ? ` (${guestAge} anos na viagem)` : ""
+      }`
+    : "Faixa etária calculada automaticamente pelo sistema";
 
   return (
     <div
@@ -315,21 +383,15 @@ function DraggableGuestItem({
           />
         </div>
 
-        {/* Tipo (Faixa etária) */}
-        <div className="md:col-span-2">
-          <select
-            value={guest.tipo}
-            onChange={(e) =>
-              onUpdateGuest(roomIdx, guestIdx, "tipo", e.target.value)
-            }
-            className="w-full px-2 py-1.5 rounded-lg border border-border/60 bg-surface-subtle text-text-title text-xs font-medium cursor-pointer focus:outline-none focus:border-primary transition-colors"
+        {/* Faixa Etária / Idade (Badge Fixo Calculado pelo Sistema) */}
+        <div className="md:col-span-2 flex items-center">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border select-none transition-colors shadow-2xs ${badgeStyle}`}
+            title={badgeTitle}
           >
-            {GUEST_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+            {badgeIcon}
+            <span>{badgeLabel}</span>
+          </span>
         </div>
 
         {/* Observação com Alerta */}
@@ -614,6 +676,8 @@ function RoomCard({
               guestIdx={guestIdx}
               slotNumber={guestIdx + 1}
               birthdayInfo={bInfo}
+              birthDate={bDate}
+              periodStart={periodStart}
               onUpdateGuest={onUpdateGuest}
               onRemoveGuest={onRemoveGuest}
               onOpenCustomerPicker={onOpenCustomerPicker}
@@ -815,6 +879,17 @@ export function RoomListView({
       const targetRoom = currentRooms[roomIdx];
       if (!targetRoom) return prev;
 
+      let autoTipo = guestData.tipo || "Adulto";
+      const bDate =
+        guestData.birthDate ||
+        (guestData.customerId ? birthdaysMap[guestData.customerId] : null);
+      if (bDate) {
+        const age = getGuestAge({ birthDate: bDate }, periodStart);
+        if (age !== null) {
+          autoTipo = age < 2 ? "Bebê" : age < 12 ? "Criança (2a)" : "Adulto";
+        }
+      }
+
       const hospedes = [...targetRoom.hospedes];
       const newGuest: RoomGuest = {
         id:
@@ -824,9 +899,9 @@ export function RoomListView({
         customerId: guestData.customerId,
         nome: guestData.nome,
         documento: guestData.documento,
-        tipo: guestData.tipo || "Adulto",
+        tipo: autoTipo,
         observacao: guestData.observacao,
-        birthDate: guestData.birthDate || null,
+        birthDate: bDate || null,
       };
 
       if (guestIdx !== undefined && guestIdx < hospedes.length) {
