@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import type { EditorBlock } from "@/lib/editor-types";
 import { Users, Calculator } from "lucide-react";
-import { calculatePackageFinancialSummary } from "@/lib/package-calc";
+import { calculatePackageFinancialSummary, formatBRL } from "@/lib/package-calc";
 
 interface SummaryWidgetProps {
   blocks: EditorBlock[];
@@ -44,12 +44,7 @@ export function SummaryWidget({
     costPerPerson,
   } = summary;
 
-  const fmt = (v: number) =>
-    v.toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-      minimumFractionDigits: 2,
-    });
+  const fmt = (v: unknown) => formatBRL(v);
 
   return (
     <div className="bg-secondary rounded-2xl shadow-shadow-card p-5 text-white space-y-4">

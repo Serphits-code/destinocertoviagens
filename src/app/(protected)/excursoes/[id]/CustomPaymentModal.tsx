@@ -21,7 +21,7 @@ import type {
   CustomPaymentMethodItem,
   PaymentMethodType,
 } from "@/lib/actions/addons";
-import { parseNum } from "@/lib/package-calc";
+import { parseNum, formatBRL } from "@/lib/package-calc";
 
 interface CustomPaymentModalProps {
   open: boolean;
@@ -47,12 +47,8 @@ const AVAILABLE_PAYMENT_METHODS: PaymentMethodType[] = [
   "Transferência",
 ];
 
-function fmt(v: number) {
-  return v.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-  });
+function fmt(v: unknown) {
+  return formatBRL(v);
 }
 
 function generateInstallmentId() {
@@ -83,39 +79,43 @@ export function CustomPaymentModal({
   // Inicializa quando abre
   useEffect(() => {
     if (open) {
-      if (initialData && (initialData.valorTotal !== undefined || initialData.metodos?.length > 0)) {
+      if (initialData && (initialData.valorTotal !== undefined || (initialData.metodos && initialData.metodos.length > 0))) {
         setTotalVal(
           initialData.valorTotal !== undefined && initialData.valorTotal !== ""
-            ? String(initialData.valorTotal)
-            : String(
+            ? formatBRL(initialData.valorTotal, false)
+            : formatBRL(
                 initialData.metodos?.reduce(
                   (sum, m) => sum + parseNum(m.valor),
                   0
-                ) || defaultCashPrice
+                ) || defaultCashPrice,
+                false
               )
         );
-        setTaxaCartao(initialData.taxaCartao ? String(initialData.taxaCartao) : "");
+        setTaxaCartao(initialData.taxaCartao ? formatBRL(initialData.taxaCartao, false) : "");
         setMetodos(
           Array.isArray(initialData.metodos) && initialData.metodos.length > 0
-            ? initialData.metodos
+            ? initialData.metodos.map((m) => ({
+                ...m,
+                valor: formatBRL(m.valor, false),
+              }))
             : [
                 {
                   id: generateInstallmentId(),
                   metodo: "Boleto",
-                  valor: String(defaultCashPrice),
+                  valor: formatBRL(defaultCashPrice, false),
                   descricao: "Pagamento Integral",
                 },
               ]
         );
       } else {
         // Inicializa com valor padrão à vista
-        setTotalVal(String(defaultCashPrice));
+        setTotalVal(formatBRL(defaultCashPrice, false));
         setTaxaCartao("");
         setMetodos([
           {
             id: generateInstallmentId(),
             metodo: "Boleto",
-            valor: String(defaultCashPrice),
+            valor: formatBRL(defaultCashPrice, false),
             descricao: "1ª Parcela",
           },
         ]);
@@ -149,7 +149,7 @@ export function CustomPaymentModal({
       {
         id: generateInstallmentId(),
         metodo: "Boleto",
-        valor: valToAdd > 0 ? valToAdd.toFixed(2) : "",
+        valor: valToAdd > 0 ? formatBRL(valToAdd, false) : "",
         descricao: `${nextNumber}ª Parcela`,
       },
     ]);
@@ -180,7 +180,7 @@ export function CustomPaymentModal({
       newItems.push({
         id: generateInstallmentId(),
         metodo: "Boleto",
-        valor: val.toFixed(2),
+        valor: formatBRL(val, false),
         descricao: `${i + 1}ª Parcela`,
       });
     }
@@ -252,9 +252,9 @@ export function CustomPaymentModal({
                   <button
                     type="button"
                     onClick={() => {
-                      setTotalVal(String(defaultCashPrice));
+                      setTotalVal(formatBRL(defaultCashPrice, false));
                       if (metodos.length === 1) {
-                        setMetodos([{ ...metodos[0], valor: String(defaultCashPrice) }]);
+                        setMetodos([{ ...metodos[0], valor: formatBRL(defaultCashPrice, false) }]);
                       }
                     }}
                     className="px-2 py-0.5 rounded-md bg-surface border border-border hover:border-primary text-text-title font-semibold transition-all cursor-pointer"
@@ -264,9 +264,9 @@ export function CustomPaymentModal({
                   <button
                     type="button"
                     onClick={() => {
-                      setTotalVal(String(defaultPrazoPrice));
+                      setTotalVal(formatBRL(defaultPrazoPrice, false));
                       if (metodos.length === 1) {
-                        setMetodos([{ ...metodos[0], valor: String(defaultPrazoPrice) }]);
+                        setMetodos([{ ...metodos[0], valor: formatBRL(defaultPrazoPrice, false) }]);
                       }
                     }}
                     className="px-2 py-0.5 rounded-md bg-surface border border-border hover:border-primary text-text-title font-semibold transition-all cursor-pointer"
@@ -281,11 +281,16 @@ export function CustomPaymentModal({
                   R$
                 </span>
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={totalVal}
                   onChange={(e) => setTotalVal(e.target.value)}
-                  placeholder="0.00"
+                  onBlur={(e) => {
+                    if (e.target.value.trim()) {
+                      setTotalVal(formatBRL(e.target.value, false));
+                    }
+                  }}
+                  placeholder="0,00"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-surface text-text-title text-lg font-black tracking-tight focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-mono shadow-2xs"
                 />
               </div>
@@ -408,13 +413,18 @@ export function CustomPaymentModal({
                           Valor da Parcela (R$)
                         </label>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={item.valor}
                           onChange={(e) =>
                             handleUpdateMethod(item.id, "valor", e.target.value)
                           }
-                          placeholder="0.00"
+                          onBlur={(e) => {
+                            if (e.target.value.trim()) {
+                              handleUpdateMethod(item.id, "valor", formatBRL(e.target.value, false));
+                            }
+                          }}
+                          placeholder="0,00"
                           className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-xs font-bold text-right font-mono focus:outline-none focus:border-primary transition-all"
                         />
                       </div>
@@ -472,11 +482,16 @@ export function CustomPaymentModal({
                 <span className="text-[10px] text-text-muted">(Opcional)</span>
               </div>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={taxaCartao}
                 onChange={(e) => setTaxaCartao(e.target.value)}
-                placeholder="0.00"
+                onBlur={(e) => {
+                  if (e.target.value.trim()) {
+                    setTaxaCartao(formatBRL(e.target.value, false));
+                  }
+                }}
+                placeholder="0,00"
                 className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-text-title text-xs font-bold font-mono focus:outline-none focus:border-primary transition-all max-w-xs"
               />
               <p className="text-[10px] text-text-muted">

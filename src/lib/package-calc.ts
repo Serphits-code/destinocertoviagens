@@ -5,9 +5,47 @@ import type { EditorBlock, CustomAgeTier } from "./editor-types";
 import type { ExcursionAddon, AddonAgeTier, RoomTypePricing, RoomAgeTier } from "./actions/addons";
 
 export function parseNum(v: unknown): number {
-  if (v === null || v === undefined) return 0;
-  const n = parseFloat(String(v).replace(",", "."));
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return isNaN(v) ? 0 : v;
+
+  let str = String(v).trim();
+  // Remove currency symbol R$, spaces
+  str = str.replace(/^[Rr]?\$?\s*/, "").trim();
+
+  // If both . and , are present (e.g. 1.234,56 or 1,234.56)
+  if (str.includes(".") && str.includes(",")) {
+    if (str.lastIndexOf(",") > str.lastIndexOf(".")) {
+      // Brazilian format: 1.234,56 -> remove . then replace , with .
+      str = str.replace(/\./g, "").replace(",", ".");
+    } else {
+      // US format: 1,234.56 -> remove ,
+      str = str.replace(/,/g, "");
+    }
+  } else if (str.includes(",")) {
+    // Only comma: 1234,56 -> 1234.56
+    str = str.replace(",", ".");
+  } else if (str.includes(".")) {
+    // Only dot: e.g. 1234.56 or multiple dots like 1.234.567
+    const dotCount = (str.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      str = str.replace(/\./g, "");
+    }
+  }
+
+  const n = parseFloat(str);
   return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Formata um valor numérico ou string para o padrão brasileiro (R$ X.XXX,XX ou X.XXX,XX)
+ */
+export function formatBRL(v: unknown, showPrefix: boolean = true): string {
+  const n = parseNum(v);
+  const formatted = n.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return showPrefix ? `R$ ${formatted}` : formatted;
 }
 
 /**
@@ -463,7 +501,7 @@ export function calculatePackageFinancialSummary(
 ): PackageFinancialSummary {
   const defaultCardVagas = getDefaultCardVagas(blocks, slots);
   const testPeopleNum = parseNum(testPeople);
-  const isSimulationActive = testPeople.trim() !== "" && testPeopleNum > 0;
+  const isSimulationActive = !!testPeople && String(testPeople).trim() !== "" && testPeopleNum > 0;
   const activePeople = isSimulationActive ? testPeopleNum : defaultCardVagas;
 
   const baseTotalCardsCost = calculateBaseCardsCost(blocks, defaultCardVagas);

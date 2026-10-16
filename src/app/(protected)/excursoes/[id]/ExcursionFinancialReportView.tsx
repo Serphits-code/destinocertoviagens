@@ -1098,7 +1098,7 @@ export function ExcursionFinancialReportView({
                                   <span>{fmtDate(p.data)}</span>
                                   {p.valor ? (
                                     <span className="text-text-title font-mono font-bold">
-                                      ({fmt(parseFloat(p.valor) || 0)})
+                                      ({fmt(parseNum(p.valor))})
                                     </span>
                                   ) : null}
                                 </span>

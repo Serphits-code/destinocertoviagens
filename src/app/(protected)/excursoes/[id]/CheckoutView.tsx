@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp,
@@ -36,6 +36,7 @@ import {
   getRoomPricingForGuest,
   type AgeBracket,
   parseNum,
+  formatBRL,
 } from "@/lib/package-calc";
 
 interface CheckoutViewProps {
@@ -59,12 +60,49 @@ interface CheckoutViewProps {
   }) => void;
 }
 
-function fmt(v: number) {
-  return v.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-  });
+function fmt(v: unknown) {
+  return formatBRL(v);
+}
+
+function RoomCurrencyInput({
+  value,
+  placeholder = "0,00",
+  onChange,
+  className,
+}: {
+  value: number;
+  placeholder?: string;
+  onChange: (val: number) => void;
+  className?: string;
+}) {
+  const [text, setText] = useState<string>(() => (value > 0 ? formatBRL(value, false) : ""));
+
+  useEffect(() => {
+    setText(value > 0 ? formatBRL(value, false) : "");
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      placeholder={placeholder}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        const parsed = parseNum(text);
+        onChange(parsed);
+        setText(parsed > 0 ? formatBRL(parsed, false) : "");
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          const parsed = parseNum(text);
+          onChange(parsed);
+          setText(parsed > 0 ? formatBRL(parsed, false) : "");
+        }
+      }}
+      className={className}
+    />
+  );
 }
 
 function getCategoryIcon(categoryId: string) {
@@ -758,14 +796,10 @@ export function CheckoutView({
                       </label>
                       <div className="relative flex items-center">
                         <span className="absolute left-2.5 text-xs font-bold text-text-muted">R$</span>
-                        <input
-                          type="number"
-                          step="1"
-                          placeholder={Math.round(suggestedPriceAdult).toFixed(2)}
-                          value={pricing.cashPrice || ""}
-                          onChange={(e) =>
-                            handleRoomPriceChange(rt.key, "cashPrice", parseNum(e.target.value))
-                          }
+                        <RoomCurrencyInput
+                          placeholder={formatBRL(Math.round(suggestedPriceAdult), false)}
+                          value={pricing.cashPrice}
+                          onChange={(val) => handleRoomPriceChange(rt.key, "cashPrice", val)}
                           className="w-full pl-8 pr-2 py-1.5 text-sm font-bold bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-title tabular-nums"
                         />
                       </div>
@@ -781,14 +815,10 @@ export function CheckoutView({
                       </label>
                       <div className="relative flex items-center">
                         <span className="absolute left-2.5 text-xs font-bold text-text-muted">R$</span>
-                        <input
-                          type="number"
-                          step="1"
-                          placeholder="0.00"
-                          value={pricing.installmentExtra || ""}
-                          onChange={(e) =>
-                            handleRoomPriceChange(rt.key, "installmentExtra", parseNum(e.target.value))
-                          }
+                        <RoomCurrencyInput
+                          placeholder="0,00"
+                          value={pricing.installmentExtra}
+                          onChange={(val) => handleRoomPriceChange(rt.key, "installmentExtra", val)}
                           className="w-full pl-8 pr-2 py-1.5 text-sm font-bold bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-title tabular-nums"
                         />
                       </div>
@@ -804,14 +834,10 @@ export function CheckoutView({
                       </label>
                       <div className="relative flex items-center">
                         <span className="absolute left-2.5 text-xs font-bold text-text-muted">R$</span>
-                        <input
-                          type="number"
-                          step="1"
-                          placeholder="0.00"
-                          value={pricing.cardFee || ""}
-                          onChange={(e) =>
-                            handleRoomPriceChange(rt.key, "cardFee", parseNum(e.target.value))
-                          }
+                        <RoomCurrencyInput
+                          placeholder="0,00"
+                          value={pricing.cardFee}
+                          onChange={(val) => handleRoomPriceChange(rt.key, "cardFee", val)}
                           className="w-full pl-8 pr-2 py-1.5 text-sm font-bold bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-title tabular-nums"
                         />
                       </div>
@@ -1604,16 +1630,14 @@ export function CheckoutView({
                                   </label>
                                   <div className="relative flex items-center">
                                     <span className="absolute left-2 text-xs font-bold text-text-muted">R$</span>
-                                    <input
-                                      type="number"
-                                      step="1"
-                                      value={tier.cashPrice || ""}
-                                      onChange={(e) =>
+                                    <RoomCurrencyInput
+                                      placeholder="0,00"
+                                      value={tier.cashPrice}
+                                      onChange={(val) =>
                                         handleUpdateRoomAgeTier(currentEditingRoom.key, tier.id, {
-                                          cashPrice: parseNum(e.target.value),
+                                          cashPrice: val,
                                         })
                                       }
-                                      placeholder="0.00"
                                       className="w-full pl-7 pr-2 py-1 text-xs font-bold bg-surface border border-border rounded-lg focus:outline-none focus:border-primary text-text-title tabular-nums"
                                     />
                                   </div>
@@ -1625,16 +1649,14 @@ export function CheckoutView({
                                   </label>
                                   <div className="relative flex items-center">
                                     <span className="absolute left-2 text-xs font-bold text-text-muted">R$</span>
-                                    <input
-                                      type="number"
-                                      step="1"
-                                      value={tier.installmentExtra || ""}
-                                      onChange={(e) =>
+                                    <RoomCurrencyInput
+                                      placeholder="0,00"
+                                      value={tier.installmentExtra}
+                                      onChange={(val) =>
                                         handleUpdateRoomAgeTier(currentEditingRoom.key, tier.id, {
-                                          installmentExtra: parseNum(e.target.value),
+                                          installmentExtra: val,
                                         })
                                       }
-                                      placeholder="0.00"
                                       className="w-full pl-7 pr-2 py-1 text-xs font-bold bg-surface border border-border rounded-lg focus:outline-none focus:border-primary text-text-title tabular-nums"
                                     />
                                   </div>
@@ -1649,16 +1671,14 @@ export function CheckoutView({
                                   </label>
                                   <div className="relative flex items-center">
                                     <span className="absolute left-2 text-xs font-bold text-text-muted">R$</span>
-                                    <input
-                                      type="number"
-                                      step="1"
-                                      value={tier.cardFee || ""}
-                                      onChange={(e) =>
+                                    <RoomCurrencyInput
+                                      placeholder="0,00"
+                                      value={tier.cardFee}
+                                      onChange={(val) =>
                                         handleUpdateRoomAgeTier(currentEditingRoom.key, tier.id, {
-                                          cardFee: parseNum(e.target.value),
+                                          cardFee: val,
                                         })
                                       }
-                                      placeholder="0.00"
                                       className="w-full pl-7 pr-2 py-1 text-xs font-bold bg-surface border border-border rounded-lg focus:outline-none focus:border-primary text-text-title tabular-nums"
                                     />
                                   </div>

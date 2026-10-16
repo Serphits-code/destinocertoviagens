@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus, Trash2, Plane, DollarSign, Calendar, Users, ChevronDown, ChevronUp } from "lucide-react";
 import type { EditorBlock, BlockData, RowStatus, BlockAgePricing, CustomAgeTier, PrazoPagamentoItem } from "@/lib/editor-types";
-import { getBlockBaseUnitCost } from "@/lib/package-calc";
+import { getBlockBaseUnitCost, parseNum, formatBRL } from "@/lib/package-calc";
 
 interface BlockTableProps {
   block: EditorBlock;
@@ -54,13 +54,6 @@ function DeleteRowBtn({ onClick }: { onClick: () => void }) {
       <Trash2 size={14} />
     </button>
   );
-}
-
-function parseNum(val: unknown): number {
-  if (typeof val === "number") return val;
-  if (!val) return 0;
-  const n = parseFloat(String(val).replace(",", "."));
-  return isNaN(n) ? 0 : n;
 }
 
 function toInputDate(val: unknown): string {
@@ -122,7 +115,7 @@ function BlockAgePricingSection({
       label: template?.label || (tiers.length === 0 ? "Criança" : `Faixa ${tiers.length + 1}`),
       minAge: template?.minAge ?? 2,
       maxAge: template?.maxAge ?? 11,
-      price: template?.price ?? (defaultBaseCost > 0 ? (defaultBaseCost * 0.5).toFixed(2) : "0.00"),
+      price: template?.price ?? (defaultBaseCost > 0 ? formatBRL(defaultBaseCost * 0.5, false) : "0,00"),
     };
     saveTiers([...tiers, newTier]);
     setIsOpen(true);
@@ -298,11 +291,16 @@ function BlockAgePricingSection({
                       <div className="relative flex items-center">
                         <span className="absolute left-2.5 text-xs text-text-muted font-bold">R$</span>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={tier.price}
                           onChange={(e) => handleUpdateTier(idx, { price: e.target.value })}
-                          placeholder="0.00"
+                          onBlur={(e) => {
+                            if (e.target.value) {
+                              handleUpdateTier(idx, { price: formatBRL(e.target.value, false) });
+                            }
+                          }}
+                          placeholder="0,00"
                           className="w-full pl-8 pr-2.5 py-1.5 text-xs font-bold rounded-lg border border-border bg-surface text-text-title focus:outline-none focus:border-primary tabular-nums"
                         />
                       </div>
@@ -330,28 +328,28 @@ function BlockAgePricingSection({
             <span className="font-semibold text-[11px]">Sugestões rápidas:</span>
             <button
               type="button"
-              onClick={() => handleAddTier({ label: "Adulto", minAge: 12, maxAge: 999, price: defaultBaseCost > 0 ? defaultBaseCost.toFixed(2) : "0.00" })}
+              onClick={() => handleAddTier({ label: "Adulto", minAge: 12, maxAge: 999, price: defaultBaseCost > 0 ? formatBRL(defaultBaseCost, false) : "0,00" })}
               className="text-[11px] px-2 py-0.5 rounded-md bg-surface border border-border hover:border-primary text-text-body transition-colors cursor-pointer"
             >
               + Adulto (12+ anos)
             </button>
             <button
               type="button"
-              onClick={() => handleAddTier({ label: "Criança 02 a 05 anos", minAge: 2, maxAge: 5, price: defaultBaseCost > 0 ? (defaultBaseCost * 0.5).toFixed(2) : "0.00" })}
+              onClick={() => handleAddTier({ label: "Criança 02 a 05 anos", minAge: 2, maxAge: 5, price: defaultBaseCost > 0 ? formatBRL(defaultBaseCost * 0.5, false) : "0,00" })}
               className="text-[11px] px-2 py-0.5 rounded-md bg-surface border border-border hover:border-primary text-text-body transition-colors cursor-pointer"
             >
               + Criança (2 a 5 anos)
             </button>
             <button
               type="button"
-              onClick={() => handleAddTier({ label: "Criança 06 a 11 anos", minAge: 6, maxAge: 11, price: defaultBaseCost > 0 ? (defaultBaseCost * 0.75).toFixed(2) : "0.00" })}
+              onClick={() => handleAddTier({ label: "Criança 06 a 11 anos", minAge: 6, maxAge: 11, price: defaultBaseCost > 0 ? formatBRL(defaultBaseCost * 0.75, false) : "0,00" })}
               className="text-[11px] px-2 py-0.5 rounded-md bg-surface border border-border hover:border-primary text-text-body transition-colors cursor-pointer"
             >
               + Criança (6 a 11 anos)
             </button>
             <button
               type="button"
-              onClick={() => handleAddTier({ label: "Bebê / Colo", minAge: 0, maxAge: 1, price: "0.00" })}
+              onClick={() => handleAddTier({ label: "Bebê / Colo", minAge: 0, maxAge: 1, price: "0,00" })}
               className="text-[11px] px-2 py-0.5 rounded-md bg-status-success/10 hover:bg-status-success/20 text-status-success border border-status-success/30 font-semibold transition-colors cursor-pointer"
             >
               + Bebê / Colo (0 a 1 ano)
@@ -434,7 +432,7 @@ function BlockFinalPaymentDeadlines({
 
         {balanceToPay !== undefined && balanceToPay > 0 && (
           <div className="text-[11px] text-text-muted">
-            Saldo a quitar: <span className="font-mono font-bold text-text-title">R$ {balanceToPay.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+            Saldo a quitar: <span className="font-mono font-bold text-text-title">{formatBRL(balanceToPay)}</span>
           </div>
         )}
       </div>
@@ -473,6 +471,11 @@ function BlockFinalPaymentDeadlines({
                 className="w-full pl-8 pr-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-xs font-semibold text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 value={item.valor ?? ""}
                 onChange={(e) => handleValorChange(idx, e.target.value)}
+                onBlur={(e) => {
+                  if (e.target.value) {
+                    handleValorChange(idx, formatBRL(e.target.value, false));
+                  }
+                }}
               />
             </div>
 
@@ -504,11 +507,11 @@ function BlockFinalPaymentDeadlines({
           <div className="text-[11px] font-semibold text-text-muted">
             Soma informada:{" "}
             <span className="font-mono font-bold text-primary">
-              R$ {totalInformado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              {formatBRL(totalInformado)}
             </span>
             {balanceToPay !== undefined && balanceToPay > 0 && (
               <span className={`ml-1.5 font-bold ${Math.abs(balanceToPay - totalInformado) < 0.01 ? "text-status-success" : "text-amber-500"}`}>
-                ({Math.abs(balanceToPay - totalInformado) < 0.01 ? "✓ Quitado exato" : `Diferença: R$ ${(balanceToPay - totalInformado).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`})
+                ({Math.abs(balanceToPay - totalInformado) < 0.01 ? "✓ Quitado exato" : `Diferença: ${formatBRL(balanceToPay - totalInformado)}`})
               </span>
             )}
           </div>
@@ -627,7 +630,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           const unit = parseNum(r.valor ?? r.custo);
           return {
             ...r,
-            total: unit > 0 ? (unit * vNum).toFixed(2) : r.total,
+            total: unit > 0 ? formatBRL(unit * vNum, false) : r.total,
           };
         });
 
@@ -641,14 +644,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           ...d,
           vagas: newVagas,
           rows,
-          totalDespesas: totalGeral.toFixed(2),
+          totalDespesas: formatBRL(totalGeral, false),
         });
       };
 
       const handleRowValorChange = (idx: number, newVal: string) => {
         const rows = [...(d.rows ?? [])];
         const vNum = parseNum(newVal);
-        const total = vNum > 0 ? (vNum * vagasNum).toFixed(2) : (newVal ? "0.00" : "");
+        const total = vNum > 0 ? formatBRL(vNum * vagasNum, false) : (newVal ? "0,00" : "");
         rows[idx] = {
           ...rows[idx],
           valor: newVal,
@@ -664,14 +667,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         onUpdate({
           ...d,
           rows,
-          totalDespesas: totalGeral.toFixed(2),
+          totalDespesas: formatBRL(totalGeral, false),
         });
       };
 
       const handleRowTotalChange = (idx: number, newTotal: string) => {
         const rows = [...(d.rows ?? [])];
         const tNum = parseNum(newTotal);
-        const unit = vagasNum > 0 && tNum > 0 ? (tNum / vagasNum).toFixed(2) : rows[idx].valor;
+        const unit = vagasNum > 0 && tNum > 0 ? formatBRL(tNum / vagasNum, false) : rows[idx].valor;
         rows[idx] = {
           ...rows[idx],
           total: newTotal,
@@ -687,12 +690,12 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         onUpdate({
           ...d,
           rows,
-          totalDespesas: totalGeral.toFixed(2),
+          totalDespesas: formatBRL(totalGeral, false),
         });
       };
 
       const handleAddRow = () => {
-        const newRow = { nome: "Nova Despesa", valor: "0.00", custo: "0.00", total: "0.00" };
+        const newRow = { nome: "Nova Despesa", valor: "0,00", custo: "0,00", total: "0,00" };
         const rows = [...(d.rows ?? []), newRow];
         onUpdate({ ...d, rows });
       };
@@ -708,7 +711,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         onUpdate({
           ...d,
           rows,
-          totalDespesas: totalGeral.toFixed(2),
+          totalDespesas: formatBRL(totalGeral, false),
         });
       };
 
@@ -761,7 +764,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                       r.total !== undefined && r.total !== ""
                         ? r.total
                         : parseNum(unitVal) > 0
-                        ? (parseNum(unitVal) * vagasNum).toFixed(2)
+                        ? formatBRL(parseNum(unitVal) * vagasNum, false)
                         : "";
 
                     return (
@@ -778,16 +781,26 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                           <input
                             className={numCls}
                             value={unitVal}
-                            placeholder="0.00"
+                            placeholder="0,00"
                             onChange={(e) => handleRowValorChange(i, e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value) {
+                                handleRowValorChange(i, formatBRL(e.target.value, false));
+                              }
+                            }}
                           />
                         </td>
                         <td className={tdCls}>
                           <input
                             className={`${numCls} font-semibold text-primary`}
                             value={totalVal}
-                            placeholder="0.00"
+                            placeholder="0,00"
                             onChange={(e) => handleRowTotalChange(i, e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value) {
+                                handleRowTotalChange(i, formatBRL(e.target.value, false));
+                              }
+                            }}
                           />
                         </td>
                         <td className={`${tdCls} text-center`}>
@@ -816,7 +829,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             <div className="flex items-center gap-2">
               <span className="text-xs text-text-muted font-medium">({vagasNum} vagas):</span>
               <span className="text-base font-bold text-primary tabular-nums">
-                R$ {totalGeralCalc.toFixed(2)}
+                {formatBRL(totalGeralCalc)}
               </span>
             </div>
           </div>
@@ -844,14 +857,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         d.custoTotal !== undefined && d.custoTotal !== ""
           ? d.custoTotal
           : vagasNum > 0 && parseNum(d.custoUnitario) > 0
-          ? (parseNum(d.custoUnitario) * vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.custoUnitario) * vagasNum, false)
           : "";
 
       const sinalUnitarioDisplay =
         d.sinalUnitario !== undefined && d.sinalUnitario !== ""
           ? d.sinalUnitario
           : vagasNum > 0 && parseNum(d.sinal) > 0
-          ? (parseNum(d.sinal) / vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.sinal) / vagasNum, false)
           : "";
 
       const sinalTotalDisplay =
@@ -860,14 +873,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           : d.sinal !== undefined && d.sinal !== ""
           ? d.sinal
           : vagasNum > 0 && parseNum(d.sinalUnitario) > 0
-          ? (parseNum(d.sinalUnitario) * vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.sinalUnitario) * vagasNum, false)
           : "";
 
       const valorNetUnitarioDisplay =
         d.valorNetUnitario !== undefined
           ? d.valorNetUnitario
           : d.valorNet && vagasNum > 0
-          ? (parseNum(d.valorNet) / vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.valorNet) / vagasNum, false)
           : "";
 
       const valorNetTotalDisplay =
@@ -876,7 +889,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           : d.valorNet !== undefined && d.valorNet !== ""
           ? d.valorNet
           : vagasNum > 0 && parseNum(d.valorNetUnitario) > 0
-          ? (parseNum(d.valorNetUnitario) * vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.valorNetUnitario) * vagasNum, false)
           : "";
 
       const handleVagasChange = (newVagas: string) => {
@@ -903,22 +916,22 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         };
 
         if (unitPassagem > 0 && vNum > 0) {
-          updated.custoTotal = (unitPassagem * vNum).toFixed(2);
+          updated.custoTotal = formatBRL(unitPassagem * vNum, false);
         }
         if (currentUnitSinal > 0 && vNum > 0) {
-          const st = (currentUnitSinal * vNum).toFixed(2);
+          const st = formatBRL(currentUnitSinal * vNum, false);
           updated.sinalTotal = st;
           updated.sinal = st;
           if (!d.sinalUnitario) {
-            updated.sinalUnitario = currentUnitSinal.toFixed(2);
+            updated.sinalUnitario = formatBRL(currentUnitSinal, false);
           }
         }
         if (currentUnitNet > 0 && vNum > 0) {
-          const nt = (currentUnitNet * vNum).toFixed(2);
+          const nt = formatBRL(currentUnitNet * vNum, false);
           updated.valorNetTotal = nt;
           updated.valorNet = nt;
           if (!d.valorNetUnitario) {
-            updated.valorNetUnitario = currentUnitNet.toFixed(2);
+            updated.valorNetUnitario = formatBRL(currentUnitNet, false);
           }
         }
         onUpdate(updated);
@@ -927,7 +940,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const handleUnitPassagemChange = (val: string) => {
         const u = parseNum(val);
         const vNum = parseNum(d.vagas);
-        const total = vNum > 0 && u > 0 ? (u * vNum).toFixed(2) : (vNum > 0 && !val ? "" : d.custoTotal);
+        const total = vNum > 0 && u > 0 ? formatBRL(u * vNum, false) : (vNum > 0 && !val ? "" : d.custoTotal);
         onUpdate({
           ...d,
           custoUnitario: val,
@@ -938,7 +951,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const handleTotalPassagemChange = (val: string) => {
         const t = parseNum(val);
         const vNum = parseNum(d.vagas);
-        const unit = vNum > 0 && t > 0 ? (t / vNum).toFixed(2) : d.custoUnitario;
+        const unit = vNum > 0 && t > 0 ? formatBRL(t / vNum, false) : d.custoUnitario;
         onUpdate({
           ...d,
           custoTotal: val,
@@ -949,7 +962,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const handleUnitValorNetChange = (val: string) => {
         const u = parseNum(val);
         const vNum = parseNum(d.vagas);
-        const total = vNum > 0 && u > 0 ? (u * vNum).toFixed(2) : (vNum > 0 && !val ? "" : (d.valorNetTotal ?? d.valorNet));
+        const total = vNum > 0 && u > 0 ? formatBRL(u * vNum, false) : (vNum > 0 && !val ? "" : (d.valorNetTotal ?? d.valorNet));
         onUpdate({
           ...d,
           valorNetUnitario: val,
@@ -961,7 +974,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const handleTotalValorNetChange = (val: string) => {
         const t = parseNum(val);
         const vNum = parseNum(d.vagas);
-        const unit = vNum > 0 && t > 0 ? (t / vNum).toFixed(2) : d.valorNetUnitario;
+        const unit = vNum > 0 && t > 0 ? formatBRL(t / vNum, false) : d.valorNetUnitario;
         onUpdate({
           ...d,
           valorNetTotal: val,
@@ -973,7 +986,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const handleUnitSinalChange = (val: string) => {
         const u = parseNum(val);
         const vNum = parseNum(d.vagas);
-        const total = vNum > 0 && u > 0 ? (u * vNum).toFixed(2) : (vNum > 0 && !val ? "" : (d.sinalTotal ?? d.sinal));
+        const total = vNum > 0 && u > 0 ? formatBRL(u * vNum, false) : (vNum > 0 && !val ? "" : (d.sinalTotal ?? d.sinal));
         onUpdate({
           ...d,
           sinalUnitario: val,
@@ -985,7 +998,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const handleTotalSinalChange = (val: string) => {
         const t = parseNum(val);
         const vNum = parseNum(d.vagas);
-        const unit = vNum > 0 && t > 0 ? (t / vNum).toFixed(2) : d.sinalUnitario;
+        const unit = vNum > 0 && t > 0 ? formatBRL(t / vNum, false) : d.sinalUnitario;
         onUpdate({
           ...d,
           sinalTotal: val,
@@ -1077,9 +1090,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={d.custoUnitario ?? ""}
                     onChange={(e) => handleUnitPassagemChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleUnitPassagemChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
                 <label className="text-xs text-text-muted">
@@ -1095,9 +1113,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={custoTotalDisplay}
                     onChange={(e) => handleTotalPassagemChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleTotalPassagemChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
               </div>
@@ -1116,9 +1139,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={valorNetUnitarioDisplay}
                     onChange={(e) => handleUnitValorNetChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleUnitValorNetChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
                 <label className="text-xs text-text-muted">
@@ -1134,9 +1162,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={valorNetTotalDisplay}
                     onChange={(e) => handleTotalValorNetChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleTotalValorNetChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
               </div>
@@ -1155,9 +1188,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={sinalUnitarioDisplay}
                     onChange={(e) => handleUnitSinalChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleUnitSinalChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
                 <label className="text-xs text-text-muted">
@@ -1173,9 +1211,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-text-title focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={sinalTotalDisplay}
                     onChange={(e) => handleTotalSinalChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleTotalSinalChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
               </div>
@@ -1269,13 +1312,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           const diariaNum = parseNum(r.diaria);
           if (diariaNum <= 0) return r;
           const effectiveDiarias = dNum > 0 ? dNum : 1;
-          const totalQuarto = (diariaNum * effectiveDiarias).toFixed(2);
+          const totalQuarto = formatBRL(diariaNum * effectiveDiarias, false);
           const cap = getRoomCapacity(r.tipo);
-          const porPessoa = (parseNum(totalQuarto) / cap).toFixed(2);
+          const porPessoa = formatBRL(parseNum(totalQuarto) / cap, false);
           const qtdNum = parseNum(r.qtd);
           const totalPeriodo =
             qtdNum > 0 && !String(r.totalPeriodo || "").toLowerCase().includes("cortesia")
-              ? (parseNum(totalQuarto) * qtdNum).toFixed(2)
+              ? formatBRL(parseNum(totalQuarto) * qtdNum, false)
               : r.totalPeriodo;
           return {
             ...r,
@@ -1295,7 +1338,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           ...d,
           diarias: newDiarias,
           rooms,
-          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+          totalReserva: sumReserva > 0 ? formatBRL(sumReserva, false) : d.totalReserva,
         });
       };
 
@@ -1308,11 +1351,11 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         const dNum = parseNum(d.diarias) || 1;
 
         if (totalQuartoNum > 0) {
-          r.porPessoa = (totalQuartoNum / cap).toFixed(2);
+          r.porPessoa = formatBRL(totalQuartoNum / cap, false);
         } else if (diariaNum > 0) {
-          const tq = (diariaNum * dNum).toFixed(2);
+          const tq = formatBRL(diariaNum * dNum, false);
           r.totalQuarto = tq;
-          r.porPessoa = (parseNum(tq) / cap).toFixed(2);
+          r.porPessoa = formatBRL(parseNum(tq) / cap, false);
         }
         rooms[idx] = r;
         onUpdate({ ...d, rooms });
@@ -1326,12 +1369,12 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         const cap = getRoomCapacity(r.tipo);
 
         if (diariaNum > 0) {
-          const totalQuarto = (diariaNum * dNum).toFixed(2);
+          const totalQuarto = formatBRL(diariaNum * dNum, false);
           r.totalQuarto = totalQuarto;
-          r.porPessoa = (parseNum(totalQuarto) / cap).toFixed(2);
+          r.porPessoa = formatBRL(parseNum(totalQuarto) / cap, false);
           const qtdNum = parseNum(r.qtd);
           if (qtdNum > 0 && !String(r.totalPeriodo || "").toLowerCase().includes("cortesia")) {
-            r.totalPeriodo = (parseNum(totalQuarto) * qtdNum).toFixed(2);
+            r.totalPeriodo = formatBRL(parseNum(totalQuarto) * qtdNum, false);
           }
         } else if (!newDiaria) {
           r.totalQuarto = "";
@@ -1349,7 +1392,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         onUpdate({
           ...d,
           rooms,
-          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+          totalReserva: sumReserva > 0 ? formatBRL(sumReserva, false) : d.totalReserva,
         });
       };
 
@@ -1361,9 +1404,9 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         const qtdNum = parseNum(r.qtd);
 
         if (tNum > 0) {
-          r.porPessoa = (tNum / cap).toFixed(2);
+          r.porPessoa = formatBRL(tNum / cap, false);
           if (qtdNum > 0 && !String(r.totalPeriodo || "").toLowerCase().includes("cortesia")) {
-            r.totalPeriodo = (tNum * qtdNum).toFixed(2);
+            r.totalPeriodo = formatBRL(tNum * qtdNum, false);
           }
         }
 
@@ -1378,7 +1421,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         onUpdate({
           ...d,
           rooms,
-          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+          totalReserva: sumReserva > 0 ? formatBRL(sumReserva, false) : d.totalReserva,
         });
       };
 
@@ -1399,7 +1442,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         const totalQuartoNum = parseNum(r.totalQuarto);
 
         if (qtdNum > 0 && totalQuartoNum > 0 && !String(r.totalPeriodo || "").toLowerCase().includes("cortesia")) {
-          r.totalPeriodo = (totalQuartoNum * qtdNum).toFixed(2);
+          r.totalPeriodo = formatBRL(totalQuartoNum * qtdNum, false);
         }
 
         rooms[idx] = r;
@@ -1417,9 +1460,9 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         onUpdate({
           ...d,
           rooms,
-          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
-          ...(uNet > 0 && newVagasNum > 0 ? { valorNetTotal: (uNet * newVagasNum).toFixed(2), valorNet: (uNet * newVagasNum).toFixed(2) } : {}),
-          ...(uSinal > 0 && newVagasNum > 0 ? { sinalTotal: (uSinal * newVagasNum).toFixed(2), sinal: (uSinal * newVagasNum).toFixed(2) } : {}),
+          totalReserva: sumReserva > 0 ? formatBRL(sumReserva, false) : d.totalReserva,
+          ...(uNet > 0 && newVagasNum > 0 ? { valorNetTotal: formatBRL(uNet * newVagasNum, false), valorNet: formatBRL(uNet * newVagasNum, false) } : {}),
+          ...(uSinal > 0 && newVagasNum > 0 ? { sinalTotal: formatBRL(uSinal * newVagasNum, false), sinal: formatBRL(uSinal * newVagasNum, false) } : {}),
         });
       };
 
@@ -1436,7 +1479,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         onUpdate({
           ...d,
           rooms,
-          totalReserva: sumReserva > 0 ? sumReserva.toFixed(2) : d.totalReserva,
+          totalReserva: sumReserva > 0 ? formatBRL(sumReserva, false) : d.totalReserva,
         });
       };
 
@@ -1445,38 +1488,38 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const sinalUnitarioDisplay =
         d.sinalUnitario !== undefined && d.sinalUnitario !== ""
           ? d.sinalUnitario
-          : vagasNum > 0 && parseNum(d.sinal) > 0 && !isNaN(Number(d.sinal))
-          ? (parseNum(d.sinal) / vagasNum).toFixed(2)
+          : vagasNum > 0 && parseNum(d.sinal) > 0
+          ? formatBRL(parseNum(d.sinal) / vagasNum, false)
           : "";
 
       const sinalTotalDisplay =
         d.sinalTotal !== undefined && d.sinalTotal !== ""
           ? d.sinalTotal
-          : d.sinal !== undefined && d.sinal !== "" && !isNaN(Number(d.sinal))
+          : d.sinal !== undefined && d.sinal !== ""
           ? d.sinal
           : vagasNum > 0 && parseNum(d.sinalUnitario) > 0
-          ? (parseNum(d.sinalUnitario) * vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.sinalUnitario) * vagasNum, false)
           : "";
 
       const valorNetUnitarioDisplay =
         d.valorNetUnitario !== undefined
           ? d.valorNetUnitario
           : d.valorNet && parseNum(d.valorNet) > 0 && vagasNum > 0
-          ? (parseNum(d.valorNet) / vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.valorNet) / vagasNum, false)
           : "";
 
       const valorNetTotalDisplay =
         d.valorNetTotal !== undefined
           ? d.valorNetTotal
-          : d.valorNet !== undefined && d.valorNet !== "" && !isNaN(Number(d.valorNet))
+          : d.valorNet !== undefined && d.valorNet !== ""
           ? d.valorNet
           : vagasNum > 0 && parseNum(d.valorNetUnitario) > 0
-          ? (parseNum(d.valorNetUnitario) * vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.valorNetUnitario) * vagasNum, false)
           : "";
 
       const handleUnitValorNetChange = (val: string) => {
         const u = parseNum(val);
-        const total = vagasNum > 0 && u > 0 ? (u * vagasNum).toFixed(2) : (vagasNum > 0 && !val ? "" : (d.valorNetTotal ?? d.valorNet));
+        const total = vagasNum > 0 && u > 0 ? formatBRL(u * vagasNum, false) : (vagasNum > 0 && !val ? "" : (d.valorNetTotal ?? d.valorNet));
         onUpdate({
           ...d,
           valorNetUnitario: val,
@@ -1487,7 +1530,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       const handleTotalValorNetChange = (val: string) => {
         const t = parseNum(val);
-        const unit = vagasNum > 0 && t > 0 ? (t / vagasNum).toFixed(2) : d.valorNetUnitario;
+        const unit = vagasNum > 0 && t > 0 ? formatBRL(t / vagasNum, false) : d.valorNetUnitario;
         onUpdate({
           ...d,
           valorNetTotal: val,
@@ -1498,7 +1541,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       const handleUnitSinalChange = (val: string) => {
         const u = parseNum(val);
-        const total = vagasNum > 0 && u > 0 ? (u * vagasNum).toFixed(2) : (vagasNum > 0 && !val ? "" : (d.sinalTotal ?? d.sinal));
+        const total = vagasNum > 0 && u > 0 ? formatBRL(u * vagasNum, false) : (vagasNum > 0 && !val ? "" : (d.sinalTotal ?? d.sinal));
         onUpdate({
           ...d,
           sinalUnitario: val,
@@ -1509,7 +1552,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       const handleTotalSinalChange = (val: string) => {
         const t = parseNum(val);
-        const unit = vagasNum > 0 && t > 0 ? (t / vagasNum).toFixed(2) : d.sinalUnitario;
+        const unit = vagasNum > 0 && t > 0 ? formatBRL(t / vagasNum, false) : d.sinalUnitario;
         onUpdate({
           ...d,
           sinalTotal: val,
@@ -1591,24 +1634,39 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                           <input
                             className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                             value={r.diaria ?? ""}
-                            placeholder="0.00"
+                            placeholder="0,00"
                             onChange={(e) => handleRoomDiariaChange(i, e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value) {
+                                handleRoomDiariaChange(i, formatBRL(e.target.value, false));
+                              }
+                            }}
                           />
                         </td>
                         <td className={tdCls}>
                           <input
                             className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                             value={r.totalQuarto ?? ""}
-                            placeholder="0.00"
+                            placeholder="0,00"
                             onChange={(e) => handleRoomTotalQuartoChange(i, e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value) {
+                                handleRoomTotalQuartoChange(i, formatBRL(e.target.value, false));
+                              }
+                            }}
                           />
                         </td>
                         <td className={tdCls}>
                           <input
                             className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                             value={r.porPessoa ?? ""}
-                            placeholder="0.00"
+                            placeholder="0,00"
                             onChange={(e) => setRow("rooms", i, "porPessoa", e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value) {
+                                setRow("rooms", i, "porPessoa", formatBRL(e.target.value, false));
+                              }
+                            }}
                           />
                         </td>
                         <td className={tdCls}>
@@ -1623,8 +1681,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                           <input
                             className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                             value={r.totalPeriodo ?? ""}
-                            placeholder="0.00"
+                            placeholder="0,00"
                             onChange={(e) => handleRoomTotalPeriodoChange(i, e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value && !e.target.value.toLowerCase().includes("cortesia")) {
+                                handleRoomTotalPeriodoChange(i, formatBRL(e.target.value, false));
+                              }
+                            }}
                           />
                         </td>
                         <td className={`${tdCls} text-center`}>
@@ -1641,11 +1704,11 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             onClick={() => {
               addRow("rooms", {
                 tipo: "Duplo",
-                diaria: "0.00",
-                totalQuarto: "0.00",
-                porPessoa: "0.00",
+                diaria: "0,00",
+                totalQuarto: "0,00",
+                porPessoa: "0,00",
                 qtd: "1",
-                totalPeriodo: "0.00",
+                totalPeriodo: "0,00",
               });
             }}
             className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
@@ -1659,8 +1722,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               <input
                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 value={d.totalReserva ?? ""}
-                placeholder="0.00"
+                placeholder="0,00"
                 onChange={(e) => set("totalReserva", e.target.value)}
+                onBlur={(e) => {
+                  if (e.target.value) {
+                    set("totalReserva", formatBRL(e.target.value, false));
+                  }
+                }}
               />
             </label>
           </div>
@@ -1680,9 +1748,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={valorNetUnitarioDisplay}
                     onChange={(e) => handleUnitValorNetChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleUnitValorNetChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
                 <label className="text-xs text-text-muted">
@@ -1698,9 +1771,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={valorNetTotalDisplay}
                     onChange={(e) => handleTotalValorNetChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleTotalValorNetChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
               </div>
@@ -1719,9 +1797,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={sinalUnitarioDisplay}
                     onChange={(e) => handleUnitSinalChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleUnitSinalChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
                 <label className="text-xs text-text-muted">
@@ -1737,9 +1820,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-text-title focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={sinalTotalDisplay}
                     onChange={(e) => handleTotalSinalChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleTotalSinalChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
               </div>
@@ -1804,7 +1892,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         d.sinalUnitario !== undefined && d.sinalUnitario !== ""
           ? d.sinalUnitario
           : vagasNum > 0 && parseNum(d.sinal) > 0
-          ? (parseNum(d.sinal) / vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.sinal) / vagasNum, false)
           : "";
 
       const sinalTotalDisplay =
@@ -1813,14 +1901,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           : d.sinal !== undefined && d.sinal !== ""
           ? d.sinal
           : vagasNum > 0 && parseNum(d.sinalUnitario) > 0
-          ? (parseNum(d.sinalUnitario) * vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.sinalUnitario) * vagasNum, false)
           : "";
 
       const valorNetUnitarioDisplay =
         d.valorNetUnitario !== undefined
           ? d.valorNetUnitario
           : d.valorNet && parseNum(d.valorNet) > 0 && vagasNum > 0
-          ? (parseNum(d.valorNet) / vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.valorNet) / vagasNum, false)
           : "";
 
       const valorNetTotalDisplay =
@@ -1829,12 +1917,12 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           : d.valorNet !== undefined && d.valorNet !== ""
           ? d.valorNet
           : vagasNum > 0 && parseNum(d.valorNetUnitario) > 0
-          ? (parseNum(d.valorNetUnitario) * vagasNum).toFixed(2)
+          ? formatBRL(parseNum(d.valorNetUnitario) * vagasNum, false)
           : "";
 
       const handleUnitValorNetChange = (val: string) => {
         const u = parseNum(val);
-        const total = vagasNum > 0 && u > 0 ? (u * vagasNum).toFixed(2) : (vagasNum > 0 && !val ? "" : (d.valorNetTotal ?? d.valorNet));
+        const total = vagasNum > 0 && u > 0 ? formatBRL(u * vagasNum, false) : (vagasNum > 0 && !val ? "" : (d.valorNetTotal ?? d.valorNet));
         onUpdate({
           ...d,
           valorNetUnitario: val,
@@ -1845,7 +1933,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       const handleTotalValorNetChange = (val: string) => {
         const t = parseNum(val);
-        const unit = vagasNum > 0 && t > 0 ? (t / vagasNum).toFixed(2) : d.valorNetUnitario;
+        const unit = vagasNum > 0 && t > 0 ? formatBRL(t / vagasNum, false) : d.valorNetUnitario;
         onUpdate({
           ...d,
           valorNetTotal: val,
@@ -1856,7 +1944,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       const handleUnitSinalChange = (val: string) => {
         const u = parseNum(val);
-        const total = vagasNum > 0 && u > 0 ? (u * vagasNum).toFixed(2) : (vagasNum > 0 && !val ? "" : (d.sinalTotal ?? d.sinal));
+        const total = vagasNum > 0 && u > 0 ? formatBRL(u * vagasNum, false) : (vagasNum > 0 && !val ? "" : (d.sinalTotal ?? d.sinal));
         onUpdate({
           ...d,
           sinalUnitario: val,
@@ -1867,7 +1955,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       const handleTotalSinalChange = (val: string) => {
         const t = parseNum(val);
-        const unit = vagasNum > 0 && t > 0 ? (t / vagasNum).toFixed(2) : d.sinalUnitario;
+        const unit = vagasNum > 0 && t > 0 ? formatBRL(t / vagasNum, false) : d.sinalUnitario;
         onUpdate({
           ...d,
           sinalTotal: val,
@@ -1879,7 +1967,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const handleVagasChange = (newVagas: string) => {
         const vNum = parseNum(newVagas);
         const vContrato = parseNum(d.valorContrato);
-        const rateio = vNum > 0 && vContrato > 0 ? (vContrato / vNum).toFixed(2) : d.rateioPorPessoa;
+        const rateio = vNum > 0 && vContrato > 0 ? formatBRL(vContrato / vNum, false) : d.rateioPorPessoa;
 
         const currentUnitSinal = parseNum(
           d.sinalUnitario !== undefined && d.sinalUnitario !== ""
@@ -1903,19 +1991,19 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         };
 
         if (currentUnitSinal > 0 && vNum > 0) {
-          const st = (currentUnitSinal * vNum).toFixed(2);
+          const st = formatBRL(currentUnitSinal * vNum, false);
           updated.sinalTotal = st;
           updated.sinal = st;
           if (!d.sinalUnitario) {
-            updated.sinalUnitario = currentUnitSinal.toFixed(2);
+            updated.sinalUnitario = formatBRL(currentUnitSinal, false);
           }
         }
         if (currentUnitNet > 0 && vNum > 0) {
-          const nt = (currentUnitNet * vNum).toFixed(2);
+          const nt = formatBRL(currentUnitNet * vNum, false);
           updated.valorNetTotal = nt;
           updated.valorNet = nt;
           if (!d.valorNetUnitario) {
-            updated.valorNetUnitario = currentUnitNet.toFixed(2);
+            updated.valorNetUnitario = formatBRL(currentUnitNet, false);
           }
         }
         onUpdate(updated);
@@ -1923,7 +2011,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
 
       const handleValorContratoChange = (newVal: string) => {
         const vNum = parseNum(newVal);
-        const rateio = vagasNum > 0 && vNum > 0 ? (vNum / vagasNum).toFixed(2) : d.rateioPorPessoa;
+        const rateio = vagasNum > 0 && vNum > 0 ? formatBRL(vNum / vagasNum, false) : d.rateioPorPessoa;
         onUpdate({
           ...d,
           valorContrato: newVal,
@@ -1934,7 +2022,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const handleRateioChange = (newRateio: string) => {
         const rNum = parseNum(newRateio);
         const vNum = vagasNum || 20;
-        const vContrato = rNum > 0 && vNum > 0 ? (rNum * vNum).toFixed(2) : (newRateio === "" ? "" : d.valorContrato);
+        const vContrato = rNum > 0 && vNum > 0 ? formatBRL(rNum * vNum, false) : (newRateio === "" ? "" : d.valorContrato);
         onUpdate({
           ...d,
           rateioPorPessoa: newRateio,
@@ -2007,8 +2095,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               <input
                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 value={d.valorContrato ?? ""}
-                placeholder="0.00"
+                placeholder="0,00"
                 onChange={(e) => handleValorContratoChange(e.target.value)}
+                onBlur={(e) => {
+                  if (e.target.value) {
+                    handleValorContratoChange(formatBRL(e.target.value, false));
+                  }
+                }}
               />
             </label>
             <label className="text-xs text-text-muted">
@@ -2016,8 +2109,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               <input
                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                 value={d.rateioPorPessoa ?? ""}
-                placeholder="0.00"
+                placeholder="0,00"
                 onChange={(e) => handleRateioChange(e.target.value)}
+                onBlur={(e) => {
+                  if (e.target.value) {
+                    handleRateioChange(formatBRL(e.target.value, false));
+                  }
+                }}
               />
             </label>
             <label className="text-xs text-text-muted">
@@ -2043,9 +2141,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={valorNetUnitarioDisplay}
                     onChange={(e) => handleUnitValorNetChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleUnitValorNetChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
                 <label className="text-xs text-text-muted">
@@ -2061,9 +2164,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={valorNetTotalDisplay}
                     onChange={(e) => handleTotalValorNetChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleTotalValorNetChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
               </div>
@@ -2082,9 +2190,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={sinalUnitarioDisplay}
                     onChange={(e) => handleUnitSinalChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleUnitSinalChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
                 <label className="text-xs text-text-muted">
@@ -2100,9 +2213,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                     type="text"
                     inputMode="decimal"
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-semibold text-text-title focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={sinalTotalDisplay}
                     onChange={(e) => handleTotalSinalChange(e.target.value)}
+                    onBlur={(e) => {
+                      if (e.target.value) {
+                        handleTotalSinalChange(formatBRL(e.target.value, false));
+                      }
+                    }}
                   />
                 </label>
               </div>
@@ -2188,11 +2306,11 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       const totalGeralDespesas = sumGuias + sumDespesas;
 
       // Rateio por pessoa calculado automaticamente dividindo o total de despesas pelas vagas
-      const rateioCalculado = vagasNum > 0 ? (totalGeralDespesas / vagasNum).toFixed(2) : "0.00";
+      const rateioCalculado = vagasNum > 0 ? formatBRL(totalGeralDespesas / vagasNum, false) : "0,00";
 
       const handleVagasChange = (newVagas: string) => {
         const vNum = parseNum(newVagas);
-        const rateio = vNum > 0 ? (totalGeralDespesas / vNum).toFixed(2) : "0.00";
+        const rateio = vNum > 0 ? formatBRL(totalGeralDespesas / vNum, false) : "0,00";
         onUpdate({
           ...d,
           vagas: newVagas,
@@ -2211,14 +2329,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           sD += parseNum(dp.valor);
         }
         const tot = sG + sD;
-        const rateio = vagasNum > 0 ? (tot / vagasNum).toFixed(2) : "0.00";
+        const rateio = vagasNum > 0 ? formatBRL(tot / vagasNum, false) : "0,00";
         onUpdate({
           ...d,
           guias: newGuias,
           despesas: newDespesas,
-          totalDiarias: sG.toFixed(2),
-          totalOutrasDespesas: sD.toFixed(2),
-          totalDespesas: tot.toFixed(2),
+          totalDiarias: formatBRL(sG, false),
+          totalOutrasDespesas: formatBRL(sD, false),
+          totalDespesas: formatBRL(tot, false),
           rateioPorPessoa: rateio,
         });
       };
@@ -2231,14 +2349,14 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           g.valorDiaria !== undefined
             ? g.valorDiaria
             : parseNum(g.valorTotal) > 0 && parseNum(guias[idx].diarias) > 0
-            ? (parseNum(g.valorTotal) / parseNum(guias[idx].diarias)).toFixed(2)
+            ? formatBRL(parseNum(g.valorTotal) / parseNum(guias[idx].diarias), false)
             : "";
         const vDiariaNum = parseNum(currentDiaria);
         g.valorDiaria = currentDiaria;
         if (diariasVal === "" || currentDiaria === "") {
           g.valorTotal = "";
         } else {
-          g.valorTotal = (dNum * vDiariaNum).toFixed(2);
+          g.valorTotal = formatBRL(dNum * vDiariaNum, false);
         }
         guias[idx] = g;
         updateGuiasAndTotals(guias, d.despesas ?? []);
@@ -2251,7 +2369,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         const g = {
           ...guias[idx],
           valorDiaria: vDiariaVal,
-          valorTotal: vDiariaVal === "" ? "" : (dNum * vDiariaNum).toFixed(2),
+          valorTotal: vDiariaVal === "" ? "" : formatBRL(dNum * vDiariaNum, false),
         };
         guias[idx] = g;
         updateGuiasAndTotals(guias, d.despesas ?? []);
@@ -2264,7 +2382,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
         const g = {
           ...guias[idx],
           valorTotal: vTotalVal,
-          valorDiaria: vTotalVal === "" ? "" : (dNum > 0 ? (vTotalNum / dNum).toFixed(2) : guias[idx].valorDiaria ?? ""),
+          valorDiaria: vTotalVal === "" ? "" : (dNum > 0 ? formatBRL(vTotalNum / dNum, false) : guias[idx].valorDiaria ?? ""),
         };
         guias[idx] = g;
         updateGuiasAndTotals(guias, d.despesas ?? []);
@@ -2276,8 +2394,8 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           tipo: "Acompanhante",
           telefone: "",
           diarias: "1",
-          valorDiaria: "0.00",
-          valorTotal: "0.00",
+          valorDiaria: "0,00",
+          valorTotal: "0,00",
           status: "PENDENTE",
         };
         const guias = [...(d.guias ?? []), newGuia];
@@ -2304,7 +2422,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
       };
 
       const handleAddDespesa = () => {
-        const newDesp = { descricao: "", valor: "0.00" };
+        const newDesp = { descricao: "", valor: "0,00" };
         const despesas = [...(d.despesas ?? []), newDesp];
         updateGuiasAndTotals(d.guias ?? [], despesas);
       };
@@ -2357,7 +2475,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                       g.valorDiaria !== undefined
                         ? g.valorDiaria
                         : dNum > 0 && tNum > 0
-                        ? (tNum / dNum).toFixed(2)
+                        ? formatBRL(tNum / dNum, false)
                         : "";
 
                     const vTotalDisplay = g.valorTotal ?? "";
@@ -2400,16 +2518,26 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                           <input
                             className={numCls}
                             value={vDiariaDisplay}
-                            placeholder="0.00"
+                            placeholder="0,00"
                             onChange={(e) => handleGuiaValorDiariaChange(i, e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value) {
+                                handleGuiaValorDiariaChange(i, formatBRL(e.target.value, false));
+                              }
+                            }}
                           />
                         </td>
                         <td className={tdCls}>
                           <input
                             className={`${numCls} font-semibold text-primary`}
                             value={vTotalDisplay}
-                            placeholder="0.00"
+                            placeholder="0,00"
                             onChange={(e) => handleGuiaValorTotalChange(i, e.target.value)}
+                            onBlur={(e) => {
+                              if (e.target.value) {
+                                handleGuiaValorTotalChange(i, formatBRL(e.target.value, false));
+                              }
+                            }}
                           />
                         </td>
                         <td className={`${tdCls} text-center`}>
@@ -2440,7 +2568,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                 <span>Despesas Adicionais do Guia</span>
               </div>
               <span className="text-xs text-text-muted font-medium">
-                Total Despesas Extras: R$ {sumDespesas.toFixed(2)}
+                Total Despesas Extras: {formatBRL(sumDespesas)}
               </span>
             </div>
 
@@ -2469,8 +2597,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                         <input
                           className={numCls}
                           value={desp.valor ?? ""}
-                          placeholder="0.00"
+                          placeholder="0,00"
                           onChange={(e) => handleDespesaValorChange(i, e.target.value)}
+                          onBlur={(e) => {
+                            if (e.target.value) {
+                              handleDespesaValorChange(i, formatBRL(e.target.value, false));
+                            }
+                          }}
                         />
                       </td>
                       <td className={`${tdCls} text-center`}>
@@ -2504,7 +2637,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               <input
                 readOnly
                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface/70 text-text-body text-sm text-right tabular-nums font-medium focus:outline-none"
-                value={sumGuias.toFixed(2)}
+                value={formatBRL(sumGuias, false)}
               />
             </label>
             <label className="text-xs text-text-muted">
@@ -2512,7 +2645,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               <input
                 readOnly
                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface/70 text-text-body text-sm text-right tabular-nums font-medium focus:outline-none"
-                value={sumDespesas.toFixed(2)}
+                value={formatBRL(sumDespesas, false)}
               />
             </label>
             <label className="text-xs text-text-muted">
@@ -2520,7 +2653,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
               <input
                 readOnly
                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums font-bold text-primary focus:outline-none"
-                value={totalGeralDespesas.toFixed(2)}
+                value={formatBRL(totalGeralDespesas, false)}
               />
             </label>
             <label className="text-xs text-text-muted">
@@ -2592,7 +2725,19 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                   </td>
                   {valueKeys.map((k) => (
                     <td key={k} className={tdCls}>
-                      <input className={numCls} value={r[k] ?? ""} onChange={(e) => setRow("rows", i, k, e.target.value)} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        className={numCls}
+                        value={r[k] ?? ""}
+                        onChange={(e) => setRow("rows", i, k, e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value.trim()) {
+                            setRow("rows", i, k, formatBRL(e.target.value, false));
+                          }
+                        }}
+                      />
                     </td>
                   ))}
                   <td className={`${tdCls} text-center`}>
@@ -2608,7 +2753,19 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                   </td>
                   {valueKeys.map((k) => (
                     <td key={k} className={tdCls}>
-                      <input className={`${numCls} font-semibold`} value={r[k] ?? ""} onChange={(e) => setRow("summaryRows", i, k, e.target.value)} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        className={`${numCls} font-semibold`}
+                        value={r[k] ?? ""}
+                        onChange={(e) => setRow("summaryRows", i, k, e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value.trim()) {
+                            setRow("summaryRows", i, k, formatBRL(e.target.value, false));
+                          }
+                        }}
+                      />
                     </td>
                   ))}
                   <td className={`${tdCls} text-center`}>
@@ -2620,13 +2777,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           </table>
           <div className="flex gap-4 mt-2">
             <button
-              onClick={() => addRow("rows", { servico: "Novo Serviço", duplo: "0.00", triplo: "0.00" })}
+              onClick={() => addRow("rows", { servico: "Novo Serviço", duplo: "0,00", triplo: "0,00" })}
               className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors"
             >
               <Plus size={14} /> Adicionar Serviço
             </button>
             <button
-              onClick={() => addRow("summaryRows", { label: "Nova Linha", duplo: "0.00", triplo: "0.00" })}
+              onClick={() => addRow("summaryRows", { label: "Nova Linha", duplo: "0,00", triplo: "0,00" })}
               className="flex items-center gap-1.5 text-sm text-tertiary hover:text-primary font-medium transition-colors"
             >
               <Plus size={14} /> Adicionar Totalizador
@@ -2678,10 +2835,34 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                       <input className={inputCls} value={r.inclusos} onChange={(e) => setRow("rows", i, "inclusos", e.target.value)} />
                     </td>
                     <td className={tdCls}>
-                      <input className={numCls} value={r.valor} onChange={(e) => setRow("rows", i, "valor", e.target.value)} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        className={numCls}
+                        value={r.valor}
+                        onChange={(e) => setRow("rows", i, "valor", e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value.trim()) {
+                            setRow("rows", i, "valor", formatBRL(e.target.value, false));
+                          }
+                        }}
+                      />
                     </td>
                     <td className={tdCls}>
-                      <input className={numCls} value={r.valor2} onChange={(e) => setRow("rows", i, "valor2", e.target.value)} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        className={numCls}
+                        value={r.valor2}
+                        onChange={(e) => setRow("rows", i, "valor2", e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value.trim()) {
+                            setRow("rows", i, "valor2", formatBRL(e.target.value, false));
+                          }
+                        }}
+                      />
                     </td>
                     <td className={`${tdCls} text-center`}>
                       <DeleteRowBtn onClick={() => removeRow("rows", i)} />
@@ -2692,7 +2873,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             </tbody>
           </table>
           <button
-            onClick={() => addRow("rows", { idade: "", inclusos: "", valor: "0.00", valor2: "0.00" })}
+            onClick={() => addRow("rows", { idade: "", inclusos: "", valor: "0,00", valor2: "0,00" })}
             className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Faixa Etária
@@ -2769,7 +2950,19 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                       <input className={inputCls} value={r.fornecedor} onChange={(e) => setRow("rows", i, "fornecedor", e.target.value)} />
                     </td>
                     <td className={tdCls}>
-                      <input className={numCls} value={r.valor} onChange={(e) => setRow("rows", i, "valor", e.target.value)} />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        className={numCls}
+                        value={r.valor}
+                        onChange={(e) => setRow("rows", i, "valor", e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value.trim()) {
+                            setRow("rows", i, "valor", formatBRL(e.target.value, false));
+                          }
+                        }}
+                      />
                     </td>
                     <td className={`${tdCls} text-center`}>
                       <StatusSelect value={r.status ?? "CONFIRMADO"} onChange={(v) => setRow("rows", i, "status", v)} />
@@ -2783,7 +2976,7 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             </tbody>
           </table>
           <button
-            onClick={() => addRow("rows", { item: "Novo Item", fornecedor: "", valor: "0.00", status: "PENDENTE" })}
+            onClick={() => addRow("rows", { item: "Novo Item", fornecedor: "", valor: "0,00", status: "PENDENTE" })}
             className="mt-2 flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
           >
             <Plus size={14} /> Adicionar Linha

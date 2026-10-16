@@ -36,6 +36,7 @@ import type {
 import type { RoomGuest } from "./RoomListView";
 import { AddonMapDrawer } from "./AddonMapDrawer";
 import { getCustomersBirthdays } from "@/lib/actions/customers";
+import { parseNum, formatBRL } from "@/lib/package-calc";
 
 interface AdicionaisViewProps {
   addons: ExcursionAddon[];
@@ -50,12 +51,8 @@ interface AdicionaisViewProps {
   periodEnd?: string | null;
 }
 
-function fmt(v: number) {
-  return v.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-  });
+function fmt(v: unknown) {
+  return formatBRL(v);
 }
 
 function getWhatsAppLink(contact?: string): string | null {
@@ -64,14 +61,6 @@ function getWhatsAppLink(contact?: string): string | null {
   if (digits.length < 10) return null;
   const full = digits.startsWith("55") ? digits : `55${digits}`;
   return `https://wa.me/${full}`;
-}
-
-function parseNum(val: unknown): number {
-  if (typeof val === "number") return val;
-  if (!val) return 0;
-  const clean = String(val).replace(/[^\d.,-]/g, "").replace(",", ".");
-  const n = parseFloat(clean);
-  return isNaN(n) ? 0 : n;
 }
 
 function toInputDate(val: unknown): string {
@@ -204,7 +193,7 @@ export function AdicionaisView({
     if (!addon) return;
     const count = addon.assignedGuestIds?.length || 0;
     const u = parseNum(val);
-    const total = count > 0 && u > 0 ? (u * count).toFixed(2) : (count > 0 && !val ? "" : (addon.valorTotal ?? ""));
+    const total = count > 0 && u > 0 ? formatBRL(u * count, false) : (count > 0 && !val ? "" : (addon.valorTotal ?? ""));
     handleUpdateAddon(addonId, {
       valorUnitario: val,
       valorTotal: total,
@@ -216,7 +205,7 @@ export function AdicionaisView({
     if (!addon) return;
     const count = addon.assignedGuestIds?.length || 0;
     const t = parseNum(val);
-    const unit = count > 0 && t > 0 ? (t / count).toFixed(2) : (addon.valorUnitario ?? "");
+    const unit = count > 0 && t > 0 ? formatBRL(t / count, false) : (addon.valorUnitario ?? "");
     handleUpdateAddon(addonId, {
       valorTotal: val,
       valorUnitario: unit,
@@ -228,7 +217,7 @@ export function AdicionaisView({
     if (!addon) return;
     const count = addon.assignedGuestIds?.length || 0;
     const u = parseNum(val);
-    const total = count > 0 && u > 0 ? (u * count).toFixed(2) : (count > 0 && !val ? "" : (addon.sinalTotal ?? ""));
+    const total = count > 0 && u > 0 ? formatBRL(u * count, false) : (count > 0 && !val ? "" : (addon.sinalTotal ?? ""));
     handleUpdateAddon(addonId, {
       sinalUnitario: val,
       sinalTotal: total,
@@ -240,7 +229,7 @@ export function AdicionaisView({
     if (!addon) return;
     const count = addon.assignedGuestIds?.length || 0;
     const t = parseNum(val);
-    const unit = count > 0 && t > 0 ? (t / count).toFixed(2) : (addon.sinalUnitario ?? "");
+    const unit = count > 0 && t > 0 ? formatBRL(t / count, false) : (addon.sinalUnitario ?? "");
     handleUpdateAddon(addonId, {
       sinalTotal: val,
       sinalUnitario: unit,
@@ -1633,9 +1622,14 @@ export function AdicionaisView({
                                 type="text"
                                 inputMode="decimal"
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-medium"
-                                placeholder="0.00"
+                                placeholder="0,00"
                                 value={addon.valorUnitario ?? ""}
                                 onChange={(e) => handleAddonUnitValorChange(addon.id, e.target.value)}
+                                onBlur={(e) => {
+                                  if (e.target.value.trim()) {
+                                    handleAddonUnitValorChange(addon.id, formatBRL(e.target.value, false));
+                                  }
+                                }}
                               />
                             </label>
                             <label className="text-xs text-text-muted">
@@ -1651,9 +1645,14 @@ export function AdicionaisView({
                                 type="text"
                                 inputMode="decimal"
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-sm text-right tabular-nums font-bold text-emerald-700 dark:text-emerald-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                                placeholder="0.00"
+                                placeholder="0,00"
                                 value={addon.valorTotal ?? ""}
                                 onChange={(e) => handleAddonTotalValorChange(addon.id, e.target.value)}
+                                onBlur={(e) => {
+                                  if (e.target.value.trim()) {
+                                    handleAddonTotalValorChange(addon.id, formatBRL(e.target.value, false));
+                                  }
+                                }}
                               />
                             </label>
                           </div>
@@ -1672,9 +1671,14 @@ export function AdicionaisView({
                                 type="text"
                                 inputMode="decimal"
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-medium"
-                                placeholder="0.00"
+                                placeholder="0,00"
                                 value={addon.sinalUnitario ?? ""}
                                 onChange={(e) => handleAddonUnitSinalChange(addon.id, e.target.value)}
+                                onBlur={(e) => {
+                                  if (e.target.value.trim()) {
+                                    handleAddonUnitSinalChange(addon.id, formatBRL(e.target.value, false));
+                                  }
+                                }}
                               />
                             </label>
                             <label className="text-xs text-text-muted">
@@ -1690,9 +1694,14 @@ export function AdicionaisView({
                                 type="text"
                                 inputMode="decimal"
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-title text-sm text-right tabular-nums font-bold text-amber-700 dark:text-amber-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                                placeholder="0.00"
+                                placeholder="0,00"
                                 value={addon.sinalTotal ?? ""}
                                 onChange={(e) => handleAddonTotalSinalChange(addon.id, e.target.value)}
+                                onBlur={(e) => {
+                                  if (e.target.value.trim()) {
+                                    handleAddonTotalSinalChange(addon.id, formatBRL(e.target.value, false));
+                                  }
+                                }}
                               />
                             </label>
                           </div>
@@ -1785,7 +1794,7 @@ export function AdicionaisView({
                                 value={addon.price || ""}
                                 onChange={(e) =>
                                   handleUpdateAddon(addon.id, {
-                                    price: parseFloat(e.target.value) || 0,
+                                    price: parseNum(e.target.value),
                                   })
                                 }
                                 placeholder="0,00"
@@ -1876,7 +1885,7 @@ export function AdicionaisView({
                                         value={tier.cost ?? 0}
                                         onChange={(e) =>
                                           handleUpdateAgeTier(addon.id, tier.id, {
-                                            cost: parseFloat(e.target.value) || 0,
+                                            cost: parseNum(e.target.value),
                                           })
                                         }
                                         className="w-24 px-2 py-1 rounded-md border border-border bg-surface text-right text-xs font-semibold text-text-body focus:outline-none focus:border-primary"
@@ -1892,7 +1901,7 @@ export function AdicionaisView({
                                         value={tier.profit ?? 0}
                                         onChange={(e) =>
                                           handleUpdateAgeTier(addon.id, tier.id, {
-                                            profit: parseFloat(e.target.value) || 0,
+                                            profit: parseNum(e.target.value),
                                           })
                                         }
                                         className="w-24 px-2 py-1 rounded-md border border-border bg-surface text-right text-xs font-semibold text-amber-600 dark:text-amber-400 focus:outline-none focus:border-primary"
@@ -1908,7 +1917,7 @@ export function AdicionaisView({
                                         value={tier.price ?? 0}
                                         onChange={(e) =>
                                           handleUpdateAgeTier(addon.id, tier.id, {
-                                            price: parseFloat(e.target.value) || 0,
+                                            price: parseNum(e.target.value),
                                           })
                                         }
                                         className="w-24 px-2 py-1 rounded-md border border-border bg-surface text-right text-xs font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-primary"
