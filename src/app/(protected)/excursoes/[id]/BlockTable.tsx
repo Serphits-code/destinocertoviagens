@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Trash2, Plane, DollarSign, Calendar, Users, ChevronDown, ChevronUp } from "lucide-react";
-import type { EditorBlock, BlockData, RowStatus, BlockAgePricing, CustomAgeTier } from "@/lib/editor-types";
+import type { EditorBlock, BlockData, RowStatus, BlockAgePricing, CustomAgeTier, PrazoPagamentoItem } from "@/lib/editor-types";
 import { getBlockBaseUnitCost } from "@/lib/package-calc";
 
 interface BlockTableProps {
@@ -359,6 +359,161 @@ function BlockAgePricingSection({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function BlockFinalPaymentDeadlines({
+  prazos,
+  legacyPrazoTotal,
+  balanceToPay,
+  onChange,
+}: {
+  prazos?: PrazoPagamentoItem[];
+  legacyPrazoTotal?: string;
+  balanceToPay?: number;
+  onChange: (prazos: PrazoPagamentoItem[], primaryDate: string) => void;
+}) {
+  const rawList: PrazoPagamentoItem[] =
+    Array.isArray(prazos) && prazos.length > 0
+      ? prazos
+      : legacyPrazoTotal
+      ? [{ id: "prazo-1", data: toInputDate(legacyPrazoTotal), valor: "" }]
+      : [{ id: "prazo-1", data: "", valor: "" }];
+
+  const updateList = (newList: PrazoPagamentoItem[]) => {
+    const firstDate = newList.find((p) => p.data?.trim())?.data || newList[0]?.data || "";
+    onChange(newList, firstDate);
+  };
+
+  const handleDateChange = (idx: number, dateVal: string) => {
+    const next = [...rawList];
+    next[idx] = { ...next[idx], data: dateVal };
+    updateList(next);
+  };
+
+  const handleValorChange = (idx: number, valorVal: string) => {
+    const next = [...rawList];
+    next[idx] = { ...next[idx], valor: valorVal };
+    updateList(next);
+  };
+
+  const handleAddPrazo = () => {
+    const nextId = "prazo-" + Math.random().toString(36).substring(2, 9);
+    const next = [...rawList, { id: nextId, data: "", valor: "" }];
+    updateList(next);
+  };
+
+  const handleRemovePrazo = (idx: number) => {
+    if (rawList.length <= 1) {
+      updateList([{ id: "prazo-1", data: "", valor: "" }]);
+      return;
+    }
+    const next = rawList.filter((_, i) => i !== idx);
+    updateList(next);
+  };
+
+  const isDivided = rawList.length > 1;
+  const totalInformado = rawList.reduce((acc, curr) => acc + (parseNum(curr.valor) || 0), 0);
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-text-title">
+            {isDivided ? "Prazos de Pagamento Final (Dividido)" : "Prazo Pagamento Final"}
+          </span>
+          {isDivided ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary border border-primary/30">
+              Dividido em {rawList.length} parcelas
+            </span>
+          ) : (
+            <span className="text-[11px] text-text-muted">(parcela única ou dividida)</span>
+          )}
+        </div>
+
+        {balanceToPay !== undefined && balanceToPay > 0 && (
+          <div className="text-[11px] text-text-muted">
+            Saldo a quitar: <span className="font-mono font-bold text-text-title">R$ {balanceToPay.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        {rawList.map((item, idx) => (
+          <div
+            key={item.id || idx}
+            className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2 rounded-lg border transition-all ${
+              isDivided
+                ? "bg-surface border-border shadow-xs"
+                : "bg-surface/60 border-border/80"
+            }`}
+          >
+            <div className="flex items-center gap-1.5 shrink-0 min-w-[95px]">
+              <span className="text-[11px] font-bold text-text-title px-2 py-1 rounded-md bg-surface-subtle border border-border/80">
+                {isDivided ? `${idx + 1}º Prazo` : "Vencimento"}
+              </span>
+            </div>
+
+            <div className="flex-1">
+              <input
+                type="date"
+                className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-xs font-semibold focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
+                value={toInputDate(item.data)}
+                onChange={(e) => handleDateChange(idx, e.target.value)}
+              />
+            </div>
+
+            <div className="w-full sm:w-44 relative flex items-center">
+              <span className="absolute left-2.5 text-xs text-text-muted font-bold">R$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="Valor (opcional)"
+                className="w-full pl-8 pr-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-xs font-semibold text-right tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                value={item.valor ?? ""}
+                onChange={(e) => handleValorChange(idx, e.target.value)}
+              />
+            </div>
+
+            {isDivided && (
+              <button
+                type="button"
+                onClick={() => handleRemovePrazo(idx)}
+                className="p-1.5 rounded-lg text-text-muted hover:text-status-danger hover:bg-status-danger/10 transition-colors cursor-pointer shrink-0 self-end sm:self-center"
+                title="Remover este prazo"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <button
+          type="button"
+          onClick={handleAddPrazo}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary-strong px-2.5 py-1 rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer"
+        >
+          <Plus size={13} />
+          {isDivided ? "Adicionar outro prazo final" : "Dividir pagamento em mais prazos"}
+        </button>
+
+        {isDivided && totalInformado > 0 && (
+          <div className="text-[11px] font-semibold text-text-muted">
+            Soma informada:{" "}
+            <span className="font-mono font-bold text-primary">
+              R$ {totalInformado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            </span>
+            {balanceToPay !== undefined && balanceToPay > 0 && (
+              <span className={`ml-1.5 font-bold ${Math.abs(balanceToPay - totalInformado) < 0.01 ? "text-status-success" : "text-amber-500"}`}>
+                ({Math.abs(balanceToPay - totalInformado) < 0.01 ? "✓ Quitado exato" : `Diferença: R$ ${(balanceToPay - totalInformado).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`})
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1011,12 +1166,12 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           </div>
 
           {/* Prazos / Datas Limite */}
-          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-2">
+          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-3">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
               <Calendar size={14} className="text-primary" />
               <span>Prazos e Datas Limite</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <label className="text-xs text-text-muted">
                 <span className="block mb-1 font-medium">Prazo Pagamento do Sinal</span>
                 <input
@@ -1024,15 +1179,6 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                   className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
                   value={toInputDate(d.prazoSinal)}
                   onChange={(e) => set("prazoSinal", e.target.value)}
-                />
-              </label>
-              <label className="text-xs text-text-muted">
-                <span className="block mb-1 font-medium">Prazo Pagamento Total</span>
-                <input
-                  type="date"
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
-                  value={toInputDate(d.prazoPagamentoTotal)}
-                  onChange={(e) => set("prazoPagamentoTotal", e.target.value)}
                 />
               </label>
               <label className="text-xs text-text-muted">
@@ -1044,6 +1190,22 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                   onChange={(e) => set("prazoEmissao", e.target.value)}
                 />
               </label>
+            </div>
+
+            {/* Prazos de Pagamento Final / Dividido */}
+            <div className="pt-2 border-t border-border/50">
+              <BlockFinalPaymentDeadlines
+                prazos={d.prazosPagamentoFinal}
+                legacyPrazoTotal={d.prazoPagamentoTotal}
+                balanceToPay={Math.max(0, (parseNum(d.valorNetTotal) || parseNum(d.valorNet) || parseNum(custoTotalDisplay)) - parseNum(sinalTotalDisplay))}
+                onChange={(prazos, primaryDate) =>
+                  onUpdate({
+                    ...d,
+                    prazosPagamentoFinal: prazos,
+                    prazoPagamentoTotal: primaryDate,
+                  })
+                }
+              />
             </div>
           </div>
 
@@ -1568,13 +1730,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           </div>
 
           {/* Prazos / Datas Limite */}
-          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-2">
+          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-3">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
               <Calendar size={14} className="text-primary" />
               <span>Prazos e Datas Limite</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label className="text-xs text-text-muted">
+            <div>
+              <label className="text-xs text-text-muted max-w-sm block">
                 <span className="block mb-1 font-medium">Prazo Pagamento do Sinal</span>
                 <input
                   type="date"
@@ -1583,15 +1745,22 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                   onChange={(e) => set("prazoSinal", e.target.value)}
                 />
               </label>
-              <label className="text-xs text-text-muted">
-                <span className="block mb-1 font-medium">Prazo Pagamento Total</span>
-                <input
-                  type="date"
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
-                  value={toInputDate(d.prazoPagamentoTotal)}
-                  onChange={(e) => set("prazoPagamentoTotal", e.target.value)}
-                />
-              </label>
+            </div>
+
+            {/* Prazos de Pagamento Final / Dividido */}
+            <div className="pt-2 border-t border-border/50">
+              <BlockFinalPaymentDeadlines
+                prazos={d.prazosPagamentoFinal}
+                legacyPrazoTotal={d.prazoPagamentoTotal}
+                balanceToPay={Math.max(0, (parseNum(d.totalReserva) || parseNum(d.valorNetTotal) || parseNum(d.valorNet)) - parseNum(sinalTotalDisplay))}
+                onChange={(prazos, primaryDate) =>
+                  onUpdate({
+                    ...d,
+                    prazosPagamentoFinal: prazos,
+                    prazoPagamentoTotal: primaryDate,
+                  })
+                }
+              />
             </div>
           </div>
 
@@ -1924,13 +2093,13 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
           </div>
 
           {/* Prazos / Datas Limite */}
-          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-2">
+          <div className="p-3.5 rounded-xl border border-border bg-surface-subtle/50 space-y-3">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-text-title">
               <Calendar size={14} className="text-primary" />
               <span>Prazos e Datas Limite</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label className="text-xs text-text-muted">
+            <div>
+              <label className="text-xs text-text-muted max-w-sm block">
                 <span className="block mb-1 font-medium">Prazo Pagamento do Sinal</span>
                 <input
                   type="date"
@@ -1939,15 +2108,22 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
                   onChange={(e) => set("prazoSinal", e.target.value)}
                 />
               </label>
-              <label className="text-xs text-text-muted">
-                <span className="block mb-1 font-medium">Prazo Pagamento Total</span>
-                <input
-                  type="date"
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-body text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
-                  value={toInputDate(d.prazoPagamentoTotal)}
-                  onChange={(e) => set("prazoPagamentoTotal", e.target.value)}
-                />
-              </label>
+            </div>
+
+            {/* Prazos de Pagamento Final / Dividido */}
+            <div className="pt-2 border-t border-border/50">
+              <BlockFinalPaymentDeadlines
+                prazos={d.prazosPagamentoFinal}
+                legacyPrazoTotal={d.prazoPagamentoTotal}
+                balanceToPay={Math.max(0, (parseNum(d.valorContrato) || parseNum(d.valorNetTotal) || parseNum(d.valorNet)) - parseNum(sinalTotalDisplay))}
+                onChange={(prazos, primaryDate) =>
+                  onUpdate({
+                    ...d,
+                    prazosPagamentoFinal: prazos,
+                    prazoPagamentoTotal: primaryDate,
+                  })
+                }
+              />
             </div>
           </div>
 

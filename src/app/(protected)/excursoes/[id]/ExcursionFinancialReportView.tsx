@@ -23,7 +23,7 @@ import {
   Layers,
   FileSpreadsheet,
 } from "lucide-react";
-import type { EditorBlock } from "@/lib/editor-types";
+import type { EditorBlock, PrazoPagamentoItem } from "@/lib/editor-types";
 import type { ExcursionAddon, AddonGuestPayment, RoomTypePricing } from "@/lib/actions/addons";
 import type { RoomGuest, RoomEntry } from "./RoomListView";
 import type { PackageFinancialSummary } from "@/lib/package-calc";
@@ -266,6 +266,7 @@ export function ExcursionFinancialReportView({
       let sinalCost = 0;
       let prazoSinal = d?.prazoSinal || null;
       let prazoPagamentoTotal = d?.prazoPagamentoTotal || null;
+      let prazosPagamentoFinal: PrazoPagamentoItem[] | null = d?.prazosPagamentoFinal || null;
 
       switch (b.categoryId) {
         case "aereo":
@@ -304,6 +305,7 @@ export function ExcursionFinancialReportView({
         balanceToPay,
         prazoSinal,
         prazoPagamentoTotal,
+        prazosPagamentoFinal,
       };
     });
   }, [blocks, slots]);
@@ -1014,7 +1016,28 @@ export function ExcursionFinancialReportView({
                       </td>
 
                       <td className="py-3 px-3 text-center text-text-muted font-medium">
-                        {fmtDate(s.prazoPagamentoTotal)}
+                        {s.prazosPagamentoFinal && s.prazosPagamentoFinal.filter((p) => p.data?.trim()).length > 1 ? (
+                          <div className="flex flex-col gap-1 items-center justify-center">
+                            {s.prazosPagamentoFinal
+                              .filter((p) => p.data?.trim())
+                              .map((p, pIdx) => (
+                                <span
+                                  key={pIdx}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20 whitespace-nowrap"
+                                >
+                                  <span className="text-[10px] opacity-75">{pIdx + 1}ª:</span>
+                                  <span>{fmtDate(p.data)}</span>
+                                  {p.valor ? (
+                                    <span className="text-text-title font-mono font-bold">
+                                      ({fmt(parseFloat(p.valor) || 0)})
+                                    </span>
+                                  ) : null}
+                                </span>
+                              ))}
+                          </div>
+                        ) : (
+                          fmtDate(s.prazoPagamentoTotal)
+                        )}
                       </td>
 
                       <td className="py-3 px-4 text-right font-mono font-black text-status-danger">

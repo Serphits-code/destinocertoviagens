@@ -43,10 +43,19 @@ export interface AereoFlight {
   status: RowStatus;
 }
 
+export interface PrazoPagamentoItem {
+  id: string;
+  data: string;
+  valor?: string;
+  descricao?: string;
+}
+
 export interface AereoBlockData {
   title?: string;
   canalVendaNome?: string;
   canalVendaContato?: string;
+  fornecedor?: string;
+  canalVenda?: string;
   portal?: string;
   localizador?: string;
   vagas?: string;
@@ -61,6 +70,7 @@ export interface AereoBlockData {
   sinal?: string;
   prazoSinal?: string;
   prazoPagamentoTotal?: string;
+  prazosPagamentoFinal?: PrazoPagamentoItem[];
   prazoEmissao?: string;
   status?: RowStatus;
   observation?: string;
@@ -94,6 +104,7 @@ export interface HospedagemBlockData {
   sinal?: string;
   prazoSinal?: string;
   prazoPagamentoTotal?: string;
+  prazosPagamentoFinal?: PrazoPagamentoItem[];
   status?: RowStatus;
   observation?: string;
   agePricing?: BlockAgePricing;
@@ -125,6 +136,7 @@ export interface RodoviarioBlockData {
   sinal?: string;
   prazoSinal?: string;
   prazoPagamentoTotal?: string;
+  prazosPagamentoFinal?: PrazoPagamentoItem[];
   agePricing?: BlockAgePricing;
 }
 
