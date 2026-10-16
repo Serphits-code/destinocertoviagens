@@ -1,9 +1,14 @@
 import { execSync } from 'child_process';
 import { PrismaClient } from '@prisma/client';
 
+import fs from 'fs';
+import path from 'path';
+
 const prisma = new PrismaClient();
 const pgRestore = 'C:\\Program Files\\PostgreSQL\\17\\bin\\pg_restore.exe';
-const dumpPath = 'c:/geo/data/database_20260917103253.dump';
+const dumpDir = path.resolve('data');
+const dumpFiles = fs.readdirSync(dumpDir).filter((f) => f.startsWith('database_') && f.endsWith('.dump')).sort();
+const dumpPath = path.join(dumpDir, dumpFiles[dumpFiles.length - 1]);
 
 async function fixCancelledSales() {
   console.log('Extraindo situacoes do dump do Monde...');

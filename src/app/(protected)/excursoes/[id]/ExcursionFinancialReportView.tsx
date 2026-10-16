@@ -24,12 +24,14 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import type { EditorBlock } from "@/lib/editor-types";
-import type { ExcursionAddon, AddonGuestPayment } from "@/lib/actions/addons";
+import type { ExcursionAddon, AddonGuestPayment, RoomTypePricing } from "@/lib/actions/addons";
 import type { RoomGuest, RoomEntry } from "./RoomListView";
 import type { PackageFinancialSummary } from "@/lib/package-calc";
 import {
   getGuestAge,
   getBlockUnitPriceForGuest,
+  getAddonPriceForGuest,
+  getRoomPricingForGuest,
 } from "@/lib/package-calc";
 
 interface ExcursionFinancialReportViewProps {
@@ -48,6 +50,8 @@ interface ExcursionFinancialReportViewProps {
   customProfitAmount?: number | null;
   customPackagePrice?: number | null;
   financialSummary: PackageFinancialSummary;
+  roomPricing?: Record<string, RoomTypePricing>;
+  guestPaymentModes?: Record<string, "vista" | "prazo">;
 }
 
 export function ExcursionFinancialReportView({
@@ -56,12 +60,15 @@ export function ExcursionFinancialReportView({
   periodStart,
   periodEnd,
   slots,
-  blocks,
+  blocks = [],
+  rooms = [],
   guests,
   addons,
   guestPayments = {},
   profitMargin = 0,
   financialSummary,
+  roomPricing,
+  guestPaymentModes = {},
 }: ExcursionFinancialReportViewProps) {
   const [activeTab, setActiveTab] = useState<"dre" | "passageiros" | "fornecedores">("dre");
   const [searchTerm, setSearchTerm] = useState("");
@@ -97,19 +104,48 @@ export function ExcursionFinancialReportView({
 
       const basePackageCost = blockBreakdown.reduce((sum, b) => sum + b.cost, 0);
 
-      // Margem de lucro aplicada da agência
+      // Encontrar quarto do hóspede
+      const guestRoom = rooms.find((r) => r.hospedes?.some((gItem) => gItem.id === g.id));
+      const roomType = guestRoom?.tipo || "Duplo";
+      const paymentMode: "vista" | "prazo" = (guestPaymentModes && guestPaymentModes[g.id]) || "vista";
+
+      // Margem de lucro aplicada da agência e precificação do quarto por idade
       const effectiveProfit = financialSummary.effectiveProfitPerPerson || 0;
       const roundingDiff = financialSummary.roundingDifference || 0;
-      const packageFinalPrice = basePackageCost + effectiveProfit + roundingDiff;
+      const fallbackAdultPrice = financialSummary.pricePerPerson || (basePackageCost + effectiveProfit + roundingDiff);
+
+      const roomPricingResult = getRoomPricingForGuest(
+        roomPricing,
+        roomType,
+        age,
+        g.tipo,
+        fallbackAdultPrice
+      );
+
+      const isPrazo = paymentMode === "prazo";
+      const packageFinalPrice = isPrazo
+        ? roomPricingResult.cashPrice + roomPricingResult.installmentExtra
+        : roomPricingResult.cashPrice;
+      const cardFeeApplied = isPrazo ? roomPricingResult.cardFee : 0;
+      const agencyProfit = packageFinalPrice - basePackageCost - cardFeeApplied;
 
       // Adicionais contratados
       const passengerAddons = addons.filter((a) =>
         (a.assignedGuestIds ?? []).includes(g.id)
       );
-      const totalAddonsPrice = passengerAddons.reduce((sum, a) => {
-        const val = typeof a.price === "number" ? a.price : parseFloat(a.price || "0") || 0;
-        return sum + val;
-      }, 0);
+      const passengerAddonsDetailed = passengerAddons.map((a) => {
+        const pricing = getAddonPriceForGuest(a, age, g.tipo);
+        return {
+          addon: a,
+          cost: pricing.cost,
+          profit: pricing.profit,
+          price: pricing.price,
+          tierLabel: pricing.tierLabel,
+        };
+      });
+      const totalAddonsPrice = passengerAddonsDetailed.reduce((sum, a) => sum + a.price, 0);
+      const totalAddonsCost = passengerAddonsDetailed.reduce((sum, a) => sum + a.cost, 0);
+      const totalAddonsProfit = passengerAddonsDetailed.reduce((sum, a) => sum + a.profit, 0);
 
       const totalReceivable = packageFinalPrice + totalAddonsPrice;
 
@@ -130,20 +166,24 @@ export function ExcursionFinancialReportView({
         age,
         birthDate: g.birthDate,
         tipo: g.tipo,
-        roomName: (g as unknown as { roomName?: string }).roomName || "Sem quarto",
+        roomName: (g as unknown as { roomName?: string }).roomName || (guestRoom ? `Quarto ${guestRoom.numero} (${guestRoom.tipo})` : "Sem quarto"),
+        roomMatchedTierLabel: roomPricingResult.matchedTierLabel,
         blockBreakdown,
         basePackageCost,
-        agencyProfit: effectiveProfit + roundingDiff,
+        agencyProfit,
         packageFinalPrice,
         passengerAddons,
+        passengerAddonsDetailed,
         totalAddonsPrice,
+        totalAddonsCost,
+        totalAddonsProfit,
         totalReceivable,
         amountPaid,
         pendingAmount,
         status: isPaid ? "pago" : isPartial ? "parcial" : "pendente",
       };
     });
-  }, [guests, blocks, periodStart, slots, financialSummary, addons, guestPayments]);
+  }, [guests, blocks, rooms, periodStart, slots, financialSummary, addons, guestPayments, roomPricing, guestPaymentModes]);
 
   // 2. TOTAIS DE RECEITAS E CUSTOS
   const summary = useMemo(() => {
@@ -170,12 +210,11 @@ export function ExcursionFinancialReportView({
       0
     );
 
-    // Custos diretos de adicionais (se houver custo unitário, ou margem)
-    const totalAddonsCost = addons.reduce((sum, a) => {
-      const assignedCount = (a.assignedGuestIds ?? []).length;
-      const costUnit = typeof a.cost === "number" ? a.cost : a.cost ? parseFloat(a.cost) || 0 : 0;
-      return sum + costUnit * assignedCount;
-    }, 0);
+    // Custos diretos de adicionais somando os custos reais calculados por passageiro
+    const totalAddonsCost = passengerReport.reduce(
+      (sum, p) => sum + p.totalAddonsCost,
+      0
+    );
 
     const totalOperatingCost = totalBlocksCost + totalAddonsCost;
     const netProfit = grossRevenue - totalOperatingCost;
@@ -813,9 +852,14 @@ export function ExcursionFinancialReportView({
                         </td>
 
                         <td className="py-3 px-3">
-                          <span className="px-2 py-0.5 rounded-md bg-surface-subtle border border-border text-[11px] font-medium text-text-body">
+                          <span className="px-2 py-0.5 rounded-md bg-surface-subtle border border-border text-[11px] font-medium text-text-body block w-fit">
                             {p.roomName}
                           </span>
+                          {p.roomMatchedTierLabel && (
+                            <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                              {p.roomMatchedTierLabel}
+                            </span>
+                          )}
                         </td>
 
                         <td className="py-3 px-3">
@@ -836,8 +880,10 @@ export function ExcursionFinancialReportView({
                           {fmt(p.basePackageCost)}
                         </td>
 
-                        <td className="py-3 px-3 text-right font-mono text-status-success font-semibold">
-                          +{fmt(p.agencyProfit)}
+                        <td className={`py-3 px-3 text-right font-mono font-semibold ${
+                          p.agencyProfit >= 0 ? "text-status-success" : "text-status-danger"
+                        }`}>
+                          {p.agencyProfit >= 0 ? `+${fmt(p.agencyProfit)}` : fmt(p.agencyProfit)}
                         </td>
 
                         <td className="py-3 px-3 text-right font-mono font-bold text-text-title">

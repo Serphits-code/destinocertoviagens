@@ -84,42 +84,21 @@ function toInputDate(val: unknown): string {
   return "";
 }
 
-function calculateAge(birthDateStr?: string | null): number | null {
+function calculateAge(birthDateStr?: string | null, targetDateStr?: string | null): number | null {
   if (!birthDateStr) return null;
   const d = new Date(birthDateStr);
   if (isNaN(d.getTime())) return null;
-  const today = new Date();
-  let age = today.getFullYear() - d.getFullYear();
-  const m = today.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) {
+  const target = targetDateStr ? new Date(targetDateStr + "T00:00:00") : new Date();
+  let age = target.getFullYear() - d.getFullYear();
+  const m = target.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && target.getDate() < d.getDate())) {
     age--;
   }
   return age >= 0 ? age : null;
 }
 
-export function getAddonPriceForGuest(
-  addon: ExcursionAddon,
-  guestAge: number | null
-): { price: number; cost: number; profit: number; tierLabel?: string } {
-  if (addon.ageTiers && addon.ageTiers.length > 0 && guestAge !== null) {
-    const matchedTier = addon.ageTiers.find(
-      (t) => guestAge >= t.minAge && guestAge <= t.maxAge
-    );
-    if (matchedTier) {
-      return {
-        price: Number(matchedTier.price) || 0,
-        cost: Number(matchedTier.cost) || 0,
-        profit: Number(matchedTier.profit) || 0,
-        tierLabel: matchedTier.label || `${matchedTier.minAge} a ${matchedTier.maxAge} anos`,
-      };
-    }
-  }
-
-  const price = Number(addon.price) || 0;
-  const cost = Number(addon.cost) || 0;
-  const profit = Number(addon.profit) || (price - cost > 0 ? price - cost : 0);
-  return { price, cost, profit };
-}
+export { getAddonPriceForGuest } from "@/lib/package-calc";
+import { getAddonPriceForGuest } from "@/lib/package-calc";
 
 const PAYMENT_METHODS = [
   "PIX",
@@ -137,6 +116,8 @@ export function AdicionaisView({
   guests,
   guestPayments = {},
   onUpdateGuestPayments,
+  periodStart = null,
+  periodEnd = null,
 }: AdicionaisViewProps) {
   // Sub-telas: Adesão (padrão ao abrir) e Config
   const [subTab, setSubTab] = useState<"adesao" | "config">("adesao");
@@ -310,14 +291,35 @@ export function AdicionaisView({
       return updated;
     });
 
-    handleUpdateAddon(addonId, { ageTiers: nextTiers });
+    const defaultTier =
+      nextTiers.find((t) => Number(t.minAge) >= 12 || (t.label || "").toLowerCase().includes("adulto")) ||
+      nextTiers[nextTiers.length - 1];
+
+    handleUpdateAddon(addonId, {
+      ageTiers: nextTiers,
+      ...(defaultTier ? {
+        price: defaultTier.price,
+        cost: defaultTier.cost,
+        profit: defaultTier.profit,
+      } : {}),
+    });
   };
 
   const handleDeleteAgeTier = (addonId: string, tierId: string) => {
     const addon = addons.find((a) => a.id === addonId);
     if (!addon || !addon.ageTiers) return;
+    const nextTiers = addon.ageTiers.filter((t) => t.id !== tierId);
+    const defaultTier =
+      nextTiers.find((t) => Number(t.minAge) >= 12 || (t.label || "").toLowerCase().includes("adulto")) ||
+      nextTiers[nextTiers.length - 1];
+
     handleUpdateAddon(addonId, {
-      ageTiers: addon.ageTiers.filter((t) => t.id !== tierId),
+      ageTiers: nextTiers,
+      ...(defaultTier ? {
+        price: defaultTier.price,
+        cost: defaultTier.cost,
+        profit: defaultTier.profit,
+      } : {}),
     });
   };
 
@@ -492,8 +494,8 @@ export function AdicionaisView({
         const payment = guestPayments[guest.id] || {};
         const voucher = addon.vouchers?.[guest.id] || {};
         const bDate = getGuestBDate(guest);
-        const age = calculateAge(bDate);
-        const { tierLabel } = getAddonPriceForGuest(addon, age);
+        const age = calculateAge(bDate, periodStart);
+        const { tierLabel } = getAddonPriceForGuest(addon, age, guest.tipo);
 
         // Filtro de busca
         if (voucherSearchQuery.trim()) {
@@ -554,7 +556,7 @@ export function AdicionaisView({
 
     for (const guest of guests) {
       const bDate = getGuestBDate(guest);
-      const age = calculateAge(bDate);
+      const age = calculateAge(bDate, periodStart);
       const isPaid = !!guestPayments[guest.id]?.paid;
 
       let guestSubtotal = 0;
@@ -563,7 +565,7 @@ export function AdicionaisView({
       for (const addon of addons) {
         if (addon.assignedGuestIds?.includes(guest.id)) {
           hasAny = true;
-          const { price } = getAddonPriceForGuest(addon, age);
+          const { price } = getAddonPriceForGuest(addon, age, guest.tipo);
           guestSubtotal += price;
         }
       }
@@ -790,7 +792,7 @@ export function AdicionaisView({
                   <tbody className="divide-y divide-border/60">
                     {filteredGuests.map((guest) => {
                       const bDate = getGuestBDate(guest);
-                      const age = calculateAge(bDate);
+                      const age = calculateAge(bDate, periodStart);
                       const paymentInfo = guestPayments[guest.id] || {};
                       const isPaid = !!paymentInfo.paid;
 
@@ -798,7 +800,7 @@ export function AdicionaisView({
                       let guestSubtotal = 0;
                       addons.forEach((addon) => {
                         if (addon.assignedGuestIds?.includes(guest.id)) {
-                          const { price } = getAddonPriceForGuest(addon, age);
+                          const { price } = getAddonPriceForGuest(addon, age, guest.tipo);
                           guestSubtotal += price;
                         }
                       });
@@ -852,7 +854,8 @@ export function AdicionaisView({
                             );
                             const { price, tierLabel } = getAddonPriceForGuest(
                               addon,
-                              age
+                              age,
+                              guest.tipo
                             );
 
                             return (
@@ -974,8 +977,8 @@ export function AdicionaisView({
                         for (const g of filteredGuests) {
                           if (addon.assignedGuestIds?.includes(g.id)) {
                             const bDate = getGuestBDate(g);
-                            const age = calculateAge(bDate);
-                            addonColTotal += getAddonPriceForGuest(addon, age).price;
+                            const age = calculateAge(bDate, periodStart);
+                            addonColTotal += getAddonPriceForGuest(addon, age, g.tipo).price;
                           }
                         }
 

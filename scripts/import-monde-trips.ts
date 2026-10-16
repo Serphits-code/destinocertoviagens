@@ -12,14 +12,14 @@ function getDumpPath(): string {
   const dataDir = 'c:/geo/data';
   if (fs.existsSync(dataDir)) {
     const files = fs.readdirSync(dataDir)
-      .filter((f) => f.endsWith('.dump'))
+      .filter((f) => f.startsWith('database_') && f.endsWith('.dump'))
       .sort()
       .reverse();
     if (files.length > 0) {
       return path.join(dataDir, files[0]).replace(/\\/g, '/');
     }
   }
-  return 'c:/geo/data/database_20260917103253.dump';
+  return 'c:/geo/data/database_20261016143511.dump';
 }
 
 const dumpPath = getDumpPath();

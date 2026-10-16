@@ -2,6 +2,7 @@
 // Cálculos financeiros consolidados e compartilhados entre SummaryWidget, PackageEditor e CheckoutView
 
 import type { EditorBlock, CustomAgeTier } from "./editor-types";
+import type { ExcursionAddon, AddonAgeTier, RoomTypePricing, RoomAgeTier } from "./actions/addons";
 
 export function parseNum(v: unknown): number {
   if (v === null || v === undefined) return 0;
@@ -514,3 +515,210 @@ export function calculatePackageFinancialSummary(
     grandTotalRevenue,
   };
 }
+
+export interface AddonPricingResult {
+  price: number;
+  cost: number;
+  profit: number;
+  tierLabel?: string;
+}
+
+export function formatTierLabel(label?: string, minAge?: number, maxAge?: number): string {
+  if (!label || !label.trim()) {
+    return minAge !== undefined && maxAge !== undefined ? `${minAge} a ${maxAge} anos` : "";
+  }
+  const clean = label.trim();
+  if (clean.toLowerCase().includes("ano") || (clean.toLowerCase().includes("a") && clean.match(/\d/))) {
+    return clean;
+  }
+  if (minAge !== undefined && maxAge !== undefined) {
+    return `${clean} (${minAge} a ${maxAge} anos)`;
+  }
+  return clean;
+}
+
+/**
+ * Retorna o preço de venda, custo e margem de lucro de um adicional para um hóspede específico,
+ * considerando faixas etárias configuradas no adicional, idade do hóspede ou tipo de hóspede.
+ */
+export function getAddonPriceForGuest(
+  addon: ExcursionAddon,
+  guestAge: number | null,
+  guestType?: string | null
+): AddonPricingResult {
+  const tiers: AddonAgeTier[] = Array.isArray(addon.ageTiers) ? addon.ageTiers : [];
+
+  if (tiers.length > 0) {
+    // 1. Prioridade: Casamento por idade exata do hóspede
+    if (guestAge !== null && guestAge !== undefined) {
+      const matched = tiers.find(
+        (t) => guestAge >= Number(t.minAge) && guestAge <= Number(t.maxAge)
+      );
+      if (matched) {
+        const cost = Number(matched.cost) || 0;
+        const profit = Number(matched.profit) || 0;
+        const price = Number(matched.price) || (cost + profit);
+        return {
+          price,
+          cost,
+          profit,
+          tierLabel: formatTierLabel(matched.label, matched.minAge, matched.maxAge),
+        };
+      }
+
+      // Se a idade for maior que todas as faixas (ex: 68 anos e a maior faixa vai até 65), utiliza a faixa máxima (adulto/sênior)
+      const sortedByMax = [...tiers].sort((a, b) => Number(b.maxAge) - Number(a.maxAge));
+      if (sortedByMax.length > 0 && guestAge > Number(sortedByMax[0].maxAge)) {
+        const topTier = sortedByMax[0];
+        const cost = Number(topTier.cost) || 0;
+        const profit = Number(topTier.profit) || 0;
+        const price = Number(topTier.price) || (cost + profit);
+        return {
+          price,
+          cost,
+          profit,
+          tierLabel: topTier.label
+            ? `${topTier.label} (${topTier.minAge} a ${topTier.maxAge} anos)`
+            : `${topTier.minAge} a ${topTier.maxAge} anos`,
+        };
+      }
+
+      // Se a idade for menor que todas as faixas, utiliza a menor faixa
+      const sortedByMin = [...tiers].sort((a, b) => Number(a.minAge) - Number(b.minAge));
+      if (sortedByMin.length > 0 && guestAge < Number(sortedByMin[0].minAge)) {
+        const lowestTier = sortedByMin[0];
+        const cost = Number(lowestTier.cost) || 0;
+        const profit = Number(lowestTier.profit) || 0;
+        const price = Number(lowestTier.price) || (cost + profit);
+        return {
+          price,
+          cost,
+          profit,
+          tierLabel: lowestTier.label
+            ? `${lowestTier.label} (${lowestTier.minAge} a ${lowestTier.maxAge} anos)`
+            : `${lowestTier.minAge} a ${lowestTier.maxAge} anos`,
+        };
+      }
+    }
+
+    // 2. Fallback sem idade ou sem match exato: tenta casar pelo tipo de hóspede (ex: "Adulto", "Criança", "Bebê")
+    const tipo = (guestType || "").toLowerCase();
+    if (tipo) {
+      const matchByTipo = tiers.find((t) => {
+        const lbl = (t.label || "").toLowerCase();
+        return lbl.includes(tipo) || tipo.includes(lbl);
+      });
+      if (matchByTipo) {
+        const cost = Number(matchByTipo.cost) || 0;
+        const profit = Number(matchByTipo.profit) || 0;
+        const price = Number(matchByTipo.price) || (cost + profit);
+        return {
+          price,
+          cost,
+          profit,
+          tierLabel: matchByTipo.label
+            ? `${matchByTipo.label} (${matchByTipo.minAge} a ${matchByTipo.maxAge} anos)`
+            : `${matchByTipo.minAge} a ${matchByTipo.maxAge} anos`,
+        };
+      }
+    }
+
+    // 3. Fallback dentro das faixas: utiliza a faixa adulta (minAge >= 12 ou label "adulto") ou a última faixa
+    const adultTier =
+      tiers.find((t) => Number(t.minAge) >= 12 || (t.label || "").toLowerCase().includes("adulto")) ||
+      tiers[tiers.length - 1];
+
+    if (adultTier) {
+      const cost = Number(adultTier.cost) || 0;
+      const profit = Number(adultTier.profit) || 0;
+      const price = Number(adultTier.price) || (cost + profit);
+      return {
+        price,
+        cost,
+        profit,
+        tierLabel: adultTier.label
+          ? `${adultTier.label} (${adultTier.minAge} a ${adultTier.maxAge} anos)`
+          : `${adultTier.minAge} a ${adultTier.maxAge} anos`,
+      };
+    }
+  }
+
+  // Fallback padrão se não houver ageTiers configuradas
+  const price = Number(addon.price) || 0;
+  const cost = Number(addon.cost) || 0;
+  const profit = Number(addon.profit) || Math.max(0, price - cost);
+  return { price, cost, profit };
+}
+
+export interface EffectiveRoomPricing {
+  cashPrice: number;
+  installmentExtra: number;
+  cardFee: number;
+  matchedTierLabel?: string;
+  isAgeTierApplied: boolean;
+}
+
+/**
+ * Retorna os valores de venda (à vista, acréscimo prazo, taxa cartão) de um tipo de quarto para um hóspede,
+ * considerando se há faixas etárias customizadas cadastradas no quarto para a idade/tipo do hóspede.
+ */
+export function getRoomPricingForGuest(
+  roomPricing: Record<string, RoomTypePricing> | undefined,
+  roomTypeRaw: string,
+  guestAge: number | null,
+  guestType?: string | null,
+  fallbackCashPrice: number = 0
+): EffectiveRoomPricing {
+  const key = (roomTypeRaw || "duplo").trim().toLowerCase();
+  const base = roomPricing ? (roomPricing[key] || roomPricing[roomTypeRaw]) : undefined;
+
+  const defaultCash = base && base.cashPrice > 0 ? base.cashPrice : fallbackCashPrice;
+  const defaultExtra = base?.installmentExtra ?? 0;
+  const defaultFee = base?.cardFee ?? 0;
+
+  const tiers: RoomAgeTier[] = Array.isArray(base?.ageTiers) ? base!.ageTiers! : [];
+
+  if (tiers.length > 0) {
+    // 1. Tentar casar pela idade exata do hóspede
+    if (guestAge !== null && guestAge !== undefined) {
+      const matched = tiers.find(
+        (t) => guestAge >= Number(t.minAge) && guestAge <= Number(t.maxAge)
+      );
+      if (matched) {
+        return {
+          cashPrice: Number(matched.cashPrice) || 0,
+          installmentExtra: Number(matched.installmentExtra) || 0,
+          cardFee: Number(matched.cardFee) || 0,
+          matchedTierLabel: formatTierLabel(matched.label, matched.minAge, matched.maxAge),
+          isAgeTierApplied: true,
+        };
+      }
+    }
+
+    // 2. Tentar casar pelo tipo do hóspede (ex: "Criança", "Bebê", etc.)
+    const tipo = (guestType || "").toLowerCase();
+    if (tipo) {
+      const matchByTipo = tiers.find((t) => {
+        const lbl = (t.label || "").toLowerCase();
+        return lbl.includes(tipo) || tipo.includes(lbl);
+      });
+      if (matchByTipo) {
+        return {
+          cashPrice: Number(matchByTipo.cashPrice) || 0,
+          installmentExtra: Number(matchByTipo.installmentExtra) || 0,
+          cardFee: Number(matchByTipo.cardFee) || 0,
+          matchedTierLabel: formatTierLabel(matchByTipo.label, matchByTipo.minAge, matchByTipo.maxAge),
+          isAgeTierApplied: true,
+        };
+      }
+    }
+  }
+
+  return {
+    cashPrice: defaultCash,
+    installmentExtra: defaultExtra,
+    cardFee: defaultFee,
+    isAgeTierApplied: false,
+  };
+}
+

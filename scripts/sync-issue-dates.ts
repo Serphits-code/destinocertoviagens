@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 import { db } from '../src/lib/db';
 
@@ -6,7 +7,10 @@ async function syncIssueDates() {
   console.log('🔄 Extraindo data de emissão (issueDate) do dump do Monde...');
 
   const pgRestore = 'C:\\Program Files\\PostgreSQL\\17\\bin\\pg_restore.exe';
-  const dumpPath = path.resolve('data/database_20260917103253.dump');
+  const dumpDir = path.resolve('data');
+  const dumpFiles = fs.readdirSync(dumpDir).filter((f) => f.startsWith('database_') && f.endsWith('.dump')).sort();
+  const dumpPath = path.join(dumpDir, dumpFiles[dumpFiles.length - 1]);
+  console.log(`📁 Dump utilizado: ${dumpPath}`);
 
   const finRaw = execSync(`"${pgRestore}" -a -t financeiro -f - "${dumpPath}"`, {
     maxBuffer: 100 * 1024 * 1024,

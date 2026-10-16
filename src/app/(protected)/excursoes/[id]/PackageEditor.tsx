@@ -1017,6 +1017,8 @@ export function PackageEditor({
               customProfitAmount={customProfitAmount}
               customPackagePrice={customPackagePrice}
               financialSummary={financialSummary}
+              roomPricing={roomPricing}
+              guestPaymentModes={guestPaymentModes}
             />
           ) : view === "interessados" ? (
             <InterestedLeadsView

@@ -19,7 +19,7 @@ function getDumpPath(): string {
       return path.join(dataDir, files[0]).replace(/\\/g, '/');
     }
   }
-  return 'c:/geo/data/database_20260917103253.dump';
+  return 'c:/geo/data/database_20261016143511.dump';
 }
 
 const dumpPath = getDumpPath();
@@ -284,11 +284,12 @@ async function main() {
   const vendasData = parseLines(vendasRaw, 'COPY destinocertoroteiros.vendas ');
 
   // Mapear primeiro as que já existem
-  const existingSales = new Set(
-    (await prisma.sale.findMany({ select: { saleNumber: true } })).map((s) => s.saleNumber)
+  const existingSalesMap = new Map(
+    (await prisma.sale.findMany({ select: { id: true, saleNumber: true, status: true } })).map((s) => [s.saleNumber, s])
   );
 
   const salesToInsert: any[] = [];
+  const salesToUpdateStatus: { id: string; status: any }[] = [];
   const vendaMondeToDbMap = new Map<string, any>();
 
   for (const parts of vendasData.rows) {
@@ -315,15 +316,16 @@ async function main() {
 
     const situacao = cleanVal(parts[vendasData.colIdx['situacao']]) || 'CONFIRMADA';
     let status: any = 'CONFIRMADA';
-    if (situacao.includes('CANCEL') || situacao.includes('Cancel')) status = 'CANCELADA';
-    else if (situacao.includes('ORCA') || situacao.includes('Orça')) status = 'ORCAMENTO';
+    if (situacao === 'C' || situacao.includes('CANCEL') || situacao.includes('Cancel')) status = 'CANCELADA';
+    else if (situacao === 'A' || situacao.includes('ORCA') || situacao.includes('Orça')) status = 'ORCAMENTO';
 
     const obs = cleanVal(parts[vendasData.colIdx['observacoes']]);
     const obsFin = cleanVal(parts[vendasData.colIdx['obs_financeiro']]);
 
     vendaMondeToDbMap.set(vId, num);
 
-    if (!existingSales.has(num)) {
+    const existing = existingSalesMap.get(num);
+    if (!existing) {
       salesToInsert.push({
         mondeId: vId,
         saleNumber: num,
@@ -341,6 +343,8 @@ async function main() {
         notes: obs,
         financialNotes: obsFin,
       });
+    } else if (existing.status !== status) {
+      salesToUpdateStatus.push({ id: existing.id, status });
     }
   }
 
@@ -355,6 +359,17 @@ async function main() {
       process.stdout.write(`   Inseridas ${Math.min(i + 500, salesToInsert.length)} de ${salesToInsert.length} vendas\r`);
     }
     console.log(`\n✅ Novas Vendas inseridas com sucesso!`);
+  }
+
+  if (salesToUpdateStatus.length > 0) {
+    console.log(`🔄 Atualizando status de ${salesToUpdateStatus.length} vendas existentes...`);
+    for (const item of salesToUpdateStatus) {
+      await prisma.sale.update({
+        where: { id: item.id },
+        data: { status: item.status },
+      });
+    }
+    console.log(`✅ Status de vendas atualizados com sucesso!`);
   }
   const allSalesDb = await prisma.sale.findMany({ select: { id: true, mondeId: true, saleNumber: true } });
   const saleMap = new Map(allSalesDb.filter((s) => s.mondeId).map((s) => [s.mondeId!, s.id]));
@@ -425,15 +440,21 @@ async function main() {
     });
   }
 
-  const existingItemsCount = await prisma.saleItem.count();
-  if (existingItemsCount === 0 && saleItems.length > 0) {
-    console.log(`💾 Inserindo ${saleItems.length} Itens de Vendas...`);
-    for (let i = 0; i < saleItems.length; i += 1000) {
-      const chunk = saleItems.slice(i, i + 1000);
+  const salesWithItems = new Set(
+    (await prisma.saleItem.groupBy({ by: ['saleId'] })).map((g) => g.saleId)
+  );
+  const itemsToInsert = saleItems.filter((item) => !salesWithItems.has(item.saleId));
+
+  if (itemsToInsert.length > 0) {
+    console.log(`💾 Inserindo ${itemsToInsert.length} novos Itens de Vendas...`);
+    for (let i = 0; i < itemsToInsert.length; i += 1000) {
+      const chunk = itemsToInsert.slice(i, i + 1000);
       await prisma.saleItem.createMany({ data: chunk });
-      process.stdout.write(`   Inseridos ${Math.min(i + 1000, saleItems.length)} de ${saleItems.length} itens\r`);
+      process.stdout.write(`   Inseridos ${Math.min(i + 1000, itemsToInsert.length)} de ${itemsToInsert.length} itens\r`);
     }
-    console.log(`\n✅ Itens de Vendas inseridos!`);
+    console.log(`\n✅ Novos Itens de Vendas inseridos!`);
+  } else {
+    console.log(`ℹ️ Nenhum novo item de venda a inserir.`);
   }
   const totalItems = await prisma.saleItem.count();
   console.log(`✅ Total de Itens de Venda registrados: ${totalItems}`);
@@ -470,16 +491,15 @@ async function main() {
     }
   }
 
-  const existingPassCount = await prisma.salePassenger.count();
-  if (existingPassCount === 0 && salePassengersMap.size > 0) {
-    const passengersToInsert = Array.from(salePassengersMap.values());
-    console.log(`💾 Inserindo ${passengersToInsert.length} vínculos de Passageiros em Vendas...`);
+  const passengersToInsert = Array.from(salePassengersMap.values());
+  if (passengersToInsert.length > 0) {
+    console.log(`💾 Inserindo vínculos de Passageiros em Vendas (${passengersToInsert.length} registros)...`);
     for (let i = 0; i < passengersToInsert.length; i += 1000) {
       const chunk = passengersToInsert.slice(i, i + 1000);
       await prisma.salePassenger.createMany({ data: chunk, skipDuplicates: true });
-      process.stdout.write(`   Inseridos ${Math.min(i + 1000, passengersToInsert.length)} de ${passengersToInsert.length} passageiros\r`);
+      process.stdout.write(`   Processados ${Math.min(i + 1000, passengersToInsert.length)} de ${passengersToInsert.length} passageiros\r`);
     }
-    console.log(`\n✅ Passageiros vinculados às Vendas!`);
+    console.log(`\n✅ Passageiros vinculados às Vendas com sucesso!`);
   }
   const totalPass = await prisma.salePassenger.count();
   console.log(`✅ Total de vínculos de Passageiros: ${totalPass}`);
@@ -527,9 +547,8 @@ async function main() {
     }
   }
 
-  const existingTaskCount = await prisma.task.count();
-  if (existingTaskCount === 0 && tasksToInsert.length > 0) {
-    console.log(`💾 Inserindo ${tasksToInsert.length} Tarefas de CRM...`);
+  if (tasksToInsert.length > 0) {
+    console.log(`💾 Inserindo Tarefas de CRM (${tasksToInsert.length} registros)...`);
     await prisma.task.createMany({ data: tasksToInsert, skipDuplicates: true });
     console.log(`✅ Tarefas de CRM inseridas com sucesso!`);
   }

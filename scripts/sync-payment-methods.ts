@@ -17,7 +17,7 @@ function findPgRestore(): string {
 
 const pgRestore = findPgRestore();
 const dumpDir = path.join(process.cwd(), 'data');
-const dumpFiles = fs.readdirSync(dumpDir).filter((f) => f.startsWith('database_') && f.endsWith('.dump'));
+const dumpFiles = fs.readdirSync(dumpDir).filter((f) => f.startsWith('database_') && f.endsWith('.dump')).sort();
 const dumpPath = path.join(dumpDir, dumpFiles[dumpFiles.length - 1]);
 
 function cleanVal(v?: string): string | null {

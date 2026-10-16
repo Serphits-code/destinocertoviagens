@@ -62,10 +62,21 @@ export interface ExcursionAddon {
   assignedGuestIds: string[];
 }
 
+export interface RoomAgeTier {
+  id: string;
+  label?: string;
+  minAge: number;
+  maxAge: number;
+  cashPrice: number;
+  installmentExtra: number;
+  cardFee: number;
+}
+
 export interface RoomTypePricing {
   cashPrice: number;
   installmentExtra: number;
   cardFee: number;
+  ageTiers?: RoomAgeTier[];
 }
 
 export type ExcursionAddonsPayload =
