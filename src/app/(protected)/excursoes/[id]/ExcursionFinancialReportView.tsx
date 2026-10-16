@@ -32,6 +32,8 @@ import {
   getBlockUnitPriceForGuest,
   getAddonPriceForGuest,
   getRoomPricingForGuest,
+  parseNum,
+  getGuestAgeBracket,
 } from "@/lib/package-calc";
 
 interface ExcursionFinancialReportViewProps {
@@ -90,23 +92,69 @@ export function ExcursionFinancialReportView({
     return guests.map((g) => {
       const age = getGuestAge(g, periodStart);
 
-      // Discriminação dos blocos de acordo com a faixa etária correspondente
-      const blockBreakdown = blocks.map((b) => {
-        const pricing = getBlockUnitPriceForGuest(b, g, periodStart, slots || 20);
-        return {
-          blockId: b.id,
-          blockTitle: b.title,
-          category: b.categoryId,
-          cost: pricing.unitCost,
-          tierLabel: pricing.matchedTierLabel,
-        };
-      });
-
-      const basePackageCost = blockBreakdown.reduce((sum, b) => sum + b.cost, 0);
-
-      // Encontrar quarto do hóspede
+      // Encontrar quarto e hotel do hóspede
       const guestRoom = rooms.find((r) => r.hospedes?.some((gItem) => gItem.id === g.id));
       const roomType = guestRoom?.tipo || "Duplo";
+      const roomBlockId = guestRoom?.blockId;
+      const hospedagemBlocks = blocks.filter((b) => b.categoryId === "hospedagem");
+
+      // Discriminação dos blocos de acordo com a faixa etária e alocação de hospedagem
+      const blockBreakdown: {
+        blockId: string;
+        blockTitle: string;
+        category: string;
+        cost: number;
+        tierLabel: string;
+      }[] = [];
+
+      for (const b of blocks) {
+        if (b.categoryId === "hospedagem") {
+          if (hospedagemBlocks.length > 1) {
+            // Se o passageiro está alocado em um quarto de hotel específico, calcula APENAS esse hotel!
+            if (roomBlockId && b.id !== roomBlockId) {
+              continue;
+            }
+            if (!roomBlockId && b.id !== hospedagemBlocks[0].id) {
+              continue;
+            }
+          }
+
+          let hotelCost = getBlockUnitPriceForGuest(b, g, periodStart, slots || 20).unitCost;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const bRooms = (b.data as any)?.rooms;
+          if (Array.isArray(bRooms)) {
+            const matchedRoom = bRooms.find(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (hr: any) => hr.tipo?.trim().toLowerCase() === roomType.trim().toLowerCase()
+            );
+            if (matchedRoom && parseNum(matchedRoom.porPessoa) > 0) {
+              const ageBracket = getGuestAgeBracket(g, periodStart);
+              hotelCost = ageBracket === "bebe" ? 0 : parseNum(matchedRoom.porPessoa);
+            }
+          }
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const hotelName = (b.data as any)?.hotel || b.title || "Hospedagem";
+          blockBreakdown.push({
+            blockId: b.id,
+            blockTitle: (b.data as any)?.hotel ? `Hospedagem (${(b.data as any).hotel})` : hotelName,
+            category: b.categoryId,
+            cost: hotelCost,
+            tierLabel: (b.data as any)?.hotel || "Hospedagem",
+          });
+        } else {
+          const pricing = getBlockUnitPriceForGuest(b, g, periodStart, slots || 20);
+          blockBreakdown.push({
+            blockId: b.id,
+            blockTitle: b.title,
+            category: b.categoryId,
+            cost: pricing.unitCost,
+            tierLabel: pricing.matchedTierLabel,
+          });
+        }
+      }
+
+      const basePackageCost = blockBreakdown.reduce((sum, b) => sum + b.cost, 0);
       const paymentMode: "vista" | "prazo" = (guestPaymentModes && guestPaymentModes[g.id]) || "vista";
 
       // Margem de lucro aplicada da agência e precificação do quarto por idade

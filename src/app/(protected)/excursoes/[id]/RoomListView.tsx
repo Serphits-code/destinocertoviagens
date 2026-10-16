@@ -61,6 +61,8 @@ export interface RoomEntry {
   numero: string;
   tipo: string; // "Single", "Duplo", "Triplo"...
   hospedes: RoomGuest[];
+  blockId?: string;
+  hotelName?: string;
 }
 
 interface HospedagemRoom {

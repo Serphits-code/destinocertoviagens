@@ -484,7 +484,13 @@ export function PackageEditor({
   );
   const rooms: RoomEntry[] = useMemo(() => {
     return hospedagemBlocks.flatMap((b) =>
-      Array.isArray(b.data?.roomList) ? (b.data.roomList as RoomEntry[]) : []
+      Array.isArray(b.data?.roomList)
+        ? (b.data.roomList as RoomEntry[]).map((r) => ({
+            ...r,
+            blockId: b.id,
+            hotelName: b.data?.hotel || b.title || "Hospedagem",
+          }))
+        : []
     );
   }, [hospedagemBlocks]);
 

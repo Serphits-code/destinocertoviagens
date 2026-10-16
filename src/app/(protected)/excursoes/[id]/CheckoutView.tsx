@@ -102,6 +102,46 @@ export function CheckoutView({
 
   // 1. Custo Base do Adulto (sempre a referência de cálculo)
   const adultBaseCost = useMemo(() => {
+    const hospedagemBlocks = blocks.filter((b) => b.categoryId === "hospedagem");
+    if (hospedagemBlocks.length > 1) {
+      const otherBlocksCost = blocks
+        .filter((b) => b.categoryId !== "hospedagem")
+        .reduce((sum, b) => sum + getBlockUnitPriceForTier(b, "adulto", slots || 20), 0);
+
+      const totalHotelCost = hospedagemBlocks.reduce((sum, b) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const d = (b.data || {}) as any;
+        const netTotal = parseNum(d.valorNetTotal ?? d.valorNet);
+        const netUnit = parseNum(d.valorNetUnitario);
+        const totalReserva = parseNum(d.totalReserva);
+        let sumRooms = 0;
+        const dDiarias = parseNum(d.diarias) || 1;
+        if (Array.isArray(d.rooms)) {
+          for (const r of d.rooms) {
+            const totPer = parseNum(r.totalPeriodo);
+            const totQ = parseNum(r.totalQuarto);
+            const diaria = parseNum(r.diaria);
+            const qtd = parseNum(r.qtd) || 1;
+            if (totPer > 0) sumRooms += totPer;
+            else if (totQ > 0) sumRooms += totQ * qtd;
+            else if (diaria > 0) sumRooms += diaria * dDiarias * qtd;
+          }
+        }
+        const bCost =
+          netTotal > 0
+            ? netTotal
+            : totalReserva > 0
+            ? totalReserva
+            : sumRooms > 0
+            ? sumRooms
+            : netUnit * (parseNum(d.vagas) || slots || 20);
+        return sum + bCost;
+      }, 0);
+
+      const avgHotelPerPerson = slots > 0 ? totalHotelCost / slots : 0;
+      return otherBlocksCost + avgHotelPerPerson;
+    }
+
     const sum = blocks.reduce((acc, b) => {
       return acc + getBlockUnitPriceForTier(b, "adulto", slots || 20);
     }, 0);
@@ -116,13 +156,15 @@ export function CheckoutView({
   const detectedRoomTypes = useMemo(() => {
     const map = new Map<string, { key: string; label: string; count: number }>();
 
+    // 1. Tipos de quarto configurados nos cards de hospedagem com qtd > 0
     for (const b of blocks) {
       if (b.categoryId === "hospedagem") {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const hRooms = (b.data as any)?.rooms || [];
         for (const hr of hRooms) {
           const raw = hr?.tipo?.trim();
-          if (raw) {
+          const qtd = parseInt(hr?.qtd) || 0;
+          if (raw && qtd > 0) {
             const key = raw.toLowerCase();
             if (!map.has(key)) {
               map.set(key, { key, label: raw, count: 0 });
@@ -132,6 +174,7 @@ export function CheckoutView({
       }
     }
 
+    // 2. Conta passageiros alocados nos quartos (só inclui tipos que têm passageiros alocados)
     for (const r of rooms) {
       const raw = r?.tipo?.trim();
       if (raw) {
@@ -140,7 +183,7 @@ export function CheckoutView({
         const existing = map.get(key);
         if (existing) {
           existing.count += guestCount;
-        } else {
+        } else if (guestCount > 0) {
           map.set(key, { key, label: raw, count: guestCount });
         }
       }
@@ -155,12 +198,17 @@ export function CheckoutView({
 
   // Mapa de quarto por hóspede
   const guestRoomMap = useMemo(() => {
-    const map: Record<string, { roomNumber: string; roomType: string }> = {};
+    const map: Record<
+      string,
+      { roomNumber: string; roomType: string; blockId?: string; hotelName?: string }
+    > = {};
     for (const r of rooms) {
-      for (const g of r.hospedes) {
+      for (const g of r.hospedes || []) {
         map[g.id] = {
           roomNumber: r.numero || "Quarto",
           roomType: r.tipo || "Duplo",
+          blockId: r.blockId,
+          hotelName: r.hotelName,
         };
       }
     }
@@ -328,16 +376,55 @@ export function CheckoutView({
     );
     const paymentMode: "vista" | "prazo" = guestPaymentModes[guest.id] || "vista";
 
-    // Valores discriminados dos blocos para a idade deste hóspede
-    const blockBreakdown = blocks.map((b) => {
-      const unitCost = getBlockUnitPriceForTier(b, ageBracket, slots || 20);
-      return {
-        id: b.id,
-        title: b.title || "Item do Pacote",
-        categoryId: b.categoryId,
-        cost: unitCost,
-      };
-    });
+    // Valores discriminados dos blocos para a idade deste hóspede (respeitando o quarto e hotel alocado)
+    const hospedagemBlocks = blocks.filter((b) => b.categoryId === "hospedagem");
+    const blockBreakdown: { id: string; title: string; categoryId: string; cost: number }[] = [];
+
+    for (const b of blocks) {
+      if (b.categoryId === "hospedagem") {
+        if (hospedagemBlocks.length > 1) {
+          // Se o passageiro está alocado em um quarto de hotel específico, calcula APENAS esse hotel!
+          if (guestRoom?.blockId && b.id !== guestRoom.blockId) {
+            continue;
+          }
+          // Se não estiver alocado ainda, usa apenas a primeira hospedagem como referência para não duplicar
+          if (!guestRoom?.blockId && b.id !== hospedagemBlocks[0].id) {
+            continue;
+          }
+        }
+
+        // Custo específico do quarto do hóspede na hospedagem alocada
+        let hotelCost = getBlockUnitPriceForTier(b, ageBracket, slots || 20);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const bRooms = (b.data as any)?.rooms;
+        if (Array.isArray(bRooms)) {
+          const matchedRoom = bRooms.find(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (hr: any) => hr.tipo?.trim().toLowerCase() === roomType.trim().toLowerCase()
+          );
+          if (matchedRoom && parseNum(matchedRoom.porPessoa) > 0) {
+            hotelCost = ageBracket === "bebe" ? 0 : parseNum(matchedRoom.porPessoa);
+          }
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const hotelName = (b.data as any)?.hotel || b.title || "Hospedagem";
+        blockBreakdown.push({
+          id: b.id,
+          title: (b.data as any)?.hotel ? `Hospedagem (${(b.data as any).hotel})` : hotelName,
+          categoryId: b.categoryId,
+          cost: hotelCost,
+        });
+      } else {
+        const unitCost = getBlockUnitPriceForTier(b, ageBracket, slots || 20);
+        blockBreakdown.push({
+          id: b.id,
+          title: b.title || "Item do Pacote",
+          categoryId: b.categoryId,
+          cost: unitCost,
+        });
+      }
+    }
 
     const guestBaseCost = blockBreakdown.reduce((sum, item) => sum + item.cost, 0);
 

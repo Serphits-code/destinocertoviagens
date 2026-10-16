@@ -532,11 +532,28 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
   const addRow = (listKey: string, template: Record<string, unknown>) =>
     onUpdate({ ...d, [listKey]: [...(d[listKey] ?? []), template] });
 
-  const removeRow = (listKey: string, idx: number) =>
+  const removeRow = (listKey: string, idx: number) => {
+    const nextList = (d[listKey] ?? []).filter((_: unknown, i: number) => i !== idx);
+    const patch: Record<string, unknown> = { [listKey]: nextList };
+
+    if (listKey === "rooms" && Array.isArray(d.roomList)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const remainingTypes = new Set(nextList.map((r: any) => r.tipo?.trim().toLowerCase()));
+      // Limpa do roomList quartos vazios cujos tipos foram removidos do card
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cleanedRoomList = d.roomList.filter((r: any) => {
+        const isConfigured = remainingTypes.has(r.tipo?.trim().toLowerCase());
+        const hasGuests = (r.hospedes || []).length > 0;
+        return isConfigured || hasGuests;
+      });
+      patch.roomList = cleanedRoomList;
+    }
+
     onUpdate({
       ...d,
-      [listKey]: (d[listKey] ?? []).filter((_: unknown, i: number) => i !== idx),
+      ...patch,
     });
+  };
 
   switch (block.categoryId) {
     // ---- Itens Inclusos ----
