@@ -40,7 +40,13 @@ import {
 } from "lucide-react";
 import type { EditorBlock, BlockCategoryId, BlockData } from "@/lib/editor-types";
 import type { ItineraryItem } from "@/lib/actions/itinerary";
-import type { ExcursionAddon, AddonGuestPayment, InterestedLead, RoomTypePricing } from "@/lib/actions/addons";
+import type {
+  ExcursionAddon,
+  AddonGuestPayment,
+  InterestedLead,
+  RoomTypePricing,
+  CustomGuestPayment,
+} from "@/lib/actions/addons";
 import {
   updateExcursionAddons,
   updateExcursionProfitMargin,
@@ -94,7 +100,8 @@ interface PackageEditorProps {
   initialGuestPayments?: Record<string, AddonGuestPayment>;
   initialInterestedLeads?: InterestedLead[];
   initialRoomPricing?: Record<string, RoomTypePricing>;
-  initialGuestPaymentModes?: Record<string, "vista" | "prazo">;
+  initialGuestPaymentModes?: Record<string, "vista" | "prazo" | "personalizado">;
+  initialGuestCustomPayments?: Record<string, CustomGuestPayment>;
   initialProfitMargin?: number;
   initialCustomProfitAmount?: number | null;
   initialCustomPackagePrice?: number | null;
@@ -126,6 +133,7 @@ export function PackageEditor({
   initialInterestedLeads = [],
   initialRoomPricing = {},
   initialGuestPaymentModes = {},
+  initialGuestCustomPayments = {},
   initialProfitMargin = 0,
   initialCustomProfitAmount = null,
   initialCustomPackagePrice = null,
@@ -156,8 +164,11 @@ export function PackageEditor({
   const [roomPricing, setRoomPricing] = useState<Record<string, RoomTypePricing>>(
     initialRoomPricing || {}
   );
-  const [guestPaymentModes, setGuestPaymentModes] = useState<Record<string, "vista" | "prazo">>(
+  const [guestPaymentModes, setGuestPaymentModes] = useState<Record<string, "vista" | "prazo" | "personalizado">>(
     initialGuestPaymentModes || {}
+  );
+  const [guestCustomPayments, setGuestCustomPayments] = useState<Record<string, CustomGuestPayment>>(
+    initialGuestCustomPayments || {}
   );
   const [profitMargin, setProfitMargin] = useState<number>(initialProfitMargin || 0);
   const [customProfitAmount, setCustomProfitAmount] = useState<number | null>(initialCustomProfitAmount ?? null);
@@ -454,11 +465,13 @@ export function PackageEditor({
   const handleUpdateCheckoutConfig = useCallback(
     (config: {
       roomPricing?: Record<string, RoomTypePricing>;
-      guestPaymentModes?: Record<string, "vista" | "prazo">;
+      guestPaymentModes?: Record<string, "vista" | "prazo" | "personalizado">;
+      guestCustomPayments?: Record<string, CustomGuestPayment>;
       profitMargin?: number;
     }) => {
       if (config.roomPricing) setRoomPricing(config.roomPricing);
       if (config.guestPaymentModes) setGuestPaymentModes(config.guestPaymentModes);
+      if (config.guestCustomPayments) setGuestCustomPayments(config.guestCustomPayments);
       if (config.profitMargin !== undefined) {
         setProfitMargin(config.profitMargin);
         broadcastMutation({ type: "profit_margin", profitMargin: config.profitMargin });
@@ -469,12 +482,13 @@ export function PackageEditor({
         await updateExcursionCheckoutConfig(excursionId, {
           roomPricing: config.roomPricing ?? roomPricing,
           guestPaymentModes: config.guestPaymentModes ?? guestPaymentModes,
+          guestCustomPayments: config.guestCustomPayments ?? guestCustomPayments,
           profitMargin: config.profitMargin ?? profitMargin,
         });
         flashSaved();
       }, 400);
     },
-    [broadcastMutation, excursionId, flashSaved, guestPaymentModes, profitMargin, roomPricing]
+    [broadcastMutation, excursionId, flashSaved, guestCustomPayments, guestPaymentModes, profitMargin, roomPricing]
   );
 
   // Extrai quartos e passageiros de todas as hospedagens para vincular em Adicionais e Checkout
@@ -1004,6 +1018,7 @@ export function PackageEditor({
               periodStart={periodStart}
               roomPricing={roomPricing}
               guestPaymentModes={guestPaymentModes}
+              guestCustomPayments={guestCustomPayments}
               onUpdateCheckoutConfig={handleUpdateCheckoutConfig}
             />
           ) : view === "relatorio" ? (
@@ -1025,6 +1040,7 @@ export function PackageEditor({
               financialSummary={financialSummary}
               roomPricing={roomPricing}
               guestPaymentModes={guestPaymentModes}
+              guestCustomPayments={guestCustomPayments}
             />
           ) : view === "interessados" ? (
             <InterestedLeadsView

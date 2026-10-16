@@ -79,6 +79,28 @@ export interface RoomTypePricing {
   ageTiers?: RoomAgeTier[];
 }
 
+export type PaymentMethodType =
+  | "Boleto"
+  | "Dinheiro"
+  | "Cartão de Crédito"
+  | "Cartão de Débito"
+  | "PIX"
+  | "Transferência";
+
+export interface CustomPaymentMethodItem {
+  id: string;
+  metodo: PaymentMethodType;
+  valor: number | string;
+  dataVencimento?: string;
+  descricao?: string;
+}
+
+export interface CustomGuestPayment {
+  valorTotal?: number | string;
+  taxaCartao?: number | string;
+  metodos: CustomPaymentMethodItem[];
+}
+
 export type ExcursionAddonsPayload =
   | ExcursionAddon[]
   | {
@@ -86,7 +108,8 @@ export type ExcursionAddonsPayload =
       guestPayments?: Record<string, AddonGuestPayment>;
       interestedLeads?: InterestedLead[];
       roomPricing?: Record<string, RoomTypePricing>;
-      guestPaymentModes?: Record<string, "vista" | "prazo">;
+      guestPaymentModes?: Record<string, "vista" | "prazo" | "personalizado">;
+      guestCustomPayments?: Record<string, CustomGuestPayment>;
     };
 
 export async function updateExcursionAddons(
@@ -104,6 +127,7 @@ export async function updateExcursionAddons(
   const existingLeads = Array.isArray(raw) ? [] : raw.interestedLeads || [];
   const existingRoomPricing = Array.isArray(raw) ? {} : raw.roomPricing || {};
   const existingPaymentModes = Array.isArray(raw) ? {} : raw.guestPaymentModes || {};
+  const existingCustomPayments = Array.isArray(raw) ? {} : raw.guestCustomPayments || {};
 
   const finalPayload = Array.isArray(payload)
     ? {
@@ -111,12 +135,14 @@ export async function updateExcursionAddons(
         interestedLeads: existingLeads,
         roomPricing: existingRoomPricing,
         guestPaymentModes: existingPaymentModes,
+        guestCustomPayments: existingCustomPayments,
       }
     : {
         ...payload,
         interestedLeads: payload.interestedLeads ?? existingLeads,
         roomPricing: payload.roomPricing ?? existingRoomPricing,
         guestPaymentModes: payload.guestPaymentModes ?? existingPaymentModes,
+        guestCustomPayments: payload.guestCustomPayments ?? existingCustomPayments,
       };
 
   await db.excursion.update({
@@ -134,7 +160,8 @@ export async function updateExcursionCheckoutConfig(
   excursionId: string,
   data: {
     roomPricing?: Record<string, RoomTypePricing>;
-    guestPaymentModes?: Record<string, "vista" | "prazo">;
+    guestPaymentModes?: Record<string, "vista" | "prazo" | "personalizado">;
+    guestCustomPayments?: Record<string, CustomGuestPayment>;
     profitMargin?: number;
   }
 ) {
@@ -151,6 +178,7 @@ export async function updateExcursionCheckoutConfig(
   const currentLeads = Array.isArray(raw) ? [] : raw.interestedLeads || [];
   const currentRoomPricing = Array.isArray(raw) ? {} : raw.roomPricing || {};
   const currentModes = Array.isArray(raw) ? {} : raw.guestPaymentModes || {};
+  const currentCustomPayments = Array.isArray(raw) ? {} : raw.guestCustomPayments || {};
 
   const payload = {
     addons: currentAddons,
@@ -158,6 +186,7 @@ export async function updateExcursionCheckoutConfig(
     interestedLeads: currentLeads,
     roomPricing: data.roomPricing ?? currentRoomPricing,
     guestPaymentModes: data.guestPaymentModes ?? currentModes,
+    guestCustomPayments: data.guestCustomPayments ?? currentCustomPayments,
   };
 
   const updateData: any = {

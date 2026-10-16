@@ -24,9 +24,10 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import type { ExcursionAddon, RoomTypePricing, RoomAgeTier } from "@/lib/actions/addons";
+import type { ExcursionAddon, RoomTypePricing, RoomAgeTier, CustomGuestPayment } from "@/lib/actions/addons";
 import type { EditorBlock } from "@/lib/editor-types";
 import type { RoomGuest, RoomEntry } from "./RoomListView";
+import { CustomPaymentModal } from "./CustomPaymentModal";
 import {
   getGuestAgeBracket,
   getGuestAge,
@@ -48,10 +49,12 @@ interface CheckoutViewProps {
   isSimulationActive?: boolean;
   periodStart?: string | null;
   roomPricing?: Record<string, RoomTypePricing>;
-  guestPaymentModes?: Record<string, "vista" | "prazo">;
+  guestPaymentModes?: Record<string, "vista" | "prazo" | "personalizado">;
+  guestCustomPayments?: Record<string, CustomGuestPayment>;
   onUpdateCheckoutConfig?: (config: {
     roomPricing?: Record<string, RoomTypePricing>;
-    guestPaymentModes?: Record<string, "vista" | "prazo">;
+    guestPaymentModes?: Record<string, "vista" | "prazo" | "personalizado">;
+    guestCustomPayments?: Record<string, CustomGuestPayment>;
     profitMargin?: number;
   }) => void;
 }
@@ -94,11 +97,13 @@ export function CheckoutView({
   periodStart = null,
   roomPricing = {},
   guestPaymentModes = {},
+  guestCustomPayments = {},
   onUpdateCheckoutConfig,
 }: CheckoutViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [tempMargin, setTempMargin] = useState(String(profitMargin || 0));
   const [editingRoomKeyForAgeTiers, setEditingRoomKeyForAgeTiers] = useState<string | null>(null);
+  const [customPaymentModalGuestId, setCustomPaymentModalGuestId] = useState<string | null>(null);
 
   // 1. Custo Base do Adulto (sempre a referência de cálculo)
   const adultBaseCost = useMemo(() => {
@@ -353,12 +358,42 @@ export function CheckoutView({
     handleRoomPriceChange(roomKey, "cashPrice", rounded);
   };
 
-  const handleTogglePaymentMode = (guestId: string, mode: "vista" | "prazo") => {
+  const handleTogglePaymentMode = (guestId: string, mode: "vista" | "prazo" | "personalizado") => {
     const nextModes = {
       ...guestPaymentModes,
       [guestId]: mode,
     };
     onUpdateCheckoutConfig?.({ guestPaymentModes: nextModes });
+  };
+
+  const handleSaveCustomPayment = (guestId: string, customPayment: CustomGuestPayment) => {
+    const nextCustom = {
+      ...guestCustomPayments,
+      [guestId]: customPayment,
+    };
+    const nextModes = {
+      ...guestPaymentModes,
+      [guestId]: "personalizado" as const,
+    };
+    onUpdateCheckoutConfig?.({
+      guestPaymentModes: nextModes,
+      guestCustomPayments: nextCustom,
+    });
+    setCustomPaymentModalGuestId(null);
+  };
+
+  const handleResetCustomPayment = (guestId: string) => {
+    const nextCustom = { ...guestCustomPayments };
+    delete nextCustom[guestId];
+    const nextModes = {
+      ...guestPaymentModes,
+      [guestId]: "vista" as const,
+    };
+    onUpdateCheckoutConfig?.({
+      guestPaymentModes: nextModes,
+      guestCustomPayments: nextCustom,
+    });
+    setCustomPaymentModalGuestId(null);
   };
 
   // 3. Cálculos individuais para cada passageiro
@@ -374,7 +409,8 @@ export function CheckoutView({
       guest.tipo,
       suggestedPriceAdult > 0 ? Math.round(suggestedPriceAdult) : Math.round(adultBaseCost)
     );
-    const paymentMode: "vista" | "prazo" = guestPaymentModes[guest.id] || "vista";
+    const paymentMode: "vista" | "prazo" | "personalizado" = guestPaymentModes[guest.id] || "vista";
+    const customPayment = guestCustomPayments[guest.id];
 
     // Valores discriminados dos blocos para a idade deste hóspede (respeitando o quarto e hotel alocado)
     const hospedagemBlocks = blocks.filter((b) => b.categoryId === "hospedagem");
@@ -428,20 +464,33 @@ export function CheckoutView({
 
     const guestBaseCost = blockBreakdown.reduce((sum, item) => sum + item.cost, 0);
 
-    // Preço do pacote base (fixo por quarto, independentemente da faixa etária)
+    // Preço do pacote base (fixo por quarto, ou personalizado)
     const baseRoomCashPrice = pricing.cashPrice;
     const isPrazo = paymentMode === "prazo";
-    const guestPackagePrice = isPrazo
-      ? baseRoomCashPrice + pricing.installmentExtra
-      : baseRoomCashPrice;
+    const isPersonalizado = paymentMode === "personalizado";
 
-    // Custos efetivos: custos da idade + taxa de cartão se a prazo
-    const cardFeeApplied = isPrazo ? pricing.cardFee : 0;
+    let guestPackagePrice = baseRoomCashPrice;
+    let cardFeeApplied = 0;
+
+    if (isPersonalizado && customPayment) {
+      const customSum = (customPayment.metodos || []).reduce((sum, m) => sum + parseNum(m.valor), 0);
+      guestPackagePrice = parseNum(customPayment.valorTotal) > 0 ? parseNum(customPayment.valorTotal) : customSum;
+      cardFeeApplied = parseNum(customPayment.taxaCartao) || 0;
+    } else if (isPrazo) {
+      guestPackagePrice = baseRoomCashPrice + pricing.installmentExtra;
+      cardFeeApplied = pricing.cardFee;
+    } else {
+      guestPackagePrice = baseRoomCashPrice;
+      cardFeeApplied = 0;
+    }
+
+    // Custos efetivos: despesas dos blocos + taxa de cartão (se houver)
     const guestEffectiveCost = guestBaseCost + cardFeeApplied;
 
     // Lucro da agência:
     // À vista: Preço Quarto - Custos da Idade
     // A prazo: (Preço Quarto + Extra) - (Custos da Idade + Taxa Cartão)
+    // Personalizado: Preço Personalizado - (Custos da Idade + Taxa Cartão)
     const guestProfitTotal = guestPackagePrice - guestEffectiveCost;
     const extraPrazoLucro = isPrazo ? pricing.installmentExtra - pricing.cardFee : 0;
 
@@ -473,6 +522,7 @@ export function CheckoutView({
       roomType,
       pricing,
       paymentMode,
+      customPayment,
       blockBreakdown,
       guestBaseCost,
       cardFeeApplied,
@@ -853,6 +903,7 @@ export function CheckoutView({
               blockBreakdown,
               guestBaseCost,
               cardFeeApplied,
+              guestEffectiveCost,
               guestPackagePrice,
               guestProfitTotal,
               guestAddonsDetailed,
@@ -863,83 +914,174 @@ export function CheckoutView({
               guestProfitWithAddons,
             } = p;
 
-            const bracketLabel =
-              ageBracket === "bebe"
-                ? `Bebê / Colo ${guestAge !== null ? `(${guestAge}a)` : ""}`
-                : ageBracket === "crianca"
-                ? `Criança ${guestAge !== null ? `(${guestAge}a)` : ""}`
-                : `Adulto ${guestAge !== null ? `(${guestAge}a)` : ""}`;
+              const bracketLabel =
+                ageBracket === "bebe"
+                  ? `Bebê / Colo ${guestAge !== null ? `(${guestAge}a)` : ""}`
+                  : ageBracket === "crianca"
+                  ? `Criança ${guestAge !== null ? `(${guestAge}a)` : ""}`
+                  : `Adulto ${guestAge !== null ? `(${guestAge}a)` : ""}`;
 
-            const isPrazo = paymentMode === "prazo";
+              const isPrazo = paymentMode === "prazo";
+              const isPersonalizado = paymentMode === "personalizado";
+              const customPayment = p.customPayment;
 
-            return (
-              <motion.div
-                key={guest.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.02 }}
-                className="bg-surface rounded-2xl border border-border shadow-shadow-card p-5 space-y-4 hover:shadow-shadow-hover transition-all flex flex-col justify-between"
-              >
-                {/* Header do Passageiro */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
-                      <User size={18} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm text-text-title leading-snug">
-                        {guest.nome || "Hóspede sem nome"}
-                      </h4>
-                      <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5 flex-wrap">
-                        {guest.documento && <span>Doc: {guest.documento}</span>}
-                        <span>·</span>
-                        <span className="font-semibold text-text-title">{bracketLabel}</span>
+              return (
+                <motion.div
+                  key={guest.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.02 }}
+                  className={`bg-surface rounded-2xl border shadow-shadow-card p-5 space-y-4 hover:shadow-shadow-hover transition-all flex flex-col justify-between ${
+                    isPersonalizado ? "border-violet-500/40 ring-1 ring-violet-500/20" : "border-border"
+                  }`}
+                >
+                  {/* Header do Passageiro */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                        isPersonalizado ? "bg-violet-500/15 text-violet-600 dark:text-violet-400" : "bg-primary/10 text-primary"
+                      }`}>
+                        <User size={18} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-sm text-text-title leading-snug">
+                            {guest.nome || "Hóspede sem nome"}
+                          </h4>
+                          {isPersonalizado && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30">
+                              Personalizado
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5 flex-wrap">
+                          {guest.documento && <span>Doc: {guest.documento}</span>}
+                          <span>·</span>
+                          <span className="font-semibold text-text-title">{bracketLabel}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {guestRoom && (
-                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-surface-subtle border border-border text-text-muted shrink-0 flex items-center gap-1">
-                      <BedDouble size={12} className="text-primary" />
-                      <span>
-                        {guestRoom.roomNumber} ({guestRoom.roomType})
+                    {guestRoom && (
+                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-surface-subtle border border-border text-text-muted shrink-0 flex items-center gap-1">
+                        <BedDouble size={12} className={isPersonalizado ? "text-violet-500" : "text-primary"} />
+                        <span>
+                          {guestRoom.roomNumber} ({guestRoom.roomType})
+                        </span>
                       </span>
-                    </span>
-                  )}
-                </div>
-
-                {/* Seletor Toggle À Vista / A Prazo */}
-                <div className="flex items-center justify-between p-2 rounded-xl bg-surface-subtle/80 border border-border/80">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-text-title">
-                    <CreditCard size={14} className="text-primary" />
-                    <span>Pagamento:</span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-border">
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePaymentMode(guest.id, "vista")}
-                      className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                        !isPrazo
-                          ? "bg-primary text-white shadow-sm"
-                          : "text-text-muted hover:text-text-title"
-                      }`}
-                    >
-                      💵 À Vista ({fmt(pricing.cashPrice)})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePaymentMode(guest.id, "prazo")}
-                      className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                        isPrazo
-                          ? "bg-primary text-white shadow-sm"
-                          : "text-text-muted hover:text-text-title"
-                      }`}
-                    >
-                      💳 A Prazo ({fmt(pricing.cashPrice + pricing.installmentExtra)})
-                    </button>
+                  {/* Seletor Toggle À Vista / A Prazo / Personalizado */}
+                  <div className="space-y-2 p-2.5 rounded-xl bg-surface-subtle/80 border border-border/80">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-text-title">
+                        <CreditCard size={14} className="text-primary" />
+                        <span>Pagamento:</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-border flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePaymentMode(guest.id, "vista")}
+                          className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                            paymentMode === "vista"
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-text-muted hover:text-text-title"
+                          }`}
+                        >
+                          💵 À Vista ({fmt(pricing.cashPrice)})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePaymentMode(guest.id, "prazo")}
+                          className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                            paymentMode === "prazo"
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-text-muted hover:text-text-title"
+                          }`}
+                        >
+                          💳 A Prazo ({fmt(pricing.cashPrice + pricing.installmentExtra)})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (paymentMode !== "personalizado" && !customPayment) {
+                              setCustomPaymentModalGuestId(guest.id);
+                            } else {
+                              handleTogglePaymentMode(guest.id, "personalizado");
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            paymentMode === "personalizado"
+                              ? "bg-violet-600 text-white shadow-sm"
+                              : "text-text-muted hover:text-text-title hover:bg-violet-500/10"
+                          }`}
+                        >
+                          <Settings size={12} />
+                          <span>
+                            Personalizado
+                            {customPayment && parseNum(customPayment.valorTotal) > 0
+                              ? ` (${fmt(parseNum(customPayment.valorTotal))})`
+                              : ""}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          title="Configurar Pagamento Personalizado (Valor, Boletos, Cartão, Dinheiro...)"
+                          onClick={() => setCustomPaymentModalGuestId(guest.id)}
+                          className={`p-1 rounded-md text-xs transition-all cursor-pointer border ${
+                            isPersonalizado
+                              ? "bg-violet-500/20 text-violet-700 dark:text-violet-300 border-violet-500/40 hover:bg-violet-500/30"
+                              : "text-text-muted border-transparent hover:text-violet-600 hover:bg-violet-500/10"
+                          }`}
+                        >
+                          <Settings size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Breakdown das Formas de Pagamento Personalizadas quando ativo */}
+                    {isPersonalizado && customPayment && (
+                      <div className="pt-2 border-t border-border/60 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-violet-700 dark:text-violet-300 text-[11px] flex items-center gap-1">
+                            <Settings size={11} /> Composição de Pagamento ({customPayment.metodos?.length || 0}):
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCustomPaymentModalGuestId(guest.id)}
+                            className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <Settings size={11} /> Editar
+                          </button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {customPayment.metodos && customPayment.metodos.length > 0 ? (
+                            customPayment.metodos.map((m, mIdx) => (
+                              <span
+                                key={m.id || mIdx}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface border border-violet-500/30 text-[11px] font-medium text-text-title shadow-2xs"
+                              >
+                                <span className="text-violet-600 dark:text-violet-400 font-bold">{m.metodo}:</span>
+                                <span className="font-bold">{fmt(parseNum(m.valor))}</span>
+                                {m.dataVencimento && (
+                                  <span className="text-[10px] text-text-muted font-normal">
+                                    ({m.dataVencimento})
+                                  </span>
+                                )}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[11px] text-text-muted italic">
+                              Nenhuma forma de pagamento discriminada ainda.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
 
                 {/* Discriminação de TODOS os Blocos Individuais */}
                 <div className="space-y-2 pt-1 border-t border-border/70 text-xs">
@@ -974,11 +1116,11 @@ export function CheckoutView({
                       <span className="text-text-title">{fmt(guestBaseCost)}</span>
                     </div>
 
-                    {/* Taxa de Cartão se a prazo */}
-                    {isPrazo && pricing.cardFee > 0 && (
+                    {/* Taxa de Cartão / Operadora */}
+                    {cardFeeApplied > 0 && (
                       <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 font-semibold text-xs">
-                        <span>+ Taxa do Cartão (Custo Operadora)</span>
-                        <span>+{fmt(pricing.cardFee)}</span>
+                        <span>+ Taxa da Operadora / Cartão</span>
+                        <span>+{fmt(cardFeeApplied)}</span>
                       </div>
                     )}
 
@@ -988,9 +1130,17 @@ export function CheckoutView({
                     }`}>
                       <div>
                         <span>{guestProfitTotal >= 0 ? "+ Lucro Agência" : "Prejuízo Agência"}</span>
-                        {isPrazo && (
+                        {isPersonalizado ? (
+                          <span className="text-[10px] text-text-muted block font-normal">
+                            (Personalizado: {fmt(guestPackagePrice)} - Despesas: {fmt(guestEffectiveCost)})
+                          </span>
+                        ) : isPrazo ? (
                           <span className="text-[10px] text-text-muted block font-normal">
                             (Base: {(pricing.cashPrice - guestBaseCost) >= 0 ? "+" : ""}{fmt(pricing.cashPrice - guestBaseCost)} | Prazo líq: {(pricing.installmentExtra - pricing.cardFee) >= 0 ? "+" : ""}{fmt(pricing.installmentExtra - pricing.cardFee)})
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-text-muted block font-normal">
+                            (Receita: {fmt(guestPackagePrice)} - Custos: {fmt(guestBaseCost)})
                           </span>
                         )}
                       </div>
@@ -1001,23 +1151,44 @@ export function CheckoutView({
                   </div>
 
                   {/* Preço do Pacote Base */}
-                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-primary/5 border border-primary/20">
+                  <div className={`flex items-center justify-between py-1.5 px-3 rounded-lg ${
+                    isPersonalizado
+                      ? "bg-violet-500/10 border border-violet-500/30"
+                      : "bg-primary/5 border border-primary/20"
+                  }`}>
                     <div>
-                      <div className="flex items-center gap-1.5 text-primary font-bold text-xs flex-wrap">
-                        <Package size={13} />
-                        <span>Preço Pacote Base (Quarto {roomType})</span>
-                        {pricing.isAgeTierApplied && (
+                      <div className={`flex items-center gap-1.5 font-bold text-xs flex-wrap ${
+                        isPersonalizado ? "text-violet-600 dark:text-violet-400" : "text-primary"
+                      }`}>
+                        {isPersonalizado ? <Settings size={13} /> : <Package size={13} />}
+                        <span>
+                          {isPersonalizado
+                            ? `Preço Pacote Base (Personalizado - Quarto ${roomType})`
+                            : `Preço Pacote Base (Quarto ${roomType})`}
+                        </span>
+                        {isPersonalizado && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-700 dark:text-violet-300">
+                            Substitui quarto {roomType.toLowerCase()}
+                          </span>
+                        )}
+                        {!isPersonalizado && pricing.isAgeTierApplied && (
                           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 border border-primary/30 text-primary">
                             {pricing.matchedTierLabel}
                           </span>
                         )}
                       </div>
                       <span className="text-[10px] text-text-muted">
-                        {isPrazo ? "Valor a prazo configurado" : "Valor à vista configurado"}
-                        {pricing.isAgeTierApplied ? " (Tarifa diferenciada por idade)" : ""}
+                        {isPersonalizado
+                          ? `Valor personalizado definido (${customPayment?.metodos?.length || 0} forma(s) de pagamento)`
+                          : isPrazo
+                          ? "Valor a prazo configurado"
+                          : "Valor à vista configurado"}
+                        {!isPersonalizado && pricing.isAgeTierApplied ? " (Tarifa diferenciada por idade)" : ""}
                       </span>
                     </div>
-                    <span className="font-black text-primary text-base">
+                    <span className={`font-black text-base ${
+                      isPersonalizado ? "text-violet-600 dark:text-violet-400" : "text-primary"
+                    }`}>
                       {fmt(guestPackagePrice)}
                     </span>
                   </div>
@@ -1526,6 +1697,28 @@ export function CheckoutView({
           );
         })()}
       </AnimatePresence>
+
+      {/* 7. MODAL DE PAGAMENTO PERSONALIZADO */}
+      {customPaymentModalGuestId && (() => {
+        const pCalc = passengerCalculations.find((p) => p.guest.id === customPaymentModalGuestId);
+        if (!pCalc) return null;
+        return (
+          <CustomPaymentModal
+            open={true}
+            onClose={() => setCustomPaymentModalGuestId(null)}
+            passengerName={pCalc.guest.nome || "Hóspede"}
+            passengerDoc={pCalc.guest.documento}
+            passengerAgeBracket={pCalc.ageBracket}
+            roomType={pCalc.roomType}
+            defaultCashPrice={pCalc.pricing.cashPrice}
+            defaultPrazoPrice={pCalc.pricing.cashPrice + pCalc.pricing.installmentExtra}
+            guestBaseCost={pCalc.guestBaseCost}
+            initialData={guestCustomPayments[pCalc.guest.id]}
+            onSave={(data) => handleSaveCustomPayment(pCalc.guest.id, data)}
+            onResetToStandard={() => handleResetCustomPayment(pCalc.guest.id)}
+          />
+        );
+      })()}
     </div>
   );
 }

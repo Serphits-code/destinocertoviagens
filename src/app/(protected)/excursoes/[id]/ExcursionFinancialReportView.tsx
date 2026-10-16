@@ -24,7 +24,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import type { EditorBlock, PrazoPagamentoItem } from "@/lib/editor-types";
-import type { ExcursionAddon, AddonGuestPayment, RoomTypePricing } from "@/lib/actions/addons";
+import type { ExcursionAddon, AddonGuestPayment, RoomTypePricing, CustomGuestPayment } from "@/lib/actions/addons";
 import type { RoomGuest, RoomEntry } from "./RoomListView";
 import type { PackageFinancialSummary } from "@/lib/package-calc";
 import {
@@ -53,7 +53,8 @@ interface ExcursionFinancialReportViewProps {
   customPackagePrice?: number | null;
   financialSummary: PackageFinancialSummary;
   roomPricing?: Record<string, RoomTypePricing>;
-  guestPaymentModes?: Record<string, "vista" | "prazo">;
+  guestPaymentModes?: Record<string, "vista" | "prazo" | "personalizado">;
+  guestCustomPayments?: Record<string, CustomGuestPayment>;
 }
 
 export function ExcursionFinancialReportView({
@@ -71,6 +72,7 @@ export function ExcursionFinancialReportView({
   financialSummary,
   roomPricing,
   guestPaymentModes = {},
+  guestCustomPayments = {},
 }: ExcursionFinancialReportViewProps) {
   const [activeTab, setActiveTab] = useState<"dre" | "passageiros" | "fornecedores">("dre");
   const [searchTerm, setSearchTerm] = useState("");
@@ -155,7 +157,8 @@ export function ExcursionFinancialReportView({
       }
 
       const basePackageCost = blockBreakdown.reduce((sum, b) => sum + b.cost, 0);
-      const paymentMode: "vista" | "prazo" = (guestPaymentModes && guestPaymentModes[g.id]) || "vista";
+      const paymentMode: "vista" | "prazo" | "personalizado" = (guestPaymentModes && guestPaymentModes[g.id]) || "vista";
+      const customPayment = guestCustomPayments?.[g.id];
 
       // Margem de lucro aplicada da agência e precificação do quarto por idade
       const effectiveProfit = financialSummary.effectiveProfitPerPerson || 0;
@@ -171,10 +174,20 @@ export function ExcursionFinancialReportView({
       );
 
       const isPrazo = paymentMode === "prazo";
-      const packageFinalPrice = isPrazo
-        ? roomPricingResult.cashPrice + roomPricingResult.installmentExtra
-        : roomPricingResult.cashPrice;
-      const cardFeeApplied = isPrazo ? roomPricingResult.cardFee : 0;
+      const isPersonalizado = paymentMode === "personalizado";
+
+      let packageFinalPrice = roomPricingResult.cashPrice;
+      let cardFeeApplied = 0;
+
+      if (isPersonalizado && customPayment) {
+        const customSum = (customPayment.metodos || []).reduce((sum, m) => sum + parseNum(m.valor), 0);
+        packageFinalPrice = parseNum(customPayment.valorTotal) > 0 ? parseNum(customPayment.valorTotal) : customSum;
+        cardFeeApplied = parseNum(customPayment.taxaCartao) || 0;
+      } else if (isPrazo) {
+        packageFinalPrice = roomPricingResult.cashPrice + roomPricingResult.installmentExtra;
+        cardFeeApplied = roomPricingResult.cardFee;
+      }
+
       const agencyProfit = packageFinalPrice - basePackageCost - cardFeeApplied;
 
       // Adicionais contratados
@@ -216,6 +229,9 @@ export function ExcursionFinancialReportView({
         tipo: g.tipo,
         roomName: (g as unknown as { roomName?: string }).roomName || (guestRoom ? `Quarto ${guestRoom.numero} (${guestRoom.tipo})` : "Sem quarto"),
         roomMatchedTierLabel: roomPricingResult.matchedTierLabel,
+        paymentMode,
+        isPersonalizado,
+        customPayment,
         blockBreakdown,
         basePackageCost,
         agencyProfit,
@@ -231,7 +247,7 @@ export function ExcursionFinancialReportView({
         status: isPaid ? "pago" : isPartial ? "parcial" : "pendente",
       };
     });
-  }, [guests, blocks, rooms, periodStart, slots, financialSummary, addons, guestPayments, roomPricing, guestPaymentModes]);
+  }, [guests, blocks, rooms, periodStart, slots, financialSummary, addons, guestPayments, roomPricing, guestPaymentModes, guestCustomPayments]);
 
   // 2. TOTAIS DE RECEITAS E CUSTOS
   const summary = useMemo(() => {
@@ -937,7 +953,12 @@ export function ExcursionFinancialReportView({
                         </td>
 
                         <td className="py-3 px-3 text-right font-mono font-bold text-text-title">
-                          {fmt(p.packageFinalPrice)}
+                          <div>{fmt(p.packageFinalPrice)}</div>
+                          {p.isPersonalizado && (
+                            <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 block font-sans">
+                              Personalizado
+                            </span>
+                          )}
                         </td>
 
                         <td className="py-3 px-3 text-right font-mono text-text-body">
