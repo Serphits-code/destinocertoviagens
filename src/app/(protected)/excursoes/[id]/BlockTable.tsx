@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus, Trash2, Plane, DollarSign, Calendar, Users, ChevronDown, ChevronUp } from "lucide-react";
 import type { EditorBlock, BlockData, RowStatus, BlockAgePricing, CustomAgeTier, PrazoPagamentoItem } from "@/lib/editor-types";
 import { getBlockBaseUnitCost, parseNum, formatBRL } from "@/lib/package-calc";
+import { AereoFlightSection } from "./AereoFlightSection";
 
 interface BlockTableProps {
   block: EditorBlock;
@@ -396,15 +397,25 @@ function BlockFinalPaymentDeadlines({
     updateList(next);
   };
 
+  const handlePagoChange = (idx: number, pagoVal: boolean) => {
+    const next = [...rawList];
+    next[idx] = {
+      ...next[idx],
+      pago: pagoVal,
+      dataPagamento: pagoVal ? new Date().toISOString() : undefined,
+    };
+    updateList(next);
+  };
+
   const handleAddPrazo = () => {
     const nextId = "prazo-" + Math.random().toString(36).substring(2, 9);
-    const next = [...rawList, { id: nextId, data: "", valor: "" }];
+    const next = [...rawList, { id: nextId, data: "", valor: "", pago: false }];
     updateList(next);
   };
 
   const handleRemovePrazo = (idx: number) => {
     if (rawList.length <= 1) {
-      updateList([{ id: "prazo-1", data: "", valor: "" }]);
+      updateList([{ id: "prazo-1", data: "", valor: "", pago: false }]);
       return;
     }
     const next = rawList.filter((_, i) => i !== idx);
@@ -442,7 +453,9 @@ function BlockFinalPaymentDeadlines({
           <div
             key={item.id || idx}
             className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2 rounded-lg border transition-all ${
-              isDivided
+              item.pago
+                ? "bg-emerald-500/10 border-emerald-500/30"
+                : isDivided
                 ? "bg-surface border-border shadow-xs"
                 : "bg-surface/60 border-border/80"
             }`}
@@ -478,6 +491,18 @@ function BlockFinalPaymentDeadlines({
                 }}
               />
             </div>
+
+            <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface text-xs font-semibold cursor-pointer shrink-0 transition-colors select-none hover:bg-surface-subtle">
+              <input
+                type="checkbox"
+                checked={!!item.pago}
+                onChange={(e) => handlePagoChange(idx, e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer"
+              />
+              <span className={item.pago ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-text-muted"}>
+                {item.pago ? "Pago" : "Pagar"}
+              </span>
+            </label>
 
             {isDivided && (
               <button
@@ -1030,50 +1055,11 @@ export function BlockTable({ block, onUpdate }: BlockTableProps) {
             </label>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr>
-                  {["Cia", "Voo", "Origem", "Saída", "Chegada", "Destino", "Tipo", "Status", ""].map((h) => (
-                    <th key={h} className={`${thCls} text-left`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(d.flights ?? []).map(
-                  (
-                    f: { cia: string; voo: string; origem: string; saida: string; chegada: string; destino: string; tipo: string; status: RowStatus },
-                    i: number
-                  ) => (
-                    <tr key={i} className={f.status === "CANCELADO" ? "opacity-60 bg-surface-subtle/30 transition-opacity" : "transition-opacity"}>
-                      {(["cia", "voo", "origem", "saida", "chegada", "destino"] as const).map((k) => (
-                        <td key={k} className={tdCls}>
-                          <input className={inputCls} value={f[k]} onChange={(e) => setRow("flights", i, k, e.target.value)} />
-                        </td>
-                      ))}
-                      <td className={tdCls}>
-                        <input className={inputCls} value={f.tipo} onChange={(e) => setRow("flights", i, "tipo", e.target.value)} />
-                      </td>
-                      <td className={`${tdCls} text-center`}>
-                        <StatusSelect value={f.status} onChange={(v) => setRow("flights", i, "status", v)} />
-                      </td>
-                      <td className={`${tdCls} text-center`}>
-                        <DeleteRowBtn onClick={() => removeRow("flights", i)} />
-                      </td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
-          <button
-            onClick={() =>
-              addRow("flights", { cia: "AZUL", voo: "", origem: "", saida: "", chegada: "", destino: "", tipo: "Ida", status: "CONFIRMADO" })
-            }
-            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-strong font-medium transition-colors cursor-pointer"
-          >
-            <Plus size={14} /> Adicionar Voo
-          </button>
+          {/* Gerenciador Dinâmico de Voos com Conexões e Arraste */}
+          <AereoFlightSection
+            flights={d.flights ?? []}
+            onChange={(updatedFlights) => set("flights", updatedFlights)}
+          />
 
           {/* Valores das Passagens, Valor NET e Sinal com cálculo por vagas */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 p-3.5 rounded-xl border border-border bg-surface-subtle/50">

@@ -14,12 +14,16 @@ import {
   Check,
   Loader2,
   FileText,
+  Gift,
+  DollarSign,
+  Tag,
 } from "lucide-react";
 import {
   searchCustomersForRoomList,
   quickCreateCustomer,
   type CustomerSearchResult,
 } from "@/lib/actions/customers";
+import { formatBRL, parseNum } from "@/lib/package-calc";
 
 interface GuestSelectorModalProps {
   open: boolean;
@@ -31,9 +35,14 @@ interface GuestSelectorModalProps {
     observacao: string;
     customerId?: string;
     birthDate?: string | null;
+    isExtra?: boolean;
+    billingType?: "padrao" | "cortesia" | "personalizado";
+    isCortesia?: boolean;
+    customValor?: string;
   }) => void;
   roomTitle: string;
   slotNumber: number;
+  isExtraSlot?: boolean;
   existingAllocations?: Map<string, string>; // normalized name/cpf -> Room number
 }
 
@@ -43,6 +52,7 @@ export function GuestSelectorModal({
   onSelect,
   roomTitle,
   slotNumber,
+  isExtraSlot = false,
   existingAllocations = new Map(),
 }: GuestSelectorModalProps) {
   const [activeTab, setActiveTab] = useState<"search" | "new">("search");
@@ -51,6 +61,10 @@ export function GuestSelectorModal({
   const [loading, setLoading] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Condição financeira da vaga
+  const [billingType, setBillingType] = useState<"padrao" | "cortesia" | "personalizado">("padrao");
+  const [customValor, setCustomValor] = useState("");
 
   // Form de novo cliente
   const [newName, setNewName] = useState("");
@@ -68,6 +82,8 @@ export function GuestSelectorModal({
       setActiveTab("search");
       setQuery("");
       setCreateError("");
+      setBillingType("padrao");
+      setCustomValor("");
       setTimeout(() => inputRef.current?.focus(), 80);
 
       // Carga inicial dos primeiros clientes cadastrados
@@ -97,6 +113,14 @@ export function GuestSelectorModal({
 
   const handleSelectCustomer = (c: CustomerSearchResult) => {
     const doc = c.cpf || c.rg || "";
+    const isCortesia = billingType === "cortesia";
+    const valorFormatted =
+      isCortesia
+        ? "0,00"
+        : billingType === "personalizado" && customValor
+        ? formatBRL(customValor, false)
+        : "";
+
     onSelect({
       nome: c.name,
       documento: doc,
@@ -104,6 +128,10 @@ export function GuestSelectorModal({
       observacao: c.notes || "",
       customerId: c.id,
       birthDate: c.birthDate || null,
+      isExtra: isExtraSlot,
+      billingType,
+      isCortesia,
+      customValor: valorFormatted,
     });
     onClose();
   };
@@ -158,6 +186,11 @@ export function GuestSelectorModal({
                 <span className="text-xs text-text-muted">
                   Espaço #{slotNumber}
                 </span>
+                {isExtraSlot && (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                    Cama Extra / Vaga Adicional
+                  </span>
+                )}
               </div>
               <h3 className="text-lg font-bold text-text-title mt-1">
                 Adicionar Hóspede ao Quarto
@@ -169,6 +202,69 @@ export function GuestSelectorModal({
             >
               <X size={20} />
             </button>
+          </div>
+
+          {/* Seletor de Condição Financeira (Padrão vs Cortesia vs Cobrar Valor) */}
+          <div className="px-6 py-3 bg-surface-subtle/70 border-b border-border flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-1.5 text-text-title font-semibold">
+              <Tag size={14} className="text-primary" />
+              <span>Condição de cobrança desta vaga:</span>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border">
+                <button
+                  type="button"
+                  onClick={() => setBillingType("padrao")}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                    billingType === "padrao"
+                      ? "bg-primary text-white shadow-2xs"
+                      : "text-text-muted hover:text-text-title"
+                  }`}
+                >
+                  Padrão
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingType("cortesia")}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    billingType === "cortesia"
+                      ? "bg-emerald-600 text-white shadow-2xs"
+                      : "text-text-muted hover:text-emerald-600"
+                  }`}
+                >
+                  <Gift size={13} />
+                  <span>Cortesia (R$ 0)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingType("personalizado")}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    billingType === "personalizado"
+                      ? "bg-blue-600 text-white shadow-2xs"
+                      : "text-text-muted hover:text-blue-600"
+                  }`}
+                >
+                  <DollarSign size={13} />
+                  <span>Cobrar Valor</span>
+                </button>
+              </div>
+
+              {billingType === "personalizado" && (
+                <div className="flex items-center gap-1 bg-surface px-2.5 py-1 rounded-xl border border-blue-500/40 ring-1 ring-blue-500/20 animate-in fade-in">
+                  <span className="text-[11px] font-bold text-blue-600">R$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    value={customValor}
+                    onChange={(e) => setCustomValor(e.target.value)}
+                    className="w-24 px-1 text-xs font-bold text-text-title text-right tabular-nums focus:outline-none"
+                    autoFocus
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Tabs */}

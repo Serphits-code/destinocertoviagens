@@ -23,7 +23,12 @@ import {
   Moon,
   Layers,
   Baby,
+  Printer,
+  Gift,
+  DollarSign,
+  Tag,
 } from "lucide-react";
+import { HotelRoomListPrintModal } from "./HotelRoomListPrintModal";
 import {
   DndContext,
   DragOverlay,
@@ -38,13 +43,15 @@ import {
 import type { EditorBlock, BlockData } from "@/lib/editor-types";
 import { GuestSelectorModal } from "./GuestSelectorModal";
 import { getCustomersBirthdays } from "@/lib/actions/customers";
-import { getGuestAge, getGuestAgeBracket } from "@/lib/package-calc";
+import { getGuestAge, getGuestAgeBracket, formatBRL, parseNum } from "@/lib/package-calc";
 
 interface RoomListViewProps {
   blocks: EditorBlock[];
   onUpdateBlock: (blockId: string, data: BlockData, title?: string) => void;
   periodStart?: string | null;
   periodEnd?: string | null;
+  excursionName?: string;
+  destination?: string | null;
 }
 
 export interface RoomGuest {
@@ -55,6 +62,10 @@ export interface RoomGuest {
   tipo: string; // "Adulto" | "Criança (2a)" | "Criança (Colo)" | "Bebê"
   observacao: string;
   birthDate?: string | null;
+  isExtra?: boolean;
+  billingType?: "padrao" | "cortesia" | "personalizado";
+  isCortesia?: boolean;
+  customValor?: string;
 }
 
 export interface RoomEntry {
@@ -63,6 +74,7 @@ export interface RoomEntry {
   hospedes: RoomGuest[];
   blockId?: string;
   hotelName?: string;
+  extraSlots?: number;
 }
 
 interface HospedagemRoom {
@@ -158,11 +170,16 @@ function syncRooms(
       tipo: g.tipo || "Adulto",
       observacao: g.observacao || "",
       birthDate: g.birthDate || null,
+      isExtra: Boolean(g.isExtra),
+      billingType: g.billingType || (g.isCortesia ? "cortesia" : (g.customValor && parseNum(g.customValor) > 0) ? "personalizado" : "padrao"),
+      isCortesia: Boolean(g.isCortesia),
+      customValor: g.customValor || "",
     }));
 
   if (existing.length > 0 && existing.length === totalQtd) {
     return existing.map((r) => ({
       ...r,
+      extraSlots: r.extraSlots || 0,
       hospedes: ensureGuestIds(r.hospedes),
     }));
   }
@@ -185,12 +202,14 @@ function syncRooms(
         result.push({
           numero: existing[reusedIdx].numero || `Quarto ${counter}`,
           tipo: existing[reusedIdx].tipo || hr.tipo,
+          extraSlots: existing[reusedIdx].extraSlots || 0,
           hospedes: ensureGuestIds(existing[reusedIdx].hospedes),
         });
       } else {
         result.push({
           numero: `Quarto ${counter}`,
           tipo: hr.tipo,
+          extraSlots: 0,
           hospedes: [],
         });
       }
@@ -217,13 +236,21 @@ interface DraggableGuestItemProps {
     roomIdx: number,
     guestIdx: number,
     key: keyof RoomGuest,
-    value: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    value: any
+  ) => void;
+  onUpdateGuestBilling: (
+    roomIdx: number,
+    guestIdx: number,
+    billingType: "padrao" | "cortesia" | "personalizado",
+    customValor?: string
   ) => void;
   onRemoveGuest: (roomIdx: number, guestIdx: number) => void;
   onOpenCustomerPicker: (
     roomIdx: number,
     slotNumber: number,
-    guestIdx?: number
+    guestIdx?: number,
+    isExtra?: boolean
   ) => void;
 }
 
@@ -237,6 +264,7 @@ function DraggableGuestItem({
   birthDate,
   periodStart,
   onUpdateGuest,
+  onUpdateGuestBilling,
   onRemoveGuest,
   onOpenCustomerPicker,
 }: DraggableGuestItemProps) {
@@ -339,10 +367,10 @@ function DraggableGuestItem({
         </div>
       </div>
 
-      {/* Dados do Hóspede: Nome, Badge de Aniversário & Documento */}
+      {/* Dados do Hóspede: Nome, Badge de Aniversário, Cama Extra, Documento, Faixa Etária, Cobrança e Observação */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
-        {/* Nome com Badge de Aniversário */}
-        <div className="md:col-span-5 flex flex-col justify-center">
+        {/* Nome com Badge de Aniversário e Cama Extra */}
+        <div className="md:col-span-3 flex flex-col justify-center">
           <div className="flex items-center gap-1.5 flex-wrap">
             <input
               type="text"
@@ -351,20 +379,30 @@ function DraggableGuestItem({
                 onUpdateGuest(roomIdx, guestIdx, "nome", e.target.value)
               }
               placeholder="Nome completo do hóspede"
-              className="px-2.5 py-1 rounded-lg border border-transparent hover:border-border focus:border-primary bg-transparent focus:bg-surface text-text-title text-sm font-semibold transition-all outline-none flex-1 min-w-[140px]"
+              className="px-2.5 py-1 rounded-lg border border-transparent hover:border-border focus:border-primary bg-transparent focus:bg-surface text-text-title text-sm font-semibold transition-all outline-none flex-1 min-w-[120px]"
             />
+
+            {/* BADGE DE CAMA EXTRA */}
+            {guest.isExtra && (
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 shrink-0"
+                title="Hóspede alocado em vaga adicional / cama extra"
+              >
+                Cama Extra
+              </span>
+            )}
 
             {/* ALERTA DE ANIVERSÁRIO */}
             {birthdayInfo && (
               <span
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-gradient-to-r from-amber-500/20 to-pink-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 shadow-2xs shrink-0 animate-pulse"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-amber-500/20 to-pink-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 shadow-2xs shrink-0 animate-pulse"
                 title={`🎂 Aniversariante nesta viagem! Comemora dia ${birthdayInfo.dateFormatted}${
                   birthdayInfo.turningAge ? ` (${birthdayInfo.turningAge} anos)` : ""
                 }. Lembrete para bolo ou brinde!`}
               >
-                <Cake size={12} className="text-amber-500 shrink-0" />
+                <Cake size={11} className="text-amber-500 shrink-0" />
                 <span>
-                  Aniversário {birthdayInfo.dateFormatted}
+                  {birthdayInfo.dateFormatted}
                   {birthdayInfo.turningAge ? ` (${birthdayInfo.turningAge}a)` : ""}
                 </span>
               </span>
@@ -381,14 +419,14 @@ function DraggableGuestItem({
               onUpdateGuest(roomIdx, guestIdx, "documento", e.target.value)
             }
             placeholder="CPF ou RG"
-            className="w-full px-2.5 py-1.5 rounded-lg border border-transparent hover:border-border focus:border-primary bg-transparent focus:bg-surface text-text-muted text-xs transition-all outline-none font-mono"
+            className="w-full px-2 py-1.5 rounded-lg border border-transparent hover:border-border focus:border-primary bg-transparent focus:bg-surface text-text-muted text-xs transition-all outline-none font-mono"
           />
         </div>
 
         {/* Faixa Etária / Idade (Badge Fixo Calculado pelo Sistema) */}
         <div className="md:col-span-2 flex items-center">
           <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border select-none transition-colors shadow-2xs ${badgeStyle}`}
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-semibold border select-none transition-colors shadow-2xs ${badgeStyle}`}
             title={badgeTitle}
           >
             {badgeIcon}
@@ -396,8 +434,52 @@ function DraggableGuestItem({
           </span>
         </div>
 
+        {/* Condição de Cobrança (Padrão, Cortesia ou Cobrar Valor) */}
+        <div className="md:col-span-3 flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+          <select
+            value={
+              guest.billingType ||
+              (guest.isCortesia ? "cortesia" : guest.customValor && parseNum(guest.customValor) > 0 ? "personalizado" : "padrao")
+            }
+            onChange={(e) => {
+              const mode = e.target.value as "padrao" | "cortesia" | "personalizado";
+              onUpdateGuestBilling(roomIdx, guestIdx, mode, guest.customValor);
+            }}
+            className={`px-2 py-1 rounded-lg border text-xs font-semibold focus:outline-none transition-all cursor-pointer ${
+              guest.isCortesia || guest.billingType === "cortesia"
+                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold"
+                : guest.billingType === "personalizado" || (guest.customValor && parseNum(guest.customValor) > 0)
+                ? "bg-blue-500/15 border-blue-500/40 text-blue-700 dark:text-blue-300 font-bold"
+                : "bg-surface border-border text-text-muted hover:border-border-strong"
+            }`}
+            title="Condição financeira da vaga: Padrão, Cortesia (R$ 0) ou Cobrar Valor Personalizado"
+          >
+            <option value="padrao">Padrão</option>
+            <option value="cortesia">🎁 Cortesia (R$ 0)</option>
+            <option value="personalizado">💰 Cobrar Valor</option>
+          </select>
+
+          {(guest.billingType === "personalizado" ||
+            (!guest.isCortesia && guest.customValor && parseNum(guest.customValor) > 0)) && (
+            <input
+              type="text"
+              inputMode="decimal"
+              value={guest.customValor ?? ""}
+              placeholder="0,00"
+              onChange={(e) => onUpdateGuest(roomIdx, guestIdx, "customValor", e.target.value)}
+              onBlur={(e) => {
+                if (e.target.value) {
+                  onUpdateGuest(roomIdx, guestIdx, "customValor", formatBRL(e.target.value, false));
+                }
+              }}
+              className="w-20 px-1.5 py-1 rounded-lg border border-border bg-surface text-xs text-right font-bold text-text-title tabular-nums focus:outline-none focus:border-primary shadow-2xs"
+              title="Digite o valor a ser cobrado deste passageiro (R$)"
+            />
+          )}
+        </div>
+
         {/* Observação com Alerta */}
-        <div className="md:col-span-3 flex items-center gap-1.5">
+        <div className="md:col-span-2 flex items-center gap-1.5">
           {hasAlert && (
             <span title="Atenção: observação especial ou restrição">
               <AlertTriangle
@@ -412,8 +494,8 @@ function DraggableGuestItem({
             onChange={(e) =>
               onUpdateGuest(roomIdx, guestIdx, "observacao", e.target.value)
             }
-            placeholder="Alergias, cama extra, etc."
-            className={`w-full px-2 py-1.5 rounded-lg border border-transparent hover:border-border focus:border-primary bg-transparent focus:bg-surface text-xs transition-all outline-none ${
+            placeholder="Observações / Cama extra"
+            className={`w-full px-2 py-1 rounded-lg border border-transparent hover:border-border focus:border-primary bg-transparent focus:bg-surface text-xs transition-all outline-none ${
               hasAlert ? "text-amber-600 font-medium" : "text-text-muted"
             }`}
           />
@@ -451,7 +533,13 @@ interface EmptySlotProps {
   slotNumber: number;
   roomIdx: number;
   isExtra?: boolean;
-  onOpenCustomerPicker: (roomIdx: number, slotNumber: number) => void;
+  onOpenCustomerPicker: (
+    roomIdx: number,
+    slotNumber: number,
+    guestIdx?: number,
+    isExtra?: boolean
+  ) => void;
+  onRemoveExtraSlot?: (roomIdx: number) => void;
 }
 
 function EmptySlot({
@@ -459,38 +547,86 @@ function EmptySlot({
   roomIdx,
   isExtra,
   onOpenCustomerPicker,
+  onRemoveExtraSlot,
 }: EmptySlotProps) {
   return (
     <div
-      onClick={() => onOpenCustomerPicker(roomIdx, slotNumber)}
-      className="group/empty flex items-center justify-between p-3 rounded-xl border border-dashed border-border/90 hover:border-primary/60 bg-surface-subtle/40 hover:bg-primary/5 transition-all cursor-pointer"
+      onClick={() => onOpenCustomerPicker(roomIdx, slotNumber, undefined, isExtra)}
+      className={`group/empty flex items-center justify-between p-3 rounded-xl border border-dashed transition-all cursor-pointer ${
+        isExtra
+          ? "border-amber-500/60 hover:border-amber-500 bg-amber-500/5 hover:bg-amber-500/10"
+          : "border-border/90 hover:border-primary/60 bg-surface-subtle/40 hover:bg-primary/5"
+      }`}
     >
       <div className="flex items-center gap-2.5">
-        <span className="flex items-center justify-center w-6 h-6 rounded-md bg-surface-muted text-text-muted text-xs font-semibold group-hover/empty:text-primary group-hover/empty:bg-primary/10 transition-colors">
+        <span
+          className={`flex items-center justify-center w-6 h-6 rounded-md text-xs font-semibold transition-colors ${
+            isExtra
+              ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold"
+              : "bg-surface-muted text-text-muted group-hover/empty:text-primary group-hover/empty:bg-primary/10"
+          }`}
+        >
           {slotNumber}
         </span>
 
         <div className="flex items-center gap-2">
           <Bed
             size={16}
-            className="text-text-muted group-hover/empty:text-primary transition-colors"
+            className={
+              isExtra
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-text-muted group-hover/empty:text-primary transition-colors"
+            }
           />
-          <span className="text-xs font-semibold text-text-muted group-hover/empty:text-primary transition-colors">
-            {isExtra ? "Cama Extra / Espaço Adicional" : `Espaço ${slotNumber} disponível`}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`text-xs font-semibold transition-colors ${
+                isExtra
+                  ? "text-amber-700 dark:text-amber-300 font-bold"
+                  : "text-text-muted group-hover/empty:text-primary"
+              }`}
+            >
+              {isExtra ? "Cama Extra / Vaga Adicional" : `Espaço ${slotNumber} disponível`}
+            </span>
+            {isExtra && (
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-800 dark:text-amber-200">
+                + Extra
+              </span>
+            )}
+          </div>
           <span className="hidden sm:inline-block text-[11px] text-text-muted/70">
-            — Clique para adicionar passageiro cadastrado
+            — Clique para adicionar hóspede (criança ou adulto)
           </span>
         </div>
       </div>
 
-      <button
-        type="button"
-        className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary/10 text-primary group-hover/empty:bg-primary group-hover/empty:text-white text-xs font-bold transition-all shadow-2xs"
-      >
-        <Plus size={13} />
-        <span>Adicionar Hóspede</span>
-      </button>
+      <div className="flex items-center gap-2">
+        {isExtra && onRemoveExtraSlot && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemoveExtraSlot(roomIdx);
+            }}
+            className="p-1.5 rounded-lg text-text-muted hover:text-status-danger hover:bg-status-danger-bg transition-colors cursor-pointer"
+            title="Remover esta vaga extra não utilizada"
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
+
+        <button
+          type="button"
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-2xs ${
+            isExtra
+              ? "bg-amber-500 text-white hover:bg-amber-600"
+              : "bg-primary/10 text-primary group-hover/empty:bg-primary group-hover/empty:text-white"
+          }`}
+        >
+          <Plus size={13} />
+          <span>Adicionar Hóspede</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -512,16 +648,24 @@ interface RoomCardProps {
     roomIdx: number,
     guestIdx: number,
     key: keyof RoomGuest,
-    value: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    value: any
+  ) => void;
+  onUpdateGuestBilling: (
+    roomIdx: number,
+    guestIdx: number,
+    billingType: "padrao" | "cortesia" | "personalizado",
+    customValor?: string
   ) => void;
   onRemoveGuest: (roomIdx: number, guestIdx: number) => void;
   onOpenCustomerPicker: (
     roomIdx: number,
     slotNumber: number,
-    guestIdx?: number
+    guestIdx?: number,
+    isExtra?: boolean
   ) => void;
   onAddExtraSlot: (roomIdx: number) => void;
-  extraSlotsAllowed: boolean;
+  onRemoveExtraSlot: (roomIdx: number) => void;
 }
 
 function RoomCard({
@@ -535,18 +679,20 @@ function RoomCard({
   birthdaysMap,
   onSetRoomNumber,
   onUpdateGuest,
+  onUpdateGuestBilling,
   onRemoveGuest,
   onOpenCustomerPicker,
   onAddExtraSlot,
-  extraSlotsAllowed,
+  onRemoveExtraSlot,
 }: RoomCardProps) {
   const { setNodeRef } = useDroppable({
     id: `room-${blockId}-${roomIdx}`,
   });
 
-  const capacity = capacityOf(room.tipo);
+  const baseCapacity = capacityOf(room.tipo);
+  const extraSlots = room.extraSlots || 0;
   const occupiedCount = room.hospedes.length;
-  const isFull = occupiedCount >= capacity;
+  const totalCapacity = Math.max(baseCapacity + extraSlots, occupiedCount);
 
   // Resolve data de nascimento do hóspede
   const getGuestBDate = (g: RoomGuest): string | null => {
@@ -570,13 +716,12 @@ function RoomCard({
     }))
     .filter((item) => item.info?.isBirthday);
 
-  // Quantidade de vagas regulares restantes para preencher todos os espaços da capacidade do quarto
-  const remainingSlotsCount = Math.max(0, capacity - occupiedCount);
+  // Quantidade de vagas regulares restantes para preencher todos os espaços da capacidade total do quarto
+  const remainingSlotsCount = Math.max(0, totalCapacity - occupiedCount);
   const emptySlots = Array.from(
     { length: remainingSlotsCount },
     (_, idx) => occupiedCount + idx + 1
   );
-  const showExtraSlot = extraSlotsAllowed && occupiedCount >= capacity;
 
   return (
     <motion.div
@@ -617,8 +762,13 @@ function RoomCard({
           </div>
 
           <span className="text-text-muted">·</span>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-surface-muted text-text-muted border border-border/70">
-            {room.tipo}
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-surface-muted text-text-muted border border-border/70 flex items-center gap-1.5">
+            <span>{room.tipo}</span>
+            {extraSlots > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                +{extraSlots} extra
+              </span>
+            )}
           </span>
 
           {/* Badge de Aniversariante no Quarto */}
@@ -634,7 +784,7 @@ function RoomCard({
           )}
         </div>
 
-        {/* Badge de Ocupação */}
+        {/* Badge de Ocupação & Botão de Vaga Extra no Topo */}
         <div className="flex items-center gap-2">
           {isHoveredByDrag && (
             <span className="text-xs font-bold text-primary animate-pulse flex items-center gap-1">
@@ -643,21 +793,31 @@ function RoomCard({
             </span>
           )}
 
+          <button
+            type="button"
+            onClick={() => onAddExtraSlot(roomIdx)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+            title="Adicionar vaga adicional / cama extra neste quarto (ex: para criança ou cama extra)"
+          >
+            <Plus size={13} />
+            <span>+ Vaga Extra</span>
+          </button>
+
           <span
             className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
-              occupiedCount >= capacity
+              occupiedCount >= totalCapacity
                 ? "bg-status-success-bg text-status-success border border-status-success/20"
                 : occupiedCount > 0
                   ? "bg-status-info-bg text-status-info border border-status-info/20"
                   : "bg-surface-muted text-text-muted border border-border"
             }`}
           >
-            {occupiedCount}/{capacity}{" "}
+            {occupiedCount}/{totalCapacity}{" "}
             {occupiedCount === 0
               ? "Livre"
-              : occupiedCount >= capacity
+              : occupiedCount >= totalCapacity
                 ? "Completo"
-                : `Vaga${capacity - occupiedCount > 1 ? "s" : ""}: ${capacity - occupiedCount}`}
+                : `Vaga${totalCapacity - occupiedCount > 1 ? "s" : ""}: ${totalCapacity - occupiedCount}`}
           </span>
         </div>
       </div>
@@ -681,47 +841,52 @@ function RoomCard({
               birthDate={bDate}
               periodStart={periodStart}
               onUpdateGuest={onUpdateGuest}
+              onUpdateGuestBilling={onUpdateGuestBilling}
               onRemoveGuest={onRemoveGuest}
               onOpenCustomerPicker={onOpenCustomerPicker}
             />
           );
         })}
 
-        {/* Espaços Vagos Disponíveis (Pré-alocados para exibir todos os espaços da capacidade do quarto) */}
-        {emptySlots.map((slotNum) => (
-          <EmptySlot
-            key={`empty-slot-${blockId}-${roomIdx}-${slotNum}`}
-            slotNumber={slotNum}
-            roomIdx={roomIdx}
-            isExtra={false}
-            onOpenCustomerPicker={onOpenCustomerPicker}
-          />
-        ))}
+        {/* Espaços Vagos Disponíveis */}
+        {emptySlots.map((slotNum) => {
+          const isExtra = slotNum > baseCapacity;
+          return (
+            <EmptySlot
+              key={`empty-slot-${blockId}-${roomIdx}-${slotNum}`}
+              slotNumber={slotNum}
+              roomIdx={roomIdx}
+              isExtra={isExtra}
+              onOpenCustomerPicker={onOpenCustomerPicker}
+              onRemoveExtraSlot={isExtra ? () => onRemoveExtraSlot(roomIdx) : undefined}
+            />
+          );
+        })}
 
-        {/* Cama Extra / Vaga Adicional */}
-        {showExtraSlot && (
-          <EmptySlot
-            key={`extra-slot-${blockId}-${roomIdx}`}
-            slotNumber={occupiedCount + 1}
-            roomIdx={roomIdx}
-            isExtra={true}
-            onOpenCustomerPicker={onOpenCustomerPicker}
-          />
-        )}
+        {/* Ações inferiores do Quarto: sempre permitir adicionar vaga extra/criança */}
+        <div className="pt-2 flex items-center justify-between border-t border-border/40">
+          <button
+            type="button"
+            onClick={() => onAddExtraSlot(roomIdx)}
+            className="inline-flex items-center gap-1.5 text-xs text-primary hover:text-primary-strong font-semibold transition-colors cursor-pointer py-1 px-2.5 rounded-lg hover:bg-primary/5"
+            title="Adicionar vaga adicional / cama extra neste quarto (ex: para criança ou cama extra)"
+          >
+            <Plus size={13} />
+            <span>Adicionar Vaga Extra (Criança / Cama Extra)</span>
+          </button>
 
-        {/* Botão de Cama Extra */}
-        {isFull && !extraSlotsAllowed && (
-          <div className="pt-1 text-right">
+          {extraSlots > 0 && occupiedCount < totalCapacity && (
             <button
               type="button"
-              onClick={() => onAddExtraSlot(roomIdx)}
-              className="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-primary transition-colors cursor-pointer"
+              onClick={() => onRemoveExtraSlot(roomIdx)}
+              className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-status-danger transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-status-danger-bg"
+              title="Remover vaga extra não utilizada deste quarto"
             >
-              <Plus size={12} />
-              <span>Adicionar Cama Extra / Vaga Adicional</span>
+              <Trash2 size={12} />
+              <span>Remover vaga extra</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </motion.div>
   );
@@ -735,7 +900,11 @@ export function RoomListView({
   onUpdateBlock,
   periodStart,
   periodEnd,
+  excursionName,
+  destination,
 }: RoomListViewProps) {
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+
   // Filtra todos os blocos de categoria hospedagem presentes no pacote
   const hospedagemBlocks = useMemo(
     () => blocks.filter((b) => b.categoryId === "hospedagem"),
@@ -829,11 +998,36 @@ export function RoomListView({
     [blocks, onUpdateBlock]
   );
 
-  // Camas extras por quarto (identificadas por "blockId-roomIdx")
-  const [extraSlotsRooms, setExtraSlotsRooms] = useState<Record<string, boolean>>({});
-
+  // Camas extras por quarto (persistidas diretamente no objeto RoomEntry.extraSlots)
   const handleAddExtraSlot = (blockId: string, roomIdx: number) => {
-    setExtraSlotsRooms((prev) => ({ ...prev, [`${blockId}-${roomIdx}`]: true }));
+    setRoomsByBlock((prev) => {
+      const currentRooms = prev[blockId] ? [...prev[blockId]] : [];
+      const room = currentRooms[roomIdx];
+      if (!room) return prev;
+      const currentExtra = room.extraSlots || 0;
+      currentRooms[roomIdx] = {
+        ...room,
+        extraSlots: currentExtra + 1,
+      };
+      persistRoomsForBlock(blockId, currentRooms);
+      return { ...prev, [blockId]: currentRooms };
+    });
+  };
+
+  const handleRemoveExtraSlot = (blockId: string, roomIdx: number) => {
+    setRoomsByBlock((prev) => {
+      const currentRooms = prev[blockId] ? [...prev[blockId]] : [];
+      const room = currentRooms[roomIdx];
+      if (!room) return prev;
+      const currentExtra = room.extraSlots || 0;
+      if (currentExtra <= 0) return prev;
+      currentRooms[roomIdx] = {
+        ...room,
+        extraSlots: currentExtra - 1,
+      };
+      persistRoomsForBlock(blockId, currentRooms);
+      return { ...prev, [blockId]: currentRooms };
+    });
   };
 
   // Modal de Seleção de Clientes
@@ -843,18 +1037,21 @@ export function RoomListView({
     roomIdx: number;
     slotNumber: number;
     guestIdx?: number;
+    isExtraSlot?: boolean;
   }>({
     open: false,
     blockId: "",
     roomIdx: 0,
     slotNumber: 1,
+    isExtraSlot: false,
   });
 
   const handleOpenCustomerPicker = (
     blockId: string,
     roomIdx: number,
     slotNumber: number,
-    guestIdx?: number
+    guestIdx?: number,
+    isExtra?: boolean
   ) => {
     setModalState({
       open: true,
@@ -862,6 +1059,7 @@ export function RoomListView({
       roomIdx,
       slotNumber,
       guestIdx,
+      isExtraSlot: Boolean(isExtra),
     });
   };
 
@@ -872,8 +1070,12 @@ export function RoomListView({
     observacao: string;
     customerId?: string;
     birthDate?: string | null;
+    isExtra?: boolean;
+    billingType?: "padrao" | "cortesia" | "personalizado";
+    isCortesia?: boolean;
+    customValor?: string;
   }) => {
-    const { blockId, roomIdx, guestIdx } = modalState;
+    const { blockId, roomIdx, guestIdx, isExtraSlot } = modalState;
     if (!blockId) return;
 
     setRoomsByBlock((prev) => {
@@ -892,6 +1094,9 @@ export function RoomListView({
         }
       }
 
+      const isCortesia = Boolean(guestData.isCortesia || guestData.billingType === "cortesia");
+      const billingType = guestData.billingType || (isCortesia ? "cortesia" : (guestData.customValor && parseNum(guestData.customValor) > 0) ? "personalizado" : "padrao");
+
       const hospedes = [...targetRoom.hospedes];
       const newGuest: RoomGuest = {
         id:
@@ -904,6 +1109,10 @@ export function RoomListView({
         tipo: autoTipo,
         observacao: guestData.observacao,
         birthDate: bDate || null,
+        isExtra: Boolean(guestData.isExtra || isExtraSlot),
+        billingType,
+        isCortesia,
+        customValor: isCortesia ? "0,00" : (guestData.customValor || ""),
       };
 
       if (guestIdx !== undefined && guestIdx < hospedes.length) {
@@ -935,7 +1144,8 @@ export function RoomListView({
     roomIdx: number,
     guestIdx: number,
     key: keyof RoomGuest,
-    value: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    value: any
   ) => {
     setRoomsByBlock((prev) => {
       const currentRooms = prev[blockId] ? [...prev[blockId]] : [];
@@ -945,6 +1155,50 @@ export function RoomListView({
       const hospedes = room.hospedes.map((g, gi) =>
         gi === guestIdx ? { ...g, [key]: value } : g
       );
+      currentRooms[roomIdx] = { ...room, hospedes };
+      persistRoomsForBlock(blockId, currentRooms);
+      return { ...prev, [blockId]: currentRooms };
+    });
+  };
+
+  const handleUpdateGuestBilling = (
+    blockId: string,
+    roomIdx: number,
+    guestIdx: number,
+    billingType: "padrao" | "cortesia" | "personalizado",
+    customValor?: string
+  ) => {
+    setRoomsByBlock((prev) => {
+      const currentRooms = prev[blockId] ? [...prev[blockId]] : [];
+      const room = currentRooms[roomIdx];
+      if (!room || !room.hospedes[guestIdx]) return prev;
+
+      const hospedes = room.hospedes.map((g, gi) => {
+        if (gi !== guestIdx) return g;
+        if (billingType === "cortesia") {
+          return {
+            ...g,
+            billingType: "cortesia" as const,
+            isCortesia: true,
+            customValor: "0,00",
+          };
+        } else if (billingType === "personalizado") {
+          return {
+            ...g,
+            billingType: "personalizado" as const,
+            isCortesia: false,
+            customValor: customValor || g.customValor || "0,00",
+          };
+        } else {
+          return {
+            ...g,
+            billingType: "padrao" as const,
+            isCortesia: false,
+            customValor: "",
+          };
+        }
+      });
+
       currentRooms[roomIdx] = { ...room, hospedes };
       persistRoomsForBlock(blockId, currentRooms);
       return { ...prev, [blockId]: currentRooms };
@@ -1036,7 +1290,7 @@ export function RoomListView({
       const bRooms = roomsByBlock[b.id] ?? [];
       totalRooms += bRooms.length;
       totalGuests += bRooms.reduce((sum, r) => sum + r.hospedes.length, 0);
-      totalCapacity += bRooms.reduce((sum, r) => sum + capacityOf(r.tipo), 0);
+      totalCapacity += bRooms.reduce((sum, r) => sum + (capacityOf(r.tipo) + (r.extraSlots || 0)), 0);
     }
 
     const vagasLivres = Math.max(0, totalCapacity - totalGuests);
@@ -1248,12 +1502,7 @@ export function RoomListView({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            {justSaved && (
-              <span className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full font-semibold animate-in fade-in">
-                <Check size={13} />
-                <span>Salvo</span>
-              </span>
-            )}
+
 
             <div className="flex items-center gap-2 flex-wrap">
               {hospedagemBlocks.length > 1 && (
@@ -1276,6 +1525,16 @@ export function RoomListView({
               >
                 {overallStats.vagasLivres} vaga{overallStats.vagasLivres !== 1 ? "s" : ""} livre{overallStats.vagasLivres !== 1 ? "s" : ""}
               </span>
+
+              <button
+                type="button"
+                onClick={() => setPrintModalOpen(true)}
+                title="Imprimir Room List Oficial para o Hotel (PDF)"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-surface hover:bg-surface-subtle text-text-body text-xs font-semibold shadow-2xs hover:border-primary/40 transition-all cursor-pointer group"
+              >
+                <Printer size={14} className="text-text-muted group-hover:text-primary transition-colors" />
+                <span>Imprimir para Hotel</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1382,7 +1641,7 @@ export function RoomListView({
               0
             );
             const hotelCapacity = hotelRooms.reduce(
-              (sum, r) => sum + capacityOf(r.tipo),
+              (sum, r) => sum + (capacityOf(r.tipo) + (r.extraSlots || 0)),
               0
             );
             const hotelVagasLivres = Math.max(0, hotelCapacity - hotelGuestsCount);
@@ -1470,12 +1729,15 @@ export function RoomListView({
                           onUpdateGuest={(rIdx, gIdx, key, val) =>
                             handleUpdateGuest(block.id, rIdx, gIdx, key, val)
                           }
+                          onUpdateGuestBilling={(rIdx, gIdx, billingType, customValor) =>
+                            handleUpdateGuestBilling(block.id, rIdx, gIdx, billingType, customValor)
+                          }
                           onRemoveGuest={(rIdx, gIdx) => handleRemoveGuest(block.id, rIdx, gIdx)}
-                          onOpenCustomerPicker={(rIdx, slot, gIdx) =>
-                            handleOpenCustomerPicker(block.id, rIdx, slot, gIdx)
+                          onOpenCustomerPicker={(rIdx, slot, gIdx, isExtra) =>
+                            handleOpenCustomerPicker(block.id, rIdx, slot, gIdx, isExtra)
                           }
                           onAddExtraSlot={(rIdx) => handleAddExtraSlot(block.id, rIdx)}
-                          extraSlotsAllowed={Boolean(extraSlotsRooms[`${block.id}-${roomIdx}`])}
+                          onRemoveExtraSlot={(rIdx) => handleRemoveExtraSlot(block.id, rIdx)}
                         />
                       );
                     })}
@@ -1495,6 +1757,7 @@ export function RoomListView({
             roomsByBlock[modalState.blockId]?.[modalState.roomIdx]?.numero || "Quarto"
           }
           slotNumber={modalState.slotNumber}
+          isExtraSlot={modalState.isExtraSlot}
           existingAllocations={existingAllocations}
         />
 
@@ -1522,6 +1785,21 @@ export function RoomListView({
             </div>
           ) : null}
         </DragOverlay>
+
+        {/* Modal de Impressão e PDF do Room List para o Hotel */}
+        {printModalOpen && (
+          <HotelRoomListPrintModal
+            open={printModalOpen}
+            onClose={() => setPrintModalOpen(false)}
+            excursionName={excursionName}
+            destination={destination}
+            periodStart={periodStart}
+            periodEnd={periodEnd}
+            hospedagemBlocks={hospedagemBlocks}
+            roomsByBlock={roomsByBlock}
+            birthdaysMap={birthdaysMap}
+          />
+        )}
       </div>
     </DndContext>
   );

@@ -19,6 +19,11 @@ import {
   Globe,
   Loader2,
   AlertCircle,
+  UserCheck,
+  Users,
+  ChevronDown,
+  ChevronUp,
+  Hotel,
 } from "lucide-react";
 import { getShareConfig, updateShareConfig } from "@/lib/actions/share-package";
 
@@ -41,6 +46,13 @@ export function SharePackageModal({
   const [sharePassword, setSharePassword] = useState("");
   const [isShareActive, setIsShareActive] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [totalRoomGuests, setTotalRoomGuests] = useState(0);
+  const [guestPreviews, setGuestPreviews] = useState<
+    Array<{ name: string; hotel: string; maskedDoc: string }>
+  >([]);
+  const [showGuestsList, setShowGuestsList] = useState(false);
+  const [showMasterPasswordBox, setShowMasterPasswordBox] = useState(false);
+
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedMsg, setCopiedMsg] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -64,6 +76,11 @@ export function SharePackageModal({
           setShareCode(cfg.shareCode || "");
           setSharePassword(cfg.sharePassword || "");
           setIsShareActive(cfg.isShareActive);
+          setTotalRoomGuests(cfg.totalRoomGuests || 0);
+          setGuestPreviews(cfg.guestPreviews || []);
+          if (cfg.sharePassword) {
+            setShowMasterPasswordBox(true);
+          }
         })
         .catch((err) => {
           setErrorMessage(err.message || "Erro ao carregar dados de compartilhamento.");
@@ -87,10 +104,23 @@ export function SharePackageModal({
     }
   };
 
+  const buildWhatsAppMessage = () => {
+    const pwdNote = sharePassword.trim()
+      ? `\n🔑 *Senha Master Geral (Opcional):* \`${sharePassword.trim()}\``
+      : "";
+
+    return (
+      `✈️ *Destino Certo Viagens*\n\n` +
+      `Olá! Confira aqui todos os detalhes da sua viagem *${excursionName}* (sua acomodação confirmada, roteiro e passeios contratados):\n\n` +
+      `🔗 ${publicUrl}\n\n` +
+      `🔐 *Acesso Exclusivo:* Digite o seu *CPF cadastrado* na tela inicial para abrir seu guia 100% personalizado.${pwdNote}\n\n` +
+      `Qualquer dúvida, estamos à disposição!`
+    );
+  };
+
   const handleCopyWhatsApp = async () => {
     if (!publicUrl) return;
-    const pwdText = sharePassword.trim() ? `\n🔑 *Senha de Acesso:* \`${sharePassword.trim()}\`` : "";
-    const message = `✈️ *Destino Certo Viagens*\n\nOlá! Confira aqui todos os detalhes, voos, hospedagem e o roteiro completo da sua viagem *${excursionName}*:\n\n🔗 ${publicUrl}${pwdText}\n\nQualquer dúvida, estamos à disposição!`;
+    const message = buildWhatsAppMessage();
 
     try {
       await navigator.clipboard.writeText(message);
@@ -103,8 +133,7 @@ export function SharePackageModal({
 
   const handleOpenWhatsApp = () => {
     if (!publicUrl) return;
-    const pwdText = sharePassword.trim() ? `\n🔑 *Senha de Acesso:* ${sharePassword.trim()}` : "";
-    const message = `✈️ *Destino Certo Viagens*\n\nOlá! Confira aqui todos os detalhes, voos, hospedagem e o roteiro completo da sua viagem *${excursionName}*:\n\n🔗 ${publicUrl}${pwdText}\n\nQualquer dúvida, estamos à disposição!`;
+    const message = buildWhatsAppMessage();
     const encoded = encodeURIComponent(message);
     window.open(`https://api.whatsapp.com/send?text=${encoded}`, "_blank");
   };
@@ -119,6 +148,7 @@ export function SharePackageModal({
     const rand = Math.floor(100 + Math.random() * 900);
     const year = new Date().getFullYear();
     setSharePassword(`${clean || "viagem"}${year}`);
+    setShowMasterPasswordBox(true);
   };
 
   const handleSave = () => {
@@ -148,7 +178,7 @@ export function SharePackageModal({
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="relative w-full max-w-xl bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          className="relative w-full max-w-xl bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
         >
           {/* Header */}
           <div className="flex items-center justify-between p-5 border-b border-border bg-surface-subtle/50">
@@ -265,13 +295,99 @@ export function SharePackageModal({
                   </div>
                 </div>
 
-                {/* Campo de Senha de Acesso */}
-                <div className="space-y-1.5 p-4 rounded-xl border border-border bg-surface-subtle/40">
+                {/* Bloco de Acesso Personalizado por CPF (Rooming List) */}
+                <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                        <UserCheck size={18} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-text-title">
+                            Acesso Personalizado por CPF
+                          </span>
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
+                            Padrão Ativo
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-text-muted block">
+                          Cada cliente entra com seu próprio CPF e visualiza apenas o seu hotel,
+                          quarto e adicionais.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-surface border border-border/70 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-text-title flex items-center gap-1.5">
+                        <Users size={14} className="text-primary" />
+                        <span>Passageiros na Rooming List:</span>
+                      </span>
+                      <span className="font-bold text-primary">
+                        {totalRoomGuests > 0
+                          ? `${totalRoomGuests} passageiro(s) aptos`
+                          : "Nenhum ainda"}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-text-muted leading-relaxed">
+                      {totalRoomGuests > 0
+                        ? "Quando o passageiro digita o CPF dele, o portal oculta os hotéis de outros clientes e exibe exclusivamente a acomodação e passeios dele."
+                        : "Cadastre os clientes na aba 'Rooming List' para que eles consigam acessar o portal informando seus CPFs."}
+                    </p>
+
+                    {guestPreviews.length > 0 && (
+                      <div className="pt-1 border-t border-border/50">
+                        <button
+                          type="button"
+                          onClick={() => setShowGuestsList(!showGuestsList)}
+                          className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>{showGuestsList ? "Ocultar lista" : "Ver exemplos de passageiros"}</span>
+                          {showGuestsList ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        </button>
+
+                        {showGuestsList && (
+                          <div className="mt-2 space-y-1 max-h-36 overflow-y-auto pr-1">
+                            {guestPreviews.map((g, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between text-[11px] p-1.5 rounded-md bg-surface-subtle border border-border/50"
+                              >
+                                <span className="font-medium text-text-title truncate max-w-[180px]">
+                                  {g.name}
+                                </span>
+                                <div className="flex items-center gap-2 text-text-muted shrink-0">
+                                  <span className="text-[10px] bg-surface px-1.5 py-0.5 rounded border border-border">
+                                    {g.hotel}
+                                  </span>
+                                  <span className="font-mono text-text-title font-semibold">
+                                    {g.maskedDoc}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Campo de Senha Master Opcional (Agência / Organizador) */}
+                <div className="space-y-2 p-4 rounded-xl border border-border bg-surface-subtle/40">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-text-title flex items-center gap-1.5">
-                      <Lock size={14} className="text-primary" />
-                      <span>Senha de Acesso para o Cliente</span>
-                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowMasterPasswordBox(!showMasterPasswordBox)}
+                      className="text-xs font-bold text-text-title flex items-center gap-1.5 hover:text-primary transition-colors cursor-pointer"
+                    >
+                      <Lock size={14} className="text-text-muted" />
+                      <span>Senha Master da Agência (Opcional)</span>
+                      {showMasterPasswordBox ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    </button>
 
                     <button
                       type="button"
@@ -284,27 +400,31 @@ export function SharePackageModal({
                   </div>
 
                   <p className="text-[11px] text-text-muted leading-relaxed">
-                    O cliente precisará digitar esta senha antes de visualizar o roteiro. Se deixar em branco, o link será aberto sem senha.
+                    Útil caso a equipe da agência precise visualizar todos os hotéis e o pacote
+                    completo sem digitar o CPF de um cliente. Se deixar em branco, apenas o acesso por
+                    CPF funcionará.
                   </p>
 
-                  <div className="relative flex items-center mt-2">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={sharePassword}
-                      onChange={(e) => setSharePassword(e.target.value)}
-                      placeholder="Deixe em branco ou digite a senha (ex: noronha2026)"
-                      className="w-full pl-3 pr-10 py-2 text-xs font-semibold rounded-xl border border-border bg-surface text-text-title focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
+                  {showMasterPasswordBox && (
+                    <div className="relative flex items-center mt-2">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={sharePassword}
+                        onChange={(e) => setSharePassword(e.target.value)}
+                        placeholder="Deixe em branco ou digite senha administrativa"
+                        className="w-full pl-3 pr-10 py-2 text-xs font-semibold rounded-xl border border-border bg-surface text-text-title focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
 
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 text-text-muted hover:text-text-title cursor-pointer"
-                      title={showPassword ? "Ocultar Senha" : "Exibir Senha"}
-                    >
-                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 text-text-muted hover:text-text-title cursor-pointer"
+                        title={showPassword ? "Ocultar Senha" : "Exibir Senha"}
+                      >
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Ações de Compartilhamento Rápido */}

@@ -271,9 +271,13 @@ export function NotesCanvasContent({
       Math.round((scrollTop + viewportHeight / 2 - 110 + Math.floor((Math.random() - 0.5) * 60)) / currentZoom)
     );
 
-    const tempId = `temp_${Date.now()}`;
+    const newId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `note_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
     const optimisticNote: NoteItem = {
-      id: tempId,
+      id: newId,
       userId: "",
       type: "sticky",
       title: "",
@@ -292,14 +296,16 @@ export function NotesCanvasContent({
 
     startTransition(async () => {
       const created = await createNote({
+        id: newId,
         type: "sticky",
         color,
         posX: basePosX,
         posY: basePosY,
       });
 
+      // Preserva edições e garante que o ID e key se mantenham estáveis sem remontar o componente
       setNotes((prev) =>
-        prev.map((n) => (n.id === tempId ? created : n))
+        prev.map((n) => (n.id === newId ? { ...created, ...n, id: newId } : n))
       );
       flashSaved();
     });
@@ -322,9 +328,13 @@ export function NotesCanvasContent({
       Math.round((scrollTop + viewportHeight / 2 - 40 + Math.floor((Math.random() - 0.5) * 60)) / currentZoom)
     );
 
-    const tempId = `temp_txt_${Date.now()}`;
+    const newId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `txt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
     const optimisticText: NoteItem = {
-      id: tempId,
+      id: newId,
       userId: "",
       type: "text",
       fontSize: "xl",
@@ -344,6 +354,7 @@ export function NotesCanvasContent({
 
     startTransition(async () => {
       const created = await createNote({
+        id: newId,
         type: "text",
         title: "Novo Título",
         content: "Novo Título",
@@ -354,7 +365,7 @@ export function NotesCanvasContent({
       });
 
       setNotes((prev) =>
-        prev.map((n) => (n.id === tempId ? created : n))
+        prev.map((n) => (n.id === newId ? { ...created, ...n, id: newId } : n))
       );
       flashSaved();
     });

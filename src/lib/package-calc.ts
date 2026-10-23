@@ -511,14 +511,20 @@ export function calculatePackageFinancialSummary(
   const costPerPerson = baseCostPerPerson;
 
   const marginPercent = Number(profitMargin) || 0;
-  const calculatedProfitPerPerson = marginPercent > 0 ? costPerPerson * (marginPercent / 100) : 0;
+  // Margem Real sobre a Venda (Divisor: 1 - Margem/100, ex: Custo ÷ 0,90 para 10%)
+  const divisor = marginPercent > 0 && marginPercent < 100 ? 1 - marginPercent / 100 : 1;
+  const calculatedPricePerPerson =
+    marginPercent > 0 && marginPercent < 100
+      ? costPerPerson / divisor
+      : costPerPerson * (1 + marginPercent / 100);
+  const calculatedProfitPerPerson = Math.max(0, calculatedPricePerPerson - costPerPerson);
 
   // Lógica de Lucro Cheio e Arredondamento
   const customProfit = customProfitAmount !== undefined && customProfitAmount !== null ? Number(customProfitAmount) : null;
   const customPrice = customPackagePrice !== undefined && customPackagePrice !== null ? Number(customPackagePrice) : null;
 
   let effectiveProfitPerPerson = calculatedProfitPerPerson;
-  let pricePerPerson = costPerPerson + calculatedProfitPerPerson;
+  let pricePerPerson = calculatedPricePerPerson;
   let roundingDifference = 0;
 
   if (customProfit !== null && !isNaN(customProfit) && customProfit > 0) {

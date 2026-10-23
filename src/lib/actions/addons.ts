@@ -18,6 +18,9 @@ export interface AddonGuestPayment {
   paymentMethod?: string;
   paid?: boolean;
   paidAt?: string;
+  status?: "pago" | "parcial" | "pendente";
+  amountPaid?: number;
+  notes?: string;
 }
 
 export interface AddonGuestVoucher {
@@ -93,6 +96,8 @@ export interface CustomPaymentMethodItem {
   valor: number | string;
   dataVencimento?: string;
   descricao?: string;
+  pago?: boolean;
+  paidAt?: string;
 }
 
 export interface CustomGuestPayment {
@@ -106,6 +111,7 @@ export type ExcursionAddonsPayload =
   | {
       addons: ExcursionAddon[];
       guestPayments?: Record<string, AddonGuestPayment>;
+      guestPackagePayments?: Record<string, AddonGuestPayment>;
       interestedLeads?: InterestedLead[];
       roomPricing?: Record<string, RoomTypePricing>;
       guestPaymentModes?: Record<string, "vista" | "prazo" | "personalizado">;
@@ -273,4 +279,76 @@ export async function updateExcursionPricing(
 
   revalidatePath(`/excursoes/${excursionId}`);
   return { success: true };
+}
+
+export async function savePassengerPayment(params: {
+  excursionId: string;
+  guestId: string;
+  status: "pago" | "parcial" | "pendente";
+  amountPaid?: number;
+  paymentMethod?: string;
+  paidAt?: string;
+  notes?: string;
+  customPayment?: CustomGuestPayment;
+  paymentMode?: "vista" | "prazo" | "personalizado";
+}) {
+  await requireWritePermission();
+
+  const current = await db.excursion.findUnique({
+    where: { id: params.excursionId },
+    select: { addonsJson: true },
+  });
+
+  const raw = (current?.addonsJson as any) || {};
+  const currentAddons = Array.isArray(raw) ? raw : raw.addons || [];
+  const currentAddonPayments = Array.isArray(raw) ? {} : { ...(raw.guestPayments || {}) };
+  const currentPackagePayments = Array.isArray(raw) ? {} : { ...(raw.guestPackagePayments || raw.guestPayments || {}) };
+  const currentLeads = Array.isArray(raw) ? [] : raw.interestedLeads || [];
+  const currentRoomPricing = Array.isArray(raw) ? {} : raw.roomPricing || {};
+  const currentModes = Array.isArray(raw) ? {} : { ...(raw.guestPaymentModes || {}) };
+  const currentCustomPayments = Array.isArray(raw) ? {} : { ...(raw.guestCustomPayments || {}) };
+
+  currentPackagePayments[params.guestId] = {
+    ...(currentPackagePayments[params.guestId] || {}),
+    paymentMethod: params.paymentMethod,
+    paid: params.status === "pago",
+    paidAt: params.paidAt || (params.status === "pago" ? new Date().toISOString() : undefined),
+    status: params.status,
+    amountPaid: params.amountPaid,
+    notes: params.notes,
+  };
+
+  if (params.customPayment) {
+    currentCustomPayments[params.guestId] = params.customPayment;
+  }
+
+  if (params.paymentMode) {
+    currentModes[params.guestId] = params.paymentMode;
+  }
+
+  const payload = {
+    addons: currentAddons,
+    guestPayments: currentAddonPayments,
+    guestPackagePayments: currentPackagePayments,
+    interestedLeads: currentLeads,
+    roomPricing: currentRoomPricing,
+    guestPaymentModes: currentModes,
+    guestCustomPayments: currentCustomPayments,
+  };
+
+  await db.excursion.update({
+    where: { id: params.excursionId },
+    data: {
+      addonsJson: payload as any,
+    },
+  });
+
+  revalidatePath(`/excursoes/${params.excursionId}`);
+  return {
+    success: true,
+    guestPayments: currentAddonPayments,
+    guestPackagePayments: currentPackagePayments,
+    guestCustomPayments: currentCustomPayments,
+    guestPaymentModes: currentModes,
+  };
 }

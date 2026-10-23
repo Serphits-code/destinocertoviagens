@@ -166,13 +166,17 @@ export function StickyNoteCard({
           onDragEnd(note.id, Math.max(0, newX), Math.max(0, newY));
         }
       }}
-      initial={{ opacity: 0, scale: 0.9 }}
+      initial={{ opacity: 0, scale: 0.85 }}
       animate={{
         opacity: 1,
         scale: 1,
         x: isCanvasView ? note.posX : 0,
         y: isCanvasView ? note.posY : 0,
         ...cardStyle,
+      }}
+      transition={{
+        scale: { type: "spring", stiffness: 350, damping: 25 },
+        opacity: { duration: 0.18 },
       }}
       style={isCanvasView ? { position: "absolute", left: 0, top: 0 } : undefined}
       whileHover={{ scale: 1.02, zIndex: 30 }}

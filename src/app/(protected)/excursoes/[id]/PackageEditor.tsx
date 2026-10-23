@@ -37,6 +37,7 @@ import {
   Settings,
   ClipboardList,
   BarChart3,
+  Plane,
 } from "lucide-react";
 import type { EditorBlock, BlockCategoryId, BlockData } from "@/lib/editor-types";
 import type { ItineraryItem } from "@/lib/actions/itinerary";
@@ -69,6 +70,7 @@ import { BlockCard } from "./BlockCard";
 import { AddBlockModal } from "./AddBlockModal";
 import { SummaryWidget } from "./SummaryWidget";
 import { RoomListView, type RoomGuest, type RoomEntry } from "./RoomListView";
+import { VoosView } from "./VoosView";
 import { ItineraryView, DEFAULT_SAO_PAULO_ITINERARY } from "./ItineraryView";
 import { AdicionaisView } from "./AdicionaisView";
 import { CheckoutView } from "./CheckoutView";
@@ -98,6 +100,7 @@ interface PackageEditorProps {
   initialItinerary?: ItineraryItem[];
   initialAddons?: ExcursionAddon[];
   initialGuestPayments?: Record<string, AddonGuestPayment>;
+  initialGuestPackagePayments?: Record<string, AddonGuestPayment>;
   initialInterestedLeads?: InterestedLead[];
   initialRoomPricing?: Record<string, RoomTypePricing>;
   initialGuestPaymentModes?: Record<string, "vista" | "prazo" | "personalizado">;
@@ -130,6 +133,7 @@ export function PackageEditor({
   initialItinerary,
   initialAddons = [],
   initialGuestPayments = {},
+  initialGuestPackagePayments = {},
   initialInterestedLeads = [],
   initialRoomPricing = {},
   initialGuestPaymentModes = {},
@@ -153,10 +157,15 @@ export function PackageEditor({
   const [insertIndex, setInsertIndex] = useState<number | undefined>(undefined);
   const [mounted, setMounted] = useState(false);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
-  const [view, setView] = useState<"pacote" | "roomlist" | "roteiro" | "adicionais" | "checkout" | "interessados" | "relatorio">("pacote");
+  const [view, setView] = useState<
+    "pacote" | "roomlist" | "voos" | "roteiro" | "adicionais" | "checkout" | "interessados" | "relatorio"
+  >("pacote");
   const [addons, setAddons] = useState<ExcursionAddon[]>(initialAddons || []);
   const [guestPayments, setGuestPayments] = useState<Record<string, AddonGuestPayment>>(
     initialGuestPayments || {}
+  );
+  const [guestPackagePayments, setGuestPackagePayments] = useState<Record<string, AddonGuestPayment>>(
+    initialGuestPackagePayments || initialGuestPayments || {}
   );
   const [interestedLeads, setInterestedLeads] = useState<InterestedLead[]>(
     initialInterestedLeads || []
@@ -370,6 +379,11 @@ export function PackageEditor({
       b.categoryId === "hospedagem" &&
       Array.isArray(b.data.rooms) &&
       b.data.rooms.length > 0
+  );
+
+  const aereoBlocks = useMemo(
+    () => blocks.filter((b) => b.categoryId === "aereo"),
+    [blocks]
   );
 
   const activeBlock = activeBlockId
@@ -750,18 +764,7 @@ export function PackageEditor({
           {/* Avatar stack de colaboradores ativos */}
           <PresenceAvatarStack peers={peers} currentUser={currentUser} />
 
-          <AnimatePresence>
-            {saved && (
-              <motion.span
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center gap-1.5 text-sm text-status-success bg-status-success-bg px-3 py-1 rounded-full"
-              >
-                <Check size={14} /> Salvo
-              </motion.span>
-            )}
-          </AnimatePresence>
+
 
           {/* Switch Pacote / Room List / Roteiro / Adicionais / Checkout */}
           <div className="flex items-center bg-surface-muted rounded-lg p-1 border border-border flex-wrap gap-1">
@@ -787,6 +790,21 @@ export function PackageEditor({
                 <BedDouble size={15} /> Room List
               </button>
             )}
+            <button
+              onClick={() => setView("voos")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                view === "voos"
+                  ? "bg-surface text-text-title shadow-shadow-card"
+                  : "text-text-muted hover:text-text-body"
+              }`}
+            >
+              <Plane size={15} className="text-sky-500" /> Voos
+              {aereoBlocks.length > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400">
+                  {aereoBlocks.length}
+                </span>
+              )}
+            </button>
             <button
               onClick={() => setView("roteiro")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -982,6 +1000,19 @@ export function PackageEditor({
               onUpdateBlock={handleUpdateBlock}
               periodStart={periodStart}
               periodEnd={periodEnd}
+              excursionName={name}
+              destination={initialDestination}
+            />
+          ) : view === "voos" ? (
+            <VoosView
+              blocks={blocks}
+              guests={guests}
+              rooms={rooms}
+              onUpdateBlock={handleUpdateBlock}
+              periodStart={periodStart}
+              periodEnd={periodEnd}
+              excursionName={name}
+              destination={initialDestination}
             />
           ) : view === "roteiro" ? (
             <ItineraryView
@@ -1034,6 +1065,7 @@ export function PackageEditor({
               guests={guests}
               addons={addons}
               guestPayments={guestPayments}
+              guestPackagePayments={guestPackagePayments}
               profitMargin={profitMargin}
               customProfitAmount={customProfitAmount}
               customPackagePrice={customPackagePrice}
@@ -1041,6 +1073,11 @@ export function PackageEditor({
               roomPricing={roomPricing}
               guestPaymentModes={guestPaymentModes}
               guestCustomPayments={guestCustomPayments}
+              onUpdatePayments={(newPackagePayments, newCustomPayments, newPaymentModes) => {
+                setGuestPackagePayments(newPackagePayments);
+                if (newCustomPayments) setGuestCustomPayments(newCustomPayments);
+                if (newPaymentModes) setGuestPaymentModes(newPaymentModes);
+              }}
             />
           ) : view === "interessados" ? (
             <InterestedLeadsView
@@ -1168,7 +1205,7 @@ export function PackageEditor({
         </div>
 
         {/* Sidebar: lateral com Resumo Financeiro, Ações e Botão que rolam juntos mantendo-se sempre visíveis */}
-        {view !== "checkout" && view !== "relatorio" && (
+        {view !== "checkout" && view !== "relatorio" && view !== "voos" && (
           <aside className="w-72 shrink-0 hidden lg:block sticky top-20 self-start space-y-4">
             {/* Botão de Adicionar Ponto — Posicionado junto com o Resumo Financeiro sem duplicação */}
             {view === "roteiro" && (
@@ -1240,6 +1277,22 @@ export function PackageEditor({
         excursionId={excursionId}
         excursionName={name}
       />
+
+      {/* Indicador Flutuante Fixo no Canto Inferior Direito */}
+      <AnimatePresence>
+        {saved && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.85 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 15, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 450, damping: 25 }}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2 text-sm font-bold text-status-success bg-status-success-bg/95 border border-status-success/40 px-4 py-2 rounded-full shadow-2xl backdrop-blur-md pointer-events-none tracking-wide"
+          >
+            <Check size={16} className="stroke-[2.5]" />
+            <span>Salvo</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

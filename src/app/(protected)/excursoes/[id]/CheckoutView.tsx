@@ -192,8 +192,13 @@ export function CheckoutView({
   }, [blocks, slots, totalBaseCostPerPerson]);
 
   const marginNum = Number(profitMargin) || 0;
-  const suggestedProfitAdult = adultBaseCost * (marginNum / 100);
-  const suggestedPriceAdult = adultBaseCost + suggestedProfitAdult;
+  // Margem Real sobre a Venda (Fórmula: Custo ÷ (1 - Margem/100), ex: Custo ÷ 0,90 para 10%)
+  const marginDivisor = marginNum > 0 && marginNum < 100 ? 1 - marginNum / 100 : 1;
+  const suggestedPriceAdult =
+    marginNum > 0 && marginNum < 100
+      ? adultBaseCost / marginDivisor
+      : adultBaseCost * (1 + marginNum / 100);
+  const suggestedProfitAdult = Math.max(0, suggestedPriceAdult - adultBaseCost);
 
   // 2. Detecção automática de todos os tipos de quarto configurados nos cards de hospedagem
   const detectedRoomTypes = useMemo(() => {
@@ -288,7 +293,9 @@ export function CheckoutView({
         (sum, b) => sum + getBlockUnitPriceForTier(b, "crianca", slots || 20),
         0
       );
-      const childSuggested = marginNum > 0 ? childCost * (1 + marginNum / 100) : childCost;
+      const childDivisor = marginNum > 0 && marginNum < 100 ? 1 - marginNum / 100 : 1;
+      const childSuggested =
+        marginNum > 0 && marginNum < 100 ? childCost / childDivisor : childCost;
       newTier = {
         id: `rtier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         label: "Criança (2 a 11 anos)",
@@ -510,7 +517,13 @@ export function CheckoutView({
     let guestPackagePrice = baseRoomCashPrice;
     let cardFeeApplied = 0;
 
-    if (isPersonalizado && customPayment) {
+    if (guest.isCortesia || guest.billingType === "cortesia") {
+      guestPackagePrice = 0;
+      cardFeeApplied = 0;
+    } else if ((guest.billingType === "personalizado" || parseNum(guest.customValor) > 0) && !customPayment) {
+      guestPackagePrice = parseNum(guest.customValor);
+      cardFeeApplied = 0;
+    } else if (isPersonalizado && customPayment) {
       const customSum = (customPayment.metodos || []).reduce((sum, m) => sum + parseNum(m.valor), 0);
       guestPackagePrice = parseNum(customPayment.valorTotal) > 0 ? parseNum(customPayment.valorTotal) : customSum;
       cardFeeApplied = parseNum(customPayment.taxaCartao) || 0;
@@ -679,6 +692,9 @@ export function CheckoutView({
                   ))}
                 </div>
               </div>
+              <span className="text-[10px] text-text-muted mt-1 block font-medium">
+                Fórmula de Margem Real: Custo ÷ {marginDivisor.toFixed(2).replace(".", ",")}
+              </span>
             </div>
           </div>
         </div>
@@ -692,6 +708,9 @@ export function CheckoutView({
             <span className="text-base font-bold text-text-title mt-0.5 block">
               {fmt(adultBaseCost)}
             </span>
+            <span className="text-[10px] text-text-muted block mt-0.5">
+              Custo operacional bruto
+            </span>
           </div>
 
           <div className="bg-surface-subtle p-3.5 rounded-xl border border-border/70">
@@ -701,6 +720,9 @@ export function CheckoutView({
             <span className="text-base font-bold text-status-success mt-0.5 block">
               +{fmt(suggestedProfitAdult)}
             </span>
+            <span className="text-[10px] text-status-success/80 block mt-0.5 font-medium">
+              Margem real: {marginNum > 0 ? ((suggestedProfitAdult / (suggestedPriceAdult || 1)) * 100).toFixed(1) : 0}% do preço
+            </span>
           </div>
 
           <div className="bg-primary/5 p-3.5 rounded-xl border border-primary/20 col-span-2 md:col-span-1">
@@ -709,6 +731,9 @@ export function CheckoutView({
             </span>
             <span className="text-base font-black text-primary mt-0.5 block">
               {fmt(suggestedPriceAdult)}
+            </span>
+            <span className="text-[10px] text-primary/80 font-bold block mt-0.5">
+              Protegido para até {marginNum}% de desconto
             </span>
           </div>
         </div>
@@ -974,6 +999,16 @@ export function CheckoutView({
                           <h4 className="font-bold text-sm text-text-title leading-snug">
                             {guest.nome || "Hóspede sem nome"}
                           </h4>
+                          {(guest.isCortesia || guest.billingType === "cortesia") && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                              🎁 Cortesia (R$ 0)
+                            </span>
+                          )}
+                          {!guest.isCortesia && guest.billingType !== "cortesia" && (guest.billingType === "personalizado" || parseNum(guest.customValor) > 0) && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                              💰 R$ {guest.customValor} (Quarto)
+                            </span>
+                          )}
                           {isPersonalizado && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30">
                               Personalizado

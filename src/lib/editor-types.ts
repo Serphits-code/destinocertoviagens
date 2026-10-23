@@ -33,6 +33,7 @@ export interface PersonalizadosRow {
 }
 
 export interface AereoFlight {
+  id?: string;
   cia: string;
   voo: string;
   origem: string;
@@ -41,6 +42,7 @@ export interface AereoFlight {
   destino: string;
   tipo: string;
   status: RowStatus;
+  conexaoDeId?: string; // ID do voo principal ao qual este voo pertence como conexão
 }
 
 export interface PrazoPagamentoItem {
@@ -48,6 +50,21 @@ export interface PrazoPagamentoItem {
   data: string;
   valor?: string;
   descricao?: string;
+  pago?: boolean;
+  dataPagamento?: string;
+}
+
+export interface FlightPassengerAllocation {
+  id: string; // ID da alocação
+  guestId: string; // ID do RoomGuest
+  nome: string;
+  documento?: string;
+  birthDate?: string | null;
+  tipo?: string;
+  roomNumber?: string;
+  seat?: string;
+  ticketNumber?: string;
+  allocatedAt?: string;
 }
 
 export interface AereoBlockData {
@@ -60,6 +77,7 @@ export interface AereoBlockData {
   localizador?: string;
   vagas?: string;
   flights?: AereoFlight[];
+  flightAllocations?: Record<string, FlightPassengerAllocation[]>; // chave = journeyId (ex: mainFlight.id)
   custoUnitario?: string;
   custoTotal?: string;
   valorNet?: string;

@@ -57,6 +57,7 @@ export async function getUserNotes(): Promise<NoteItem[]> {
 }
 
 export async function createNote(data?: {
+  id?: string;
   type?: NoteType;
   fontSize?: string;
   title?: string;
@@ -73,6 +74,7 @@ export async function createNote(data?: {
 
   const note = await db.note.create({
     data: {
+      ...(data?.id ? { id: data.id } : {}),
       userId: user.id,
       type: data?.type || "sticky",
       fontSize: data?.fontSize || (isText ? "xl" : "base"),

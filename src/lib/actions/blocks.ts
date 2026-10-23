@@ -126,6 +126,50 @@ export async function updateBlockData(
   return { success: true };
 }
 
+export async function toggleBlockDeadlinePaid(params: {
+  blockId: string;
+  deadlineType: "sinal" | "emissao" | "final" | "parcela";
+  prazoId?: string;
+  paid: boolean;
+}) {
+  await requireWritePermission();
+  const { blockId, deadlineType, prazoId, paid } = params;
+
+  const block = await db.block.findUnique({ where: { id: blockId } });
+  if (!block) return { error: "Bloco não encontrado" };
+
+  const data = { ...((block.configJson as Record<string, any>) || {}) };
+
+  if (deadlineType === "sinal") {
+    data.sinalPago = paid;
+  } else if (deadlineType === "emissao") {
+    data.prazoEmissaoPago = paid;
+  } else if (deadlineType === "final") {
+    data.prazoPagamentoTotalPago = paid;
+  } else if (deadlineType === "parcela") {
+    if (Array.isArray(data.prazosPagamentoFinal)) {
+      data.prazosPagamentoFinal = data.prazosPagamentoFinal.map((p: any) => {
+        if (p.id === prazoId) {
+          return {
+            ...p,
+            pago: paid,
+            dataPagamento: paid ? new Date().toISOString() : undefined,
+          };
+        }
+        return p;
+      });
+    }
+  }
+
+  await db.block.update({
+    where: { id: blockId },
+    data: { configJson: data },
+  });
+
+  revalidatePath(`/excursoes/${block.excursionId}`);
+  return { success: true, data };
+}
+
 export async function deleteBlock(blockId: string) {
   await requireWritePermission();
   const block = await db.block.delete({ where: { id: blockId } });
